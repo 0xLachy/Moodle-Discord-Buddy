@@ -1,0 +1,17 @@
+{
+  "name": "lism-leadersboards",
+  "version": "1.0.0",
+  "description": "Discord bot that scrapes lismore moodle data",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "0xLachy",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "discord.js": "^13.6.0",
+    "dotenv": "^16.0.0",
+    "puppeteer": "^13.7.0",
+    "puppeteer-core": "^13.7.0"
+  }
+}
