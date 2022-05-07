@@ -25,6 +25,29 @@ client.loadCommands = (bot, reload) => require("./handlers/commands")(bot, reloa
 
 client.loadEvents(bot, false)
 client.loadCommands(bot, false)
+
+// const guilds_list = client.guilds.cache.get("950154084441288724"); 
+// guilds_list.members.cache.forEach(member => console.log(member.user.username)); 
+// client.on('ready', async() => {
+//     const guild = await client.guilds.fetch('950154084441288724')
+//     const members = await guild.members.fetch() // returns Collection
+//     console.log(members)
+// });
+// const guild = client.guilds.fetch('950154084441288724')
+// client.users.cache.concat(...guild.members.fetch())
+// console.log(client.users.cache.size)
+
+client.on("ready", async () => {
+
+    const guild = client.guilds.cache.get('950154084441288724')
+    if (!guild)
+        console.error("Target Guild not found")
+
+    //await guild.commands.set([...client.slashcommands.values()])
+    // console.log(guild.members.find(member => member.nickname == "Lachlan"));
+    // process.exit(0)
+})
+
 // client.loadSlashCommands(bot, false)
 
 

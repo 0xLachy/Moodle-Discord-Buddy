@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer');
-// const { getLeaderboard } = require("../../util/functions")
+const { LismLogin } = require("../../util/functions")
 
 const getLeaderboard = async function(page, term_url){
     await page.goto(term_url);
@@ -25,12 +25,11 @@ module.exports = {
     permissions: [],
     devOnly: false,
     run: async ({client, message, args}) => {
-        const browser = await puppeteer.launch({
-            headless: true
-        });
+        const browser = await puppeteer.launch();
         const page = await browser.newPage();
         var leaderboardString = "The all time leaderboard for 'assignments handed in' is: ";
         var allTerms = true;
+        var setRoles = false;
         var username_arr = [];
         URL = "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=897";
 
@@ -50,23 +49,14 @@ module.exports = {
                 leaderboardString = "The term 3 leaderboard for assignments done is: ";
                 URL = "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=898";
             } 
+
+            if(arg == "setrole" || arg == "setroles"){
+                setRoles = true;
+            }
         }
-        await page.goto(URL);
+
         
-        // dom element selectors
-        const USERNAME_SELECTOR = '#username';
-        const PASSWORD_SELECTOR = '#password';
-        const BUTTON_SELECTOR = 'body > div > div > div > div.uk-card-body.uk-text-left > div > div.uk-width-3-4 > form > div.uk-margin.uk-text-right > button';
-
-        await page.click(USERNAME_SELECTOR);
-        await page.keyboard.type("lstroh.90");
-
-        await page.click(PASSWORD_SELECTOR);
-        await page.keyboard.type(process.env.PASSWORD);
-        await Promise.all([
-        page.click(BUTTON_SELECTOR),
-        page.waitForNavigation()
-        ])
+        await LismLogin(page, URL)
 
         if(allTerms) {
             //TODO when t3 comes out add it in
@@ -82,9 +72,6 @@ module.exports = {
         username_arr.forEach((x) => {
             nameOccurrences[x] = (nameOccurrences[x] || 0) + 1;
         });
-        // for(let i = 0; i < username_arr.length; i++){
-        //     nameOccurrences[username_arr[i]] = (nameOccurrences[username_arr[i]] || 0) + 1;
-        // }
 
         // Create items array
         let sortedNamesCount = Object.keys(nameOccurrences).map(function(key) {
@@ -96,11 +83,63 @@ module.exports = {
             return second[1] - first[1];
         });
         
+        const guild = await client.guilds.fetch('950154084441288724')
 
-        for(let i = 0; i < sortedNamesCount.length; i++){
+        message.guild.roles.cache.each(role => {
+            // find safer way to check
+            // if(role.name != "reminder" && role.name != "@everyone" && role.name != "bump reminder" && role.name != "Lismore Buddy"){
+            if(role.name == "SDD KING" || role.name == "SDD EDLER" || role.name == "SDD KNIGHT" || role.name == "SDD SOLDIER" || role.name == "SDD SLACKER" ){
+                message.guild.members.cache.each(member => member.roles.remove(role))
+            }
+        })
+
+        for(let i = 0; i < sortedNamesCount.length;){
             leaderboardString += "\n" + sortedNamesCount[i][0] + " : " + sortedNamesCount[i][1];
             // console.log(sortedNamesCount[i])
+            if(setRoles && i < 4){
+                //loop through an I until you find one that has a smaller value, if value is greater than 1 can't give out king status 
+                let ii;
+                for(ii = 1; ii < (sortedNamesCount - i);ii++){
+                    if(sortedNamesCount[i][1] != sortedNamesCount[i+ii][1]){
+                        break;
+                    }
+                }
+                let cached_i = i;
+                for(ii; ii > 0; ii--){
+                    try {
+                            let user = message.guild.members.cache.find(member => member.nickname == sortedNamesCount[i][0].split(" ")[0]);
+                            switch (cached_i) {
+                                case 0:
+                                    //if there is only one leader
+                                    if(ii == 1 && i == 0){
+                                        user.roles.add(message.guild.roles.cache.find(role => role.name === "SDD KING"));
+                                    }
+                                    else{
+                                        user.roles.add(message.guild.roles.cache.find(role => role.name === "SDD ELDER"))
+                                    }
+                                    break;
+                                case 1:
+                                    user.roles.add(message.guild.roles.cache.find(role => role.name === "SDD ELDER"));
+                                    break;
+                                case 2:
+                                    user.roles.add(message.guild.roles.cache.find(role => role.name === "SDD KNIGHT"));
+                                    break;
+                                case 3:
+                                    user.roles.add(message.guild.roles.cache.find(role => role.name === "SDD SOLDIER"));
+                                    break;
+                                default:
+                                    console.log(user.name + " Doesn't get a role!")
+                            }
+                            
+                        }
+                        catch (TypeError){
+                            console.log(sortedNamesCount[i][0].split(" ")[0] + " could not be found")
+                        }
+                        i++;
+                }
+
+            }
         }
-        message.reply(leaderboardString)
+        message.channel.send(leaderboardString)
     }
 } 
