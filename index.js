@@ -37,16 +37,17 @@ client.loadCommands(bot, false)
 // client.users.cache.concat(...guild.members.fetch())
 // console.log(client.users.cache.size)
 
-client.on("ready", async () => {
+// client.on("ready", async () => {
 
-    const guild = client.guilds.cache.get('950154084441288724')
-    if (!guild)
-        console.error("Target Guild not found")
-
-    //await guild.commands.set([...client.slashcommands.values()])
-    // console.log(guild.members.find(member => member.nickname == "Lachlan"));
-    // process.exit(0)
-})
+//     const guild = client.guilds.cache.get('940133396775075880')
+//     if (!guild)
+//         console.error("Target Guild not found")
+//     console.log(guild.memberCount)
+//     console.log(await guild.members.fetch())
+//     //await guild.commands.set([...client.slashcommands.values()])
+//     // console.log(guild.members.find(member => member.nickname == "Lachlan"));
+//     // process.exit(0)
+// })
 
 // client.loadSlashCommands(bot, false)
 
