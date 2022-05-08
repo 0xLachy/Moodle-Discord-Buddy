@@ -48,6 +48,7 @@ module.exports = {
         var setRoles = false;
         var createRoles = false;
         var username_arr = [];
+        var show_leaderboard = true;
         URL = "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=897";
 
         for(let i = 0;i < args.length; i++){
@@ -77,6 +78,7 @@ module.exports = {
             if(arg == "removerole" || arg == "removeroles"){
                 //remove roles is slow (because of discord api limits), but still works!
                 RemoveRoles(message);
+                show_leaderboard = false;
             }
         }
         await LismLogin(page, URL)
@@ -110,7 +112,9 @@ module.exports = {
         for(let i = 0; i < sortedNamesCount.length; i++){
             leaderboardString += "\n" + sortedNamesCount[i][0] + " : " + sortedNamesCount[i][1];
         }
-
+        if(show_leaderboard)
+            message.channel.send(leaderboardString);
+        
         if (createRoles){
             CreateRole("SDD KING", "#F83E0C", 0, message);
             CreateRole("SDD ELDER", "#D9540B", 0, message);
@@ -184,7 +188,7 @@ module.exports = {
                         if(result != sortedNamesCount[i+ii][1]){
                             if(ii == 1 && i == 0){
                                 user.roles.add(wantedRoles[0]);
-                                message.channel.send(user.nickname + "gets the role: " + wantedRoles[0].name)
+                                message.channel.send(user.nickname + " gets the role: " + wantedRoles[0].name)
                             }
                             cached_i++;
                         }                        
@@ -217,8 +221,6 @@ module.exports = {
                 }
             }
         }
- 
-        message.channel.send(leaderboardString)
     }
 } 
 
