@@ -52,6 +52,7 @@ module.exports = {
 
         for(let i = 0;i < args.length; i++){
             let arg = args[i].toLowerCase();
+            arg = arg.replace("-", "");
             if(arg == "t1"){
                 leaderboardString = "The term 1 leaderboard for 'assignments handed in' is: ";
                 URL = "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896";
@@ -140,7 +141,7 @@ module.exports = {
                 let userName = sortedNamesCount[i][0];
                 let result = sortedNamesCount[i][1];
                 if(i < 4){
-                    const user = message.guild.members.cache.find(member => member.nickname == userName.split(" ")[0]);
+                    const user = message.guild.members.cache.find(member => member.nickname == userName.split(" ")[0] || member.nickname == userName);
                     //loop through an I until you find one that has a smaller value, if value is greater than 1 can't give out king status 
                     //remove console logs later, just for debug purposes
                     for(let ii = 1; ii < (sortedNamesCount.length - i);ii++){
