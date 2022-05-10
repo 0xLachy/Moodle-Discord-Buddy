@@ -229,6 +229,7 @@ module.exports = {
                 }
             }
         }
+        browser.close();
     }
 } 
 function GetName(unknownNickname, customNicknames){
