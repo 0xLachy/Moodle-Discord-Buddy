@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer');
-const { LismLogin } = require("../../util/functions")
+const { LismLogin } = require("../../util/functions");
 
 const CreateRole = async (roleName, colour, perms, message) => {
     if (message.guild.roles.cache.find(role => role.name == roleName)) {
@@ -48,6 +48,12 @@ module.exports = {
         var setRoles = false;
         var createRoles = false;
         var username_arr = [];
+        const customNicknames = {
+            "Oliver": "Oli",
+            "Jeb": "Jebidiah",
+            "Lachlan": "Lachy"
+            //Add more custom nicknames
+        }
         var show_leaderboard = true;
         URL = "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=897";
 
@@ -145,7 +151,8 @@ module.exports = {
                     // const list = client.guilds.get("335507048017952771"); 
                     //doing it twice because it would be called less
                     const user = await message.guild.members.fetch().then(members => members.find(member => {
-                        return member.nickname == userName.split(" ")[0] || member.nickname == userName;
+                        return member.nickname == userName.split(" ")[0] || member.nickname == userName
+                         || member.nickname == (GetName(userName.split(" ")[0], customNicknames));
                     }))
                     // Iterate through the collection of GuildMembers from the Guild getting the username property of each member 
                     // message.guild.members.forEach(member => console.log(member.user.username)); 
@@ -198,7 +205,8 @@ module.exports = {
                 }
                 if (i == sortedNamesCount.length - 1){
                     const user = await message.guild.members.fetch().then(members => members.find(member => {
-                        return member.nickname == userName.split(" ")[0] || member.nickname == userName;
+                        return member.nickname == userName.split(" ")[0] || member.nickname == userName 
+                        || member.nickname == (GetName(userName.split(" ")[0], customNicknames));
                     }))
 
                     for(let ii = 1; ii < sortedNamesCount.length; ii++){
@@ -223,7 +231,12 @@ module.exports = {
         }
     }
 } 
-
+function GetName(unknownNickname, customNicknames){
+    for(nickname in customNicknames){
+        if(nickname == unknownNickname) return customNicknames[nickname];
+    }
+    return unknownNickname;
+}
 function RemoveRoles(message) {
     message.guild.roles.cache.each(role => {
 

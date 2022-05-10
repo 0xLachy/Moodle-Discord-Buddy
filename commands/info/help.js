@@ -8,7 +8,7 @@ module.exports = {
             let arg = args[i].toLowerCase();
             arg = arg.replace("-", "");
             if(arg == "leaderboard"){
-                message.channel.send("Returns leaderboard of classwork, alias: lb, optional args: t1, t2, create-roles, set-roles")
+                message.channel.send("Returns leaderboard of classwork, alias: lb, optional args: t1, t2, create-roles, set-roles, remove-roles")
             } 
             if(arg == "status") {
                 message.channel.send("Get info about person in class, example: !status lachlan")

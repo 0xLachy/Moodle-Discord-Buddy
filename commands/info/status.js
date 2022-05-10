@@ -16,8 +16,9 @@ module.exports = {
             "lachy": "lachlan",
             "lachianus": "lachlan",
             "harry": "harrison",
-            "idiot": "harrison",
-            "teacher": "michael"
+            "poohead": "harrison",
+            "teacher": "michael",
+            "jebidiah": "jeb"
         }
 
         for (let nickname in nicknames) {
@@ -47,15 +48,11 @@ module.exports = {
                 }, `#user-index-participants-896_r${i}_c0 > a`);
             let LCUserName = username.toLowerCase();
             if (LCUserName == inputName || LCUserName.split(" ")[0] == inputName){
-                let statusRole = await page.evaluate((sel) => {
-                    return document.querySelector(sel).textContent;
-                    }, `#user-index-participants-896_r${i}_c1`);
-                let statusGroup = await page.evaluate((sel) => {
-                    return document.querySelector(sel).textContent;
-                    }, `#user-index-participants-896_r${i}_c2`);
-                let statusOnline = await page.evaluate((sel) => {
-                    return document.querySelector(sel).textContent;
-                    }, `#user-index-participants-896_r${i}_c3`);
+
+                let statusRole = await GetRole(page, i);
+                let statusGroup = await GetGroup(page, i);
+                let statusOnline = await GetLastOnStatus(page, i);
+
                 let statusString = "**" + username + "**\t=>" + "\t**Roles**: " + statusRole + "\t**Groups**: " + statusGroup + "\t**Last Online**: " + statusOnline;
                 message.channel.send(statusString);
                 break;
@@ -68,3 +65,21 @@ module.exports = {
         
     }
 } 
+
+async function GetRole(page, i) {
+    return await page.evaluate((sel) => {
+        return document.querySelector(sel).textContent;
+    }, `#user-index-participants-896_r${i}_c1`);
+}
+
+async function GetGroup(page, i) {
+    return await page.evaluate((sel) => {
+        return document.querySelector(sel).textContent;
+    }, `#user-index-participants-896_r${i}_c2`);
+}
+
+async function GetLastOnStatus(page, i) {
+    return await page.evaluate((sel) => {
+        return document.querySelector(sel).textContent;
+    }, `#user-index-participants-896_r${i}_c3`);
+}
