@@ -8,12 +8,14 @@ module.exports = {
     permissions: [],
     devOnly: false,
     run: async ({client, message, args}) => {
+        //TODO instead of having these fuzz things, instead make them call the fuzz function or filter function etc
         //TODO make context id settable.
         var URL = "https://moodle.oeclism.catholic.edu.au/user/index.php?contextid=123980&id=896&perpage=26";
         var inputNames = [];
         var fuzz = false;
         var filter = false;
         var filterArg = "";
+        var leaderboardstyle = false;
         //maybe store everything apart from last online locally? And call -Update to update db
         var participantInfo = []
         //move pointer to function location
@@ -37,13 +39,15 @@ module.exports = {
             if(arg == "fuzz"){
                 fuzz = true;
             } 
-            //TODO: make one that returns the whole class in a table in order of last online
             else if(arg == "filter"){
                 //Increase the arg counter, then get filter, that way it doesn't become a name
                 i++;
                 filter = true;
                 // eg. To filter by role you go "Role:-Student"
                 filterArg = args[i].replace("-", "");
+            }
+            else if(arg == "lb" || arg == "learderboard"){
+                leaderboardStyle = true;
             }
             else{
                 inputNames.push(arg)
@@ -87,56 +91,52 @@ module.exports = {
                 if (LCUserName == inputName || LCUserName.split(" ")[0] == inputName 
                 || (fuzz && LCUserName.includes(inputName)) || (filterArg != "" && filter)){
 
-                    //Getting the status for each type
-                    let statusRole = await GetRole(page, i);
-                    let statusGroup = await GetGroup(page, i);
-                    let statusOnline = await GetLastOnStatus(page, i);
-                    if (filter){
-                        // get all people to be array of objects, once it is last person make sure there stats match
-                        //This object idea might be really cool to use normally!
-                        tempPersonObj = { 
-                            "username" : username,
-                            "Role" : statusRole,
-                            "Group" : statusGroup,
-                            "Online" : statusOnline
-                        }
-                        participantInfo.push(tempPersonObj);
-                       
+                    //Puts alll the info about someone into an object
+                    personObj = { 
+                        "username" : username,
+                        "Role" : await GetRole(page, i),
+                        "Group" : await GetGroup(page, i),
+                        "Online" : await GetLastOnStatus(page, i)
+                    }
+                    // puts the person into group of people user for debugging or maybe in future caching??
+                   // participantInfo.push(personObj);
+
+                    if (filter){                    
                         //get the correct filter terms and check if they match person
                         var filterArr = filterArg.split(":", 2);
                         var filterStatusType = filterArr[0]
                         var filterStatusValue = filterArr[1]
                         // console.log(filterStatusType + " : " + filterStatusValue + filterArr)
-                        if(tempPersonObj[filterStatusType] == filterStatusValue){
-                            SendEmbedMessage(username, statusRole, statusGroup, statusOnline, message);
+                        if(personObj[filterStatusType] == filterStatusValue){
+                            SendEmbedMessage(personObj, message);
                         }
                         //implement who has been offline the longest
                         else if(filterStatusType == "Online"){
                            // console.log("got into online")
                             switch(filterStatusValue.toLowerCase()) {
                                 case "now":                                  //it says secs in participants screen but is essentially now
-                                    if(tempPersonObj[filterStatusType].includes("sec")){
-                                        SendEmbedMessage(username, statusRole, statusGroup, statusOnline, message);
+                                    if(personObj[filterStatusType].includes("sec")){
+                                        SendEmbedMessage(personObj, message);
                                     }
                                   break;
                                 case "hour":
                                     //TODO: fix if it says 3 days 4 hours it will include that
-                                    if(tempPersonObj[filterStatusType].includes("hour") && tempPersonObj[filterStatusType].includes("min")){
-                                        SendEmbedMessage(username, statusRole, statusGroup, statusOnline, message);
+                                    if(personObj[filterStatusType].includes("hour") && personObj[filterStatusType].includes("min")){
+                                        SendEmbedMessage(personObj, message);
                                     }
                                   break;
                                 case "day":
-                                    if(tempPersonObj[filterStatusType].includes("1 day")){
-                                        SendEmbedMessage(username, statusRole, statusGroup, statusOnline, message);
+                                    if(personObj[filterStatusType].includes("1 day")){
+                                        SendEmbedMessage(personObj, message);
                                     }
                                     break;
                                 default:
-                                    console.log("couldn't find anyone with " + filterStatusValue);
+                                    console.log("nobody found with" + [fitlerStatusType])
                               } 
                         }
                     }
                     else {
-                        SendEmbedMessage(username, statusRole, statusGroup, statusOnline, message);
+                        SendEmbedMessage(personObj, message);
                     }
                     //change it to && after finished testing
                     if(!fuzz && filterArg == ""){
@@ -149,19 +149,25 @@ module.exports = {
                     message.channel.send(`Couldn't find person: ${inputName}, did you spell their name correctly`)
                 }
             }
-            console.log(participantInfo)
+          //  console.log(participantInfo)
         }
        // browser.close();
         
     }
 } 
-function SendEmbedMessage(username, statusRole, statusGroup, statusOnline, message) {
+//option for custom title if wanted
+function SendEmbedMessage(personObj, message, title="none") {
     let statusEmbed = new MessageEmbed();
-    statusEmbed.setTitle(username);
+    if(title != "none"){
+        statusEmbed.setTitle(title)
+    }
+    else{
+        statusEmbed.setTitle(personObj["username"]);
+    }
     statusEmbed.addFields(
-        { name: "Roles", value: statusRole },
-        { name: "Groups", value: statusGroup },
-        { name: "Last Online", value: statusOnline }
+        { name: "Roles", value: personObj["Role"] },
+        { name: "Groups", value: personObj["Group"] },
+        { name: "Last Online", value: personObj["Online"] }
     );
     statusEmbed.setColor("#156385");
 
