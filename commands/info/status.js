@@ -15,11 +15,8 @@ module.exports = {
         var URL = `https://moodle.oeclism.catholic.edu.au/user/index.php?contextid=123980&id=896&perpage=${classAmount}`;
         var inputNames = [];
         var fuzz = false;
-        var filter = false;
         var filterArg = "";
-        var leaderboardStyle = false;
-        //maybe store everything apart from last online locally? And call -Update to update db
-        var participantInfo = []
+
         //move pointer to function location
         //#form_autocomplete_input-1653380416775
         //TODO add nickname through slash command
@@ -59,7 +56,13 @@ module.exports = {
             }
             else if(arg == "lb" || arg == "learderboard"){
                 //TODO call function instead, remember to put await
-                leaderboardStyle = true;
+                if(args[i+1]?.toLowerCase().includes("sec")){
+                    i++;
+                    await GetOnlineLeaderboard(page, message, includeSecs=true);
+                }
+                else{
+                    await GetOnlineLeaderboard(page, message);
+                }
             }
             else{
                 inputNames.push(arg)
@@ -104,7 +107,7 @@ async function GetPersonObj(page, i){
         "Username": await GetUsername(page, i),
         "Role": await GetRole(page, i),
         "Group": await GetGroup(page, i),
-        "Online": await GetLastOnStatus(page, i)
+        "LastOnline": await GetLastOnStatus(page, i)
     };  
 }
 
@@ -158,91 +161,51 @@ async function Filter(page, filterArr, message){
         message.channel.send("Couldn't find anybody with " + [filterArr])
     }
 }
-async function MainLoop(page, inputName, fuzz, filterArg, filter, message) {
-    Classloop: for (let i = 0; i < classAmount; i++) {
-        let username = await page.evaluate((sel) => {
-            return document.querySelector(sel).textContent;
-        }, `#user-index-participants-896_r${i}_c0 > a`);
-        let LCUserName = username.toLowerCase();
-        if (LCUserName == inputName || LCUserName.split(" ")[0] == inputName
-            || (fuzz && LCUserName.includes(inputName)) || (filterArg != "" && filter)) {
-
-            //Puts alll the info about someone into an object
-            personObj = {
-                "Username": username,
-                "Role": await GetRole(page, i),
-                "Group": await GetGroup(page, i),
-                "Online": await GetLastOnStatus(page, i)
-            };
-            // puts the person into group of people user for debugging or maybe in future caching??
-            // participantInfo.push(personObj);
-            if (filter) {
-                //get the correct filter terms and check if they match person
-                var filterArr = filterArg.split(":", 2);
-                var filterStatusType = filterArr[0];
-                var filterStatusValue = filterArr[1];
-                // console.log(filterStatusType + " : " + filterStatusValue + filterArr)
-                if (personObj[filterStatusType] == filterStatusValue) {
-                    SendEmbedMessage(personObj, message);
-                }
-
-                //implement who has been offline the longest
-                else if (filterStatusType == "Online") {
-                    // console.log("got into online")
-                    switch (filterStatusValue.toLowerCase()) {
-                        case "now": //it says secs in participants screen but is essentially now
-                            if (personObj[filterStatusType].includes("sec")) {
-                                SendEmbedMessage(personObj, message);
-                            }
-                            break;
-                        case "hour":
-                            //TODO: fix if it says 3 days 4 hours it will include that
-                            if (personObj[filterStatusType].includes("hour") && personObj[filterStatusType].includes("min")) {
-                                SendEmbedMessage(personObj, message);
-                            }
-                            break;
-                        case "day":
-                            if (personObj[filterStatusType].includes("1 day")) {
-                                SendEmbedMessage(personObj, message);
-                            }
-                            break;
-                        default:
-                            console.log("nobody found with" + [fitlerStatusType]);
-                    }
-                }
-            }
-            else {
-                SendEmbedMessage(personObj, message);
-            }
-            //change it to && after finished testing
-            if (!fuzz && filterArg == "") {
-                console.log("broke loop");
-                break Classloop;
-            }
-        }
-
-        // if i is the last person and their name isn't found
-        else if (i == classAmount - 1 && !fuzz) {
-            message.channel.send(`Couldn't find person: ${inputName}, did you spell their name correctly`);
-        }
-    }
-}
 
 //option for custom title if wanted
-function SendEmbedMessage(personObj, message, title="none") {
+function SendEmbedMessage(participantData, message, title="none", colour="#156385") {
     let statusEmbed = new MessageEmbed();
-    if(title != "none"){
-        statusEmbed.setTitle(title)
+    //check if data is obj or array
+    console.log(participantData.constructor.name);
+
+    if(participantData.constructor.name == "Object"){
+        if(title != "none"){
+            statusEmbed.setTitle(title)
+        }
+        else{
+            statusEmbed.setTitle(participantData["Username"]);
+        }
+        statusEmbed.addFields(
+            { name: "Roles", value: participantData["Role"] },
+            { name: "Groups", value: participantData["Group"] },
+            { name: "Last Online", value: participantData["LastOnline"] }
+        );    
+    }
+    else if(participantData.constructor.name == "Array"){
+        if(title != "none"){
+            statusEmbed.setTitle(title)
+        }
+        else{
+            statusEmbed.setTitle("Last Online leaderboard");
+        }
+        participantData.forEach(participant => {
+            let participantInfoString = "";
+            for (const [key, value] of Object.entries(participant)) {
+                //console.log(`${key}: ${value}`);
+                if(key != "Username" && key != "SecondsOnline"){
+                    participantInfoString += `**${key}** : ${value} `
+                }
+            }
+            statusEmbed.addFields(           
+                { name: participant["Username"], value: participantInfoString }
+            );
+        });
     }
     else{
-        statusEmbed.setTitle(personObj["Username"]);
+        console.log(participantData.constructor.name + " isn't an Object, or Array")
     }
-    statusEmbed.addFields(
-        { name: "Roles", value: personObj["Role"] },
-        { name: "Groups", value: personObj["Group"] },
-        { name: "Last Online", value: personObj["Online"] }
-    );
-    statusEmbed.setColor("#156385");
+
+    statusEmbed.setColor(colour);
 
     message.channel.send({ embeds: [statusEmbed] });
 }
@@ -271,9 +234,62 @@ async function GetLastOnStatus(page, i) {
     }, `#user-index-participants-896_r${i}_c3`);
 }
 
-async function GetOnlineLeaderboard(page, message){
+async function GetOnlineLeaderboard(page, message, includeSecs=false){
+    let participantInfo = []
 //TODO set big data of participants, order by date (can be function) then return back as big string like leaderboard
     for (let i = 0; i < classAmount; i++) {
-        participantInfo.push(GetPersonObj(page, i))
+        personObj = await GetPersonObj(page, i);
+        personObj.SecondsOnline = await ConvertTime(personObj["LastOnline"]);
+        if (includeSecs && !personObj["LastOnline"].includes("sec")){
+            personObj["LastOnline"] += ` (${await ConvertTime(personObj["LastOnline"])} secs)`
+        }
+        console.log(personObj);
+        participantInfo.push(personObj)
     }
+    // The sort() method accepts a comparator function. This function accepts two arguments (both presumably of the same type)
+    // and it's job is to determine which of the two comes first.
+    participantInfo.sort((a, b) => a.SecondsOnline - b.SecondsOnline)
+    SendEmbedMessage(participantInfo, message);
+
+}
+
+async function ConvertTime(unsortedTime){
+    //boom my own regex! LETS GOOOOOO
+    var timeArr = unsortedTime.match(/[0-9]+[ ][a-zA-Z]+/g)?.map(time => {
+        //multiply by 60 to get hours to mins, then another 60 to get seconds
+
+        //Not sure of years exist
+        if(time.includes("year")){
+            //console.log("contains year")
+            return time.match(/[0-9]+/g)[0] * 365 * 7 * 24 * 60 * 60;
+        }
+        else if(time.includes("week")){
+            //console.log("contains week")
+            return time.match(/[0-9]+/g)[0] * 7 * 24 * 60 * 60;
+        }
+        else if(time.includes("day")){
+           // console.log("contains day")
+            return time.match(/[0-9]+/g)[0] * 24 * 60 * 60;
+        }
+        else if(time.includes("hour")){
+            //console.log("contains hour")
+            return time.match(/[0-9]+/g)[0] * 60 * 60;
+        }
+        else if(time.includes("min")){
+           // console.log("contains min")
+            return time.match(/[0-9]+/g)[0] * 60;
+        }
+        else if(time.includes("sec")){
+            //console.log("contains second: " + time)
+            return time.match(/[0-9]+/g)[0];
+        }
+        else{
+            console.log("don't know " + time)
+            return time.match(/[0-9]+/g)[0];
+        }
+    });
+
+    secondTime = timeArr?.reduce((x,y) => x + y);
+    //console.log(secondTime)
+    return secondTime;
 }
