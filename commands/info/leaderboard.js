@@ -116,7 +116,15 @@ module.exports = {
         
         //const guild = await client.guilds.fetch('940133396775075880')
         for(let i = 0; i < sortedNamesCount.length; i++){
-            leaderboardString += "\n" + sortedNamesCount[i][0] + " : " + sortedNamesCount[i][1];
+            //just doing the harrison baird bit for jokes, remove it later
+            if(sortedNamesCount[i][0] == "Harrison Baird"){
+                leaderboardString += "\n" + sortedNamesCount[i][0] + " : " + (sortedNamesCount[i][1] - 4);
+            }
+            else{
+                //console.log(sortedNamesCount[i][0])
+                leaderboardString += "\n" + sortedNamesCount[i][0] + " : " + sortedNamesCount[i][1];
+
+            }
         }
         if(show_leaderboard)
             message.channel.send(leaderboardString);
