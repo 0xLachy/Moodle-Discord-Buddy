@@ -49,7 +49,7 @@ module.exports = {
                 //Increase the arg counter, then get filter, that way it doesn't become a name
                 i++;
                 // eg. To filter by role you go "Role:-Student"
-                //This is case sensitive - coud fix idk
+                //case sensitive :/
                 filterArg = args[i].replace("-", "");
                 //Call the filter and send in the filter args as an array e.g Role: Teacher
                 await Filter(page, filterArg.split(":", 2), message)
@@ -115,6 +115,8 @@ async function Filter(page, filterArr, message){
     let foundPerson = false;
     let filterStatusType = filterArr[0];
     let filterStatusValue = filterArr[1];
+    let filterSecondValue = await ConvertTime(filterStatusValue.toLowerCase());
+
     // console.log(filterStatusType + " : " + filterStatusValue + filterArr)
     for (let i = 0; i < classAmount; i++) {
         
@@ -128,30 +130,36 @@ async function Filter(page, filterArr, message){
         }
 
         //implement who has been offline the longest
-        else if (filterStatusType == "Online") {
+        else if (filterStatusType == "LastOnline") {
             // console.log("got into online")
-            switch (filterStatusValue.toLowerCase()) {
-                case "now": //it says secs in participants screen but is essentially now
-                    if (personObj[filterStatusType].includes("sec")) {
-                        SendEmbedMessage(personObj, message);
-                        foundPerson = true;
-                    }
-                    break;
-                case "hour":
-                    if (personObj[filterStatusType].includes("hour") && personObj[filterStatusType].includes("min")) {
-                        SendEmbedMessage(personObj, message);
-                        foundPerson = true;
-                    }
-                    break;
-                case "day":
-                    if (personObj[filterStatusType].includes("1 day")) {
-                        SendEmbedMessage(personObj, message);
-                        foundPerson = true;
-                    }
-                    break;
-                // default:
-                //     console.log("nobody found with" + [fitlerStatusType]);
+            let personObjSeconds = await ConvertTime(personObj[filterStatusType]);
+            if(filterSecondValue > personObjSeconds){
+                SendEmbedMessage(personObj, message);
+                foundPerson = true;
             }
+            //determine how long to be within, 
+            // switch (filterStatusValue.toLowerCase()) {
+            //     case "now": //it says secs in participants screen but is essentially now
+            //         if (personObj[filterStatusType].includes("sec")) {
+            //             SendEmbedMessage(personObj, message);
+            //             foundPerson = true;
+            //         }
+            //         break;
+            //     case "hour":
+            //         if (personObj[filterStatusType].includes("hour") && personObj[filterStatusType].includes("min")) {
+            //             SendEmbedMessage(personObj, message);
+            //             foundPerson = true;
+            //         }
+            //         break;
+            //     case "day":
+            //         if (personObj[filterStatusType].includes("1 day")) {
+            //             SendEmbedMessage(personObj, message);
+            //             foundPerson = true;
+            //         }
+            //         break;
+            //     // default:
+            //     //     console.log("nobody found with" + [fitlerStatusType]);
+            // }
         }
         else{
             // message.channel.send("Couldn't find anybody with" + [filterArr])
@@ -256,11 +264,11 @@ async function GetOnlineLeaderboard(page, message, includeSecs=false){
 
 async function ConvertTime(unsortedTime){
     //boom my own regex! LETS GOOOOOO
-    //now doesn't get past regex because it requires at least 1 number at the start
+    //if its now, just return 0 seconds
     if(unsortedTime == "now"){
         return 0
     }
-    var timeArr = unsortedTime.match(/[0-9][ ][a-zA-Z]+/g)?.map(time => {
+    var timeArr = unsortedTime.match(/[0-9]+[ a-zA-Z]+/g)?.map(time => {
         //multiply by 60 to get hours to mins, then another 60 to get seconds
 
         //Not sure of years exist
@@ -294,7 +302,7 @@ async function ConvertTime(unsortedTime){
             return time.match(/[0-9]+/g)[0];
         }
     });
-
+    //Adds the seconds together if array is not null
     secondTime = timeArr?.reduce((x,y) => x + y);
     //console.log(secondTime)
     return secondTime;
