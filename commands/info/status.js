@@ -244,7 +244,7 @@ async function GetOnlineLeaderboard(page, message, includeSecs=false){
         if (includeSecs){
             personObj["Username"] += ` (${await ConvertTime(personObj["LastOnline"])} seconds)`
         }
-        console.log(personObj);
+        //console.log(personObj);
         participantInfo.push(personObj)
     }
     // The sort() method accepts a comparator function. This function accepts two arguments (both presumably of the same type)
@@ -256,7 +256,11 @@ async function GetOnlineLeaderboard(page, message, includeSecs=false){
 
 async function ConvertTime(unsortedTime){
     //boom my own regex! LETS GOOOOOO
-    var timeArr = unsortedTime.match(/[0-9]+[ ][a-zA-Z]+/g)?.map(time => {
+    //now doesn't get past regex because it requires at least 1 number at the start
+    if(unsortedTime == "now"){
+        return 0
+    }
+    var timeArr = unsortedTime.match(/[0-9][ ][a-zA-Z]+/g)?.map(time => {
         //multiply by 60 to get hours to mins, then another 60 to get seconds
 
         //Not sure of years exist
