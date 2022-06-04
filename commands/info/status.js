@@ -56,7 +56,7 @@ module.exports = {
             }
             else if(arg == "lb" || arg == "learderboard"){
                 //TODO call function instead, remember to put await
-                if(args[i+1]?.toLowerCase().includes("sec")){
+                if(args[i+1]?.toLowerCase().replace("-", "").includes("sec")){
                     i++;
                     await GetOnlineLeaderboard(page, message, includeSecs=true);
                 }
@@ -192,6 +192,7 @@ function SendEmbedMessage(participantData, message, title="none", colour="#15638
             let participantInfoString = "";
             for (const [key, value] of Object.entries(participant)) {
                 //console.log(`${key}: ${value}`);
+                //last online can be either included field or in name of field not sure what looks better
                 if(key != "Username" && key != "SecondsOnline"){
                     participantInfoString += `**${key}** : ${value} `
                 }
@@ -240,8 +241,8 @@ async function GetOnlineLeaderboard(page, message, includeSecs=false){
     for (let i = 0; i < classAmount; i++) {
         personObj = await GetPersonObj(page, i);
         personObj.SecondsOnline = await ConvertTime(personObj["LastOnline"]);
-        if (includeSecs && !personObj["LastOnline"].includes("sec")){
-            personObj["LastOnline"] += ` (${await ConvertTime(personObj["LastOnline"])} secs)`
+        if (includeSecs){
+            personObj["Username"] += ` (${await ConvertTime(personObj["LastOnline"])} seconds)`
         }
         console.log(personObj);
         participantInfo.push(personObj)
@@ -281,7 +282,8 @@ async function ConvertTime(unsortedTime){
         }
         else if(time.includes("sec")){
             //console.log("contains second: " + time)
-            return time.match(/[0-9]+/g)[0];
+            //somehow it is stored as text
+            return parseInt(time.match(/[0-9]+/g)[0]);
         }
         else{
             console.log("don't know " + time)
