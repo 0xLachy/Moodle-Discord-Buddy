@@ -4,8 +4,9 @@ module.exports = {
     name: "messageCreate",
     run: async function runAll(bot, message) {
         const {client, prefix, owners} = bot
-
-        if (!message.guild) return 
+        if (!message.guild)
+            return message.channel.send('This command can only be used in a server!')
+       // if (!message.guild) return 
 
         if (message.author.bot) return 
 
@@ -14,8 +15,8 @@ module.exports = {
 
         const args = message.content.slice(prefix.length).trim().split(/ +/g)
         const cmdstr = args.shift().toLowerCase()
-
-        let command = client.commands.get(cmdstr)
+        //let cmdfile = client.commands.get(cmd) || client.commands.get(client.aliases.get(cmd))
+        let command = client.commands.get(cmdstr) || client.commands.get(client.aliases.get(cmdstr));
         if (!command) return 
 
         let member = message.member 

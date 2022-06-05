@@ -37,6 +37,9 @@ const getLeaderboard = async function(page, term_url){
 
 module.exports = {
     name: "leaderboard",
+    aliases: ["lb", "board", "ranking"],
+    usage: "leaderboard [t1, t2, CreateRole, SetRole, RemoveRole]", 
+    description: "Shows a leadeboard of assignments handed in, can give discord roles to people based on results, by default it is all terms",
     category: "info",
     permissions: [],
     devOnly: false,
@@ -104,6 +107,9 @@ module.exports = {
             nameOccurrences[x] = (nameOccurrences[x] || 0) + 1;
         });
 
+        //rigging it for harry
+        nameOccurrences["Harrison Baird"] -= 4;
+
         // Create items array
         let sortedNamesCount = Object.keys(nameOccurrences).map(function(key) {
             return [key, nameOccurrences[key]];
@@ -117,20 +123,20 @@ module.exports = {
         //const guild = await client.guilds.fetch('940133396775075880')
         for(let i = 0; i < sortedNamesCount.length; i++){
             //just doing the harrison baird bit for jokes, remove it later
-            if(sortedNamesCount[i][0] == "Harrison Baird"){
-                leaderboardString += "\n" + sortedNamesCount[i][0] + " : " + (sortedNamesCount[i][1] - 4);
-            }
-            else{
+            // if(sortedNamesCount[i][0] == "Harrison Baird"){
+            //     leaderboardString += "\n" + sortedNamesCount[i][0] + " : " + (sortedNamesCount[i][1] - 4);
+            // }
+            // else{
                 //console.log(sortedNamesCount[i][0])
                 leaderboardString += "\n" + sortedNamesCount[i][0] + " : " + sortedNamesCount[i][1];
 
-            }
+            // }
         }
         if(show_leaderboard)
             message.channel.send(leaderboardString);
         
         if (createRoles){
-            CreateRole("SDD KING", "#F83E0C", 0, message);
+            CreateRole("SDD KING", "#F83E0C",  0, message);
             CreateRole("SDD ELDER", "#D9540B", 0, message);
             CreateRole("SDD KNIGHT", "#F07900", 0, message);
             CreateRole("SDD SOLDIER", "#D98C0B", 0, message);

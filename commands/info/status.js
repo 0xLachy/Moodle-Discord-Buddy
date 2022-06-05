@@ -4,12 +4,16 @@ const {LismLogin} = require("../../util/functions")
 
 module.exports = {
     name: "status",
+    aliases: ["stat"],
+    //TODO make this look nicer / make more sense
+    usage: "status ['fuzz', 'filter <filterType>:<filterValue>', 'leaderboard/lb [seconds/sec]',] (<person>)", 
+    description: "Return status of user (or class), filter example => LastOnline:1-day or Role:Teacher",
     category: "info",
     permissions: [],
     devOnly: false,
     run: async ({client, message, args}) => {
         classAmount = 26;
-        //TODO for help have it as <filter>:<value>
+        //TODO maybe change the leaderboard to leaderboard.js or even LastOnline script itself
         //TODO instead of having these fuzz things, instead make them call the fuzz function or filter function etc
         //TODO make context id settable.
         var URL = `https://moodle.oeclism.catholic.edu.au/user/index.php?contextid=123980&id=896&perpage=${classAmount}`;
@@ -174,7 +178,7 @@ async function Filter(page, filterArr, message){
 function SendEmbedMessage(participantData, message, title="none", colour="#156385") {
     let statusEmbed = new MessageEmbed();
     //check if data is obj or array
-    console.log(participantData.constructor.name);
+    //console.log(participantData.constructor.name);
 
     if(participantData.constructor.name == "Object"){
         if(title != "none"){
@@ -215,7 +219,6 @@ function SendEmbedMessage(participantData, message, title="none", colour="#15638
     }
 
     statusEmbed.setColor(colour);
-
     message.channel.send({ embeds: [statusEmbed] });
 }
 
