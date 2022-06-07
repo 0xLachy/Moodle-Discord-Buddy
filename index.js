@@ -9,9 +9,12 @@ const client = new Discord.Client({
     ]
 })
 
+// to fetch config just put it inside const { <here> }
 let bot = {
     client,
     prefix: "!",
+    mainColour: "#156385",
+    errorColour: "#FF0000",
     owners: ["618689924970840103"]
 }
 

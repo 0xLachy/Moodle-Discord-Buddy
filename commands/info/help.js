@@ -2,7 +2,7 @@
 //First, we require readdirSync, path and config
 const { readdirSync } = require('fs')
 const path = require('path')
-const config = require("../../config.json")
+
 
 // Now, we require the MessageEmbed constructor from discord.js for making beautiful messages.
 const {MessageEmbed} = require("discord.js")
@@ -15,19 +15,15 @@ module.exports = { // All of these properties should be added in every command
     devOnly: false,
     description: "Shows a list with all available commands", // The description of the commands
     category: "utility", // The category of the command (same name of the folder where it is)
-run: async ({client, message, args, prefix}) => {
-    //const {client} = bot;
-    // If the user didn't provide any arg, send a message with all
-    console.log("help command called")
-    // message.channel.send("Hi")
-   // console.log(bot)
+run: async ({client, message, args, prefix, mainColour, errorColour}) => {
+
     if(!args[0]) {
         // As we did before with the command handler, we need to get all the commands' categories.
         const categories = readdirSync(path.join(__dirname, '../../commands/'))
 
         let embed = new MessageEmbed()
         .setTitle(`List of available commands (${client.commands.size})`)
-        .setColor("#156385")
+        .setColor(mainColour)
         embed.footer = {
             text: `Do ${prefix}help (command) for getting more information`
         }  
@@ -63,12 +59,12 @@ run: async ({client, message, args, prefix}) => {
         let usercmd = args.join(" ").toLowerCase()
         // Now we find a command with the same name as the user provided, and check if its an alias
        let cmd = client.commands.find(c => c.name.toLowerCase() === usercmd) || client.commands.get(client.aliases.get(usercmd));
-        // If that command doesn't exist, we send an error message
+        // If that command doesn't exist, we send an error message // NOT WORKING //TODO fix this
         if(!cmd) {
             let embed = new MessageEmbed()
             .setTitle(`Error!`)
             .setDescription(`**ERROR:** The command ${usercmd} doesnt exist!\nRun \`${prefix}help\` for a list of available commands!`)
-            .setColor("#156385")
+            .setColor(errorColour)
 
             return message.channel.send(embed)
         }
@@ -82,7 +78,7 @@ run: async ({client, message, args, prefix}) => {
         .addField(`Usage`, `${prefix}${cmd.usage}`)
         //.addField(`Accessible by`, cmd.accessible) change that to permissions thing
         .addField(`Aliases`, `${cmd.aliases ? cmd.aliases.join(", ") : "None"}`) // If the command has aliases, write them all separated by commas, if it doesnt have any, write "None".
-        .setColor("#156385")
+        .setColor(mainColour)
         //.setFooter(`In the usage field, arguments between round brackets are required, and arguments between square brackets are optional.`)
         embed.footer = {
             text: "In the usage field, arguments between round brackets are required, and arguments between square brackets are optional."

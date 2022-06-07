@@ -13,7 +13,7 @@ module.exports = {
     devOnly: false,
     run: async ({client, message, args}) => {
         classAmount = 26;
-        //TODO maybe change the leaderboard to leaderboard.js or even LastOnline script itself
+        //TODO maybe change the leaderboard to be in leaderboard.js instead of status or even LastOnline script itself
         //TODO instead of having these fuzz things, instead make them call the fuzz function or filter function etc
         //TODO make context id settable.
         var URL = `https://moodle.oeclism.catholic.edu.au/user/index.php?contextid=123980&id=896&perpage=${classAmount}`;
