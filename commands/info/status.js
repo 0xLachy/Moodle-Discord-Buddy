@@ -4,7 +4,7 @@ const {LismLogin} = require("../../util/functions")
 
 module.exports = {
     name: "status",
-    aliases: ["stat"],
+    aliases: ["st", "stat"],
     //TODO make this look nicer / make more sense
     usage: "status ['fuzz', 'filter <filterType>:<filterValue>', 'leaderboard/lb [seconds/sec]',] (<person>)", 
     description: "Return status of user (or class), filter example => LastOnline:1-day or Role:Teacher",
@@ -83,9 +83,7 @@ module.exports = {
             }
         }
 
-        for (let inputName in inputNames){
-            //need to get the actual name and not the index
-            inputName = inputNames[inputName]
+        for (inputName of inputNames){
             // Loops through each student to get correct one then breaks
             Classloop: for (let i = 0; i < classAmount; i++) {
                 personObj = await GetPersonObj(page, i);
@@ -141,32 +139,6 @@ async function Filter(page, filterArr, message){
                 SendEmbedMessage(personObj, message);
                 foundPerson = true;
             }
-            //determine how long to be within, 
-            // switch (filterStatusValue.toLowerCase()) {
-            //     case "now": //it says secs in participants screen but is essentially now
-            //         if (personObj[filterStatusType].includes("sec")) {
-            //             SendEmbedMessage(personObj, message);
-            //             foundPerson = true;
-            //         }
-            //         break;
-            //     case "hour":
-            //         if (personObj[filterStatusType].includes("hour") && personObj[filterStatusType].includes("min")) {
-            //             SendEmbedMessage(personObj, message);
-            //             foundPerson = true;
-            //         }
-            //         break;
-            //     case "day":
-            //         if (personObj[filterStatusType].includes("1 day")) {
-            //             SendEmbedMessage(personObj, message);
-            //             foundPerson = true;
-            //         }
-            //         break;
-            //     // default:
-            //     //     console.log("nobody found with" + [fitlerStatusType]);
-            // }
-        }
-        else{
-            // message.channel.send("Couldn't find anybody with" + [filterArr])
         }
     }
     if(!foundPerson){
