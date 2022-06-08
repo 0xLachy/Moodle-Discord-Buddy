@@ -53,7 +53,7 @@ module.exports = {
             //might make this the defualt arg tbh 
             else if(arg == "all"){   
                 assignmentObject = {...await GetAllAssignments(page, T1URL), 
-                ...await GetAllAssignments(page, T2URL) }
+                ...await GetAllAssignments(page, T2URL)} 
             }//Getting by term
             else if(arg == "t1" || arg == "term1"){
                 assignmentObject = await GetAllAssignments(page, T1URL)
@@ -83,7 +83,7 @@ module.exports = {
     }
 }
 
-async function GetAllAssignments(page, term_url="https://moodle.oeclism.catholic.edu.au/course/recent.php?id=897", pushPeople=true){
+async function GetAllAssignments(page, term_url="https://moodle.oeclism.catholic.edu.au/course/recent.php?id=897", pushPeople=true, links=false){
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
     await page.goto(term_url)
     // console.log(await page.content())
@@ -107,7 +107,8 @@ async function GetAllAssignments(page, term_url="https://moodle.oeclism.catholic
         for (elem of document.querySelectorAll('h3')){
             if(elem.querySelector('img[title="Assignment"]')){
                 //gets the title of the header if it is not a quiz
-                titleString = elem.querySelector("a").textContent
+                titleString = `[${elem.querySelector("a").textContent}](${elem.querySelector("a").getAttribute("href")})`;
+
                 var sibs = [];
                 var nextElem = elem;
 
