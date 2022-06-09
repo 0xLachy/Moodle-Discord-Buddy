@@ -1,5 +1,5 @@
 const puppeteer = require('puppeteer');
-const {MessageEmbed} = require('discord.js');
+const {MessageEmbed, DiscordAPIError} = require('discord.js');
 const { LismLogin } = require("../../util/functions");
 //TODO this all works fine and dandy, except it is slow, it might be good to cache the stuff and then have a -update to update cache
 module.exports = {
@@ -162,25 +162,28 @@ async function GetAssignmentForPerson(assignments, personName){
 
 function SendEmbedMessage(missingAssignments, message, personName, title="none", colour="#156385") {
     let embedMsg = new MessageEmbed();
-    let msgString = ""
-
+    let messageTooLong = false;
+    //TODO use reduce, to add up all the strings in the array and check if it is greater than 1024
+    //then set message too long based of that
     if(title != "none"){
         embedMsg.setTitle(title)
     }
     else{
         embedMsg.setTitle(`Missing Assignments for ${personName}`);
     }
-    console.log(missingAssignments)
+    // console.log(missingAssignments)
     //Prints out assignment as field name, and then the people who did the assignment somehow
     if(missingAssignments.constructor.name == "Object"){
         for(term of Object.entries(missingAssignments)){
             //console.log(assignmentData)
             let [termName, assignments] = term;
-            AddToMsgString(assignments, termName, msgString)
+            //won't work because the second one will be the only one that matters
+            AddToMsgString(assignments, termName)
         }
     }
     else{
-        AddToMsgString(missingAssignments, "Assignments", msgString);
+        //works fine here but try keep them both the same
+        AddToMsgString(missingAssignments, "Assignments");
     }
     //If there were no assignments added to the string
     //move into message string function
@@ -188,16 +191,24 @@ function SendEmbedMessage(missingAssignments, message, personName, title="none",
 
     embedMsg.setColor(colour);
     //TODO find a way to bypass message restriction of 1024 chars
-    if(msgString.length < 1024){
+    //console.log(msgString.length)
+    try{
         message.channel.send({ embeds: [embedMsg] });
+
     }
-    else{
+    catch(DiscordAPIError){
         message.channel.send("Too many assignments missing, the string is too long to send in a discord message")
+        
     }
+    // if(!messageTooLong){
+    // }
+    // else{
+        //Send the assignments, but not as an embed, maybe check the stringss before adding the embed feilds
+    // }
 
-    function AddToMsgString(assignmentArray, fieldName, msgString) {
-        // let msgString = "";
-
+    function AddToMsgString(assignmentArray, fieldName) {
+        let msgString = "";
+        
         for (assignment of assignmentArray) {
             //for some reason undefined shows up in this for of thing. don't know why
             if (assignment != undefined) {
@@ -213,8 +224,31 @@ function SendEmbedMessage(missingAssignments, message, personName, title="none",
                 msgString = "No Assignments Missing, Congrats :partying_face:"   
             }
         }
+        if(msgString.length > 1024){
 
-        //Add the assignments that were done to the message
-        embedMsg.addField(fieldName, msgString)
+            const assignmentStrings = msgString.match(/.{1,1024}(\s|$)/g);
+
+            let chunks = []
+            let tempStr = ""
+            assignmentStrings.forEach((assignChunk) => {
+                if(tempStr.length < (1024 - assignChunk.length)){
+                    tempStr += assignChunk;
+                }
+                else{
+                    chunks.push(tempStr);
+                    tempStr = "";
+                }
+            })
+            if(tempStr != ""){
+                chunks.push(tempStr)
+            }
+
+            chunks.forEach((biggerChunk, index) => embedMsg.addField(`${fieldName} part ${index+1}`, biggerChunk))
+        }
+        else{
+            //Add the assignments that were done to the message
+            embedMsg.addField(fieldName, msgString)
+        }
+
     }
 }
