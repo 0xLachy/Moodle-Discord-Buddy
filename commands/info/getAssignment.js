@@ -86,6 +86,7 @@ module.exports = {
             // console.log(inputName)
             SendEmbedMessage(result, message, inputName)   
         }        
+        browser.close();
     }
 }
 

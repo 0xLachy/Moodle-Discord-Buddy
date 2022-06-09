@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const { LismLogin } = require("../../util/functions");
-const { Collection, Formatters } = require("discord.js");
+//const { Collection, Formatters } = require("discord.js");
 
 module.exports = {
     name: "leaderboard",
