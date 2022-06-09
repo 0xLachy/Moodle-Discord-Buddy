@@ -7,7 +7,7 @@ module.exports = {
     aliases: ["getass", "gs", "getassignments"],
     usage: "!getassignment [t1 or t2 or t3] (<person>) || !gs filter <string>", 
     //TODO the term that it gets is based on the date in the year!!! that way future discord classes can use it
-    //TODO maybe set the urls as an array (t1, t2, t3)
+    //TODO assignment object has the assignments nested by term
     //TODO have other filter options maybe?
     description: "Get unfinished assignments for a person. By default it returns all terms",
     category: "info",
@@ -22,7 +22,7 @@ module.exports = {
         //later, if no person is called, try use their discord nickname, otherwise tell them to provide person name
         inputName = "lachlan";
         //undefined (on purpose)
-        var assignmentObject;
+        var assignmentObject = {};
 
         T1URL = "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896";
         T2URL = "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=897";
@@ -52,26 +52,30 @@ module.exports = {
             }
             //might make this the defualt arg tbh 
             else if(arg == "all"){   
-                assignmentObject = {...await GetAllAssignments(page, T1URL), 
-                ...await GetAllAssignments(page, T2URL)} 
+                // assignmentObject = {...await GetAllAssignments(page, T1URL), 
+                // ...await GetAllAssignments(page, T2URL)} 
+                assignmentObject["Term 1"] = await GetAllAssignments(page, T1URL);
+                assignmentObject["Term 2"] = await GetAllAssignments(page, T2URL);
             }//Getting by term
             else if(arg == "t1" || arg == "term1"){
-                assignmentObject = await GetAllAssignments(page, T1URL)
+                assignmentObject["Term 1"] = await GetAllAssignments(page, T1URL)
             }
             else if(arg == "t2" || arg == "term2"){
-                assignmentObject = await GetAllAssignments(page, T2URL)
+                assignmentObject["Term 2"] = await GetAllAssignments(page, T2URL)
             }
             else if(arg == "t3" || arg == "term3"){
-                assignmentObject = await GetAllAssignments(page, T3URl)
+                assignmentObject["Term 3"] = await GetAllAssignments(page, T3URl)
             }
             else{
                 //call the main function with the index and compare if it is string or numb
                 inputName = arg;
             }
         }
-        if(assignmentObject == undefined){
-            assignmentObject = {...await GetAllAssignments(page, T1URL), 
-                ...await GetAllAssignments(page, T2URL) }
+        if(Object.keys(assignmentObject).length === 0 && !filter){
+            // assignmentObject = {...await GetAllAssignments(page, T1URL), 
+            //     ...await GetAllAssignments(page, T2URL) };
+            assignmentObject["Term 1"] = await GetAllAssignments(page, T1URL);
+            assignmentObject["Term 2"] = await GetAllAssignments(page, T2URL);
         }
         if(!filter){
 
@@ -138,20 +142,27 @@ async function GetAllAssignments(page, term_url="https://moodle.oeclism.catholic
 }
 
 async function GetAssignmentForPerson(assignments, personName){
-    missingAssignments = [];
-
-    for(assignmentData of Object.entries(assignments)){
-        let [assignment, people] = assignmentData;
-        //If they can't be found then it pushes, meaning if you put ZZZZZ it will get all the assignments for the term
-        if(!people.some(correctPerson => correctPerson.toLowerCase().includes(personName))){
-            missingAssignments.push(assignment);
+    missingAssignments = {};
+    for(term of Object.entries(assignments)){
+        let [termName, assignmentsObj] = term;
+        //sets { Term3: term3}
+        //missingAssignments[termName] = term;
+        missingAssignments[termName] = [];
+        for(assignmentData of Object.entries(assignmentsObj)){
+            let [assignment, people] = assignmentData;
+            //If they can't be found then it pushes, meaning if you put ZZZZZ it will get all the assignments for the term
+            if(!people.some(correctPerson => correctPerson.toLowerCase().includes(personName))){
+                missingAssignments[termName].push(assignment);
+            }
         }
     }
+    //console.log(missingAssignments)
     return missingAssignments;
 }
 
 function SendEmbedMessage(missingAssignments, message, personName, title="none", colour="#156385") {
     let embedMsg = new MessageEmbed();
+    let msgString = ""
 
     if(title != "none"){
         embedMsg.setTitle(title)
@@ -159,28 +170,21 @@ function SendEmbedMessage(missingAssignments, message, personName, title="none",
     else{
         embedMsg.setTitle(`Missing Assignments for ${personName}`);
     }
-
-    let msgString = "";
-
-    for(assignment of missingAssignments){
-        //for some reason undefined shows up in this for of thing. don't know why
-        if(assignment != undefined){
-            msgString += `${assignment}\n`;
+    console.log(missingAssignments)
+    //Prints out assignment as field name, and then the people who did the assignment somehow
+    if(missingAssignments.constructor.name == "Object"){
+        for(term of Object.entries(missingAssignments)){
+            //console.log(assignmentData)
+            let [termName, assignments] = term;
+            AddToMsgString(assignments, termName, msgString)
         }
+    }
+    else{
+        AddToMsgString(missingAssignments, "Assignments", msgString);
     }
     //If there were no assignments added to the string
-    if (msgString == ""){
-        if(personName == "null"){
-            msgString = "No Assignments Found"
-        }
-        else{
-            msgString = "No Assignments Missing, Congrats :partying_face:"   
-        }
-    }
+    //move into message string function
 
-    //TODO have a field for each person or something instead
-    //Add the assignments that were done to the message
-    embedMsg.addField("Assignments", msgString)
 
     embedMsg.setColor(colour);
     //TODO find a way to bypass message restriction of 1024 chars
@@ -189,5 +193,28 @@ function SendEmbedMessage(missingAssignments, message, personName, title="none",
     }
     else{
         message.channel.send("Too many assignments missing, the string is too long to send in a discord message")
+    }
+
+    function AddToMsgString(assignmentArray, fieldName, msgString) {
+        // let msgString = "";
+
+        for (assignment of assignmentArray) {
+            //for some reason undefined shows up in this for of thing. don't know why
+            if (assignment != undefined) {
+                msgString += `${assignment}\n`;
+            }
+        }
+
+        if (msgString == ""){
+            if(personName == "null"){
+                msgString = "No Assignments Found"
+            }
+            else{
+                msgString = "No Assignments Missing, Congrats :partying_face:"   
+            }
+        }
+
+        //Add the assignments that were done to the message
+        embedMsg.addField(fieldName, msgString)
     }
 }
