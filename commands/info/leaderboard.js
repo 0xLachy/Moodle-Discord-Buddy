@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const { LismLogin } = require("../../util/functions");
-const { Collection, Formatters } = require("discord.js")
+const { Collection, Formatters } = require("discord.js");
 
 module.exports = {
     name: "leaderboard",
@@ -24,6 +24,7 @@ module.exports = {
         //     "Jebidiah": "Jeb",
         //     "Lachy": "Lachlan"
         // }];
+        //TODO use inverse NicknameToTrueName from functions util
         const customNicknames = {
             "Oliver": "Oli",
             "Jeb": "Jebidiah",
@@ -173,7 +174,7 @@ const CreateRole = async (roleName, colour, perms, message) => {
 async function GetName(unknownNickname, customNicknames){
     //discord collections are nice
     // return (customNicknames.get(unknownNickname) || unknownNickname);
-    for(nickname in customNicknames){
+    for(nickname of customNicknames){
         if(nickname == unknownNickname) return customNicknames[nickname];
     }
     return unknownNickname;

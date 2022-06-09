@@ -22,7 +22,33 @@ const LismLogin = async (page, url) => {
     ])
 }
 
+const NicknameToRealName = async (inputName) => {
+    //best band ever!! <3
+    const nicknames = {
+        "lachy": "lachlan",
+        "lachianus": "lachlan",
+        "harrisonus": "lachlan",
+        "harry": "harrison",
+        "poohead": "harrison",
+        "teacher": "michael",
+        "sddmaster": "harrison",
+        "jebidiah": "jeb"
+    }        
+
+    for(nicknamePair of Object.entries(nicknames)){
+        let [ nickname, trueName ] = nicknamePair;
+        if(inputName == nickname) { 
+            inputName = trueName;
+            break;
+        }
+    }
+
+    //returns original name if the for loop didn't work
+    return inputName;
+}
+
 module.exports = {
     getFiles,
-    LismLogin
+    LismLogin,
+    NicknameToRealName
 }

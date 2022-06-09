@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const {MessageEmbed} = require('discord.js');
-const {LismLogin} = require("../../util/functions")
+const { LismLogin, NicknameToRealName } = require("../../util/functions")
 
 module.exports = {
     name: "status",
@@ -24,16 +24,7 @@ module.exports = {
         //move pointer to function location
         //#form_autocomplete_input-1653380416775
         //TODO add nickname through slash command
-        const nicknames = {
-            "lachy": "lachlan",
-            "lachianus": "lachlan",
-            "harrisonus": "lachlan",
-            "harry": "harrison",
-            "poohead": "harrison",
-            "teacher": "michael",
-            "sddmaster": "harrison",
-            "jebidiah": "jeb"
-        }
+
         // Starts browser visible 
         //const browser = await puppeteer.launch({ headless: false});
         const browser = await puppeteer.launch();
@@ -74,13 +65,16 @@ module.exports = {
         }
 
         //convert names from nicknames
-        for (let i = 0; i < inputNames.length; i++){
-            for (let nickname in nicknames) {
-                if(nickname == inputNames[i]){
-                    inputNames[i] = nicknames[nickname];
-                    break;
-                }
-            }
+        // for (let i = 0; i < inputNames.length; i++){
+        //     for (let nickname in nicknames) {
+        //         if(nickname == inputNames[i]){
+        //             inputNames[i] = nicknames[nickname];
+        //             break;
+        //         }
+        //     }
+        // }
+        for(nameIndex in inputNames){
+            inputNames[nameIndex] = await NicknameToRealName(inputNames[nameIndex])
         }
 
         for (inputName of inputNames){

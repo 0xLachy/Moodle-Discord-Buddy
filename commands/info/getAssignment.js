@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
-const {MessageEmbed, DiscordAPIError} = require('discord.js');
-const { LismLogin } = require("../../util/functions");
+const { MessageEmbed } = require('discord.js');
+const { LismLogin, NicknameToRealName } = require("../../util/functions");
 //TODO this all works fine and dandy, except it is slow, it might be good to cache the stuff and then have a -update to update cache
 module.exports = {
     name: "getassignment",
@@ -71,6 +71,8 @@ module.exports = {
                 inputName = arg;
             }
         }
+
+        inputName = await NicknameToRealName(inputName);
         if(Object.keys(assignmentObject).length === 0 && !filter){
             // assignmentObject = {...await GetAllAssignments(page, T1URL), 
             //     ...await GetAllAssignments(page, T2URL) };
