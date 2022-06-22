@@ -4,7 +4,7 @@ const { LismLogin, NicknameToRealName } = require("../../util/functions");
 //TODO this all works fine and dandy, except it is slow, it might be good to cache the stuff and then have a -update to update cache
 module.exports = {
     name: "getassignment",
-    aliases: ["getass", "gs", "getassignments"],
+    aliases: ["gs", "getassignments"],
     usage: "!getassignment [t1 or t2 or t3] (<person>) || !gs filter <string>", 
     //TODO the term that it gets is based on the date in the year!!! that way future discord classes can use it
     //TODO assignment object has the assignments nested by term

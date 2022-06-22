@@ -23,11 +23,12 @@ const LismLogin = async (page, url) => {
 }
 
 const NicknameToRealName = async (inputName) => {
-    //best band ever!! <3
+    //best band ever! 😍
     const nicknames = {
         "lachy": "lachlan",
-        "lachianus": "lachlan",
-        "harrisonus": "lachlan",
+        "lociānus": "lachlan",
+        "locianus": "lachlan",
+        "harrisonus": "harrison",
         "harry": "harrison",
         "poohead": "harrison",
         "teacher": "michael",

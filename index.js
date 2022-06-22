@@ -44,5 +44,5 @@ client.on("interactionCreate", (interaction) => {
     if(!interaction.inGuild()) return interaction.reply("This command can only be used in a server")
 })
 
-
-client.login(process.env.TOKEN)
+//That .then is not needed, but idk
+client.login(process.env.TOKEN)//.then(client.user.setActivity("Reading Moodle Data", {type: "PLAYING"}))

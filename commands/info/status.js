@@ -103,7 +103,8 @@ async function GetPersonObj(page, i){
         "Username": await GetUsername(page, i),
         "Role": await GetRole(page, i),
         "Group": await GetGroup(page, i),
-        "LastOnline": await GetLastOnStatus(page, i)
+        "LastOnline": await GetLastOnStatus(page, i),
+        "Thumbnail": await GetProfilePic(page, i)
     };  
 }
 
@@ -157,7 +158,8 @@ function SendEmbedMessage(participantData, message, title="none", colour="#15638
             { name: "Roles", value: participantData["Role"] },
             { name: "Groups", value: participantData["Group"] },
             { name: "Last Online", value: participantData["LastOnline"] }
-        );    
+        ); 
+        statusEmbed.setThumbnail(participantData["Thumbnail"])   
     }
     else if(participantData.constructor.name == "Array"){
         if(title != "none"){
@@ -211,6 +213,13 @@ async function GetLastOnStatus(page, i) {
         return document.querySelector(sel).textContent;
     }, `#user-index-participants-896_r${i}_c3`);
 }
+
+async function GetProfilePic(page, i) {
+    return await page.evaluate((sel) => {
+        return document.querySelector(sel).src;
+    }, `#user-index-participants-896_r${i}_c0 > a > img`);
+}
+
 
 async function GetOnlineLeaderboard(page, message, includeSecs=false){
     let participantInfo = []
