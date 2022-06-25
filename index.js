@@ -41,17 +41,18 @@ client.loadSlashCommands(bot, false)
 module.exports = bot
 
 //Change this to your discord server
-//TODO change this to array
+//The reason for this is that it takes like an hour for the client application commands to publish, or you need to regenerate the URL
 const guildId = "950154084441288724"
 
 client.on("ready", async () => {
     console.log(`Loading ${client.slashcommands.size} slash commands`)
-
     const guild = client.guilds.cache.get(guildId)
     if (!guild)
         return console.error("Target Guild not found")
 
+    await client.application.commands.set([...client.slashcommands.values()])
     await guild.commands.set([...client.slashcommands.values()])
+    //console.log(client.application.commands.s)
     console.log(`Successfully loaded in ${client.slashcommands.size} slash commands`)
 })
 

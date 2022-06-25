@@ -5,7 +5,7 @@ const LismFunctions = require("../util/functions")
 
 //.setRequired(true));
 const data = new SlashCommandBuilder()
-	.setName('getassignments')
+	.setName('assignments')
 	.setDescription('Get assignments for the lismore course')
     //.setDefaultPermission()
 	.addSubcommand(subcommand =>
@@ -57,7 +57,7 @@ module.exports = {
     ...data.toJSON(),
     run: async (client, interaction) => {
 
-        await interaction.deferReply('Working on it!');
+        await interaction.deferReply();
 
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
@@ -72,7 +72,7 @@ module.exports = {
             let studentName = await LismFunctions.NicknameToRealName(await interaction.options.getString("studentname"));
             let termInt = await interaction.options.getInteger("term");
 
-            if(termInt){
+            if(termInt != null){
                 let currentTerm = LismFunctions.GetTermURLS()[termInt];
                 SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, [currentTerm]), studentName), interaction, studentName);
             }
@@ -84,7 +84,7 @@ module.exports = {
             let filterString = await interaction.options.getString("filterstring")
             let termInt = await interaction.options.getInteger("term-to-filter");
 
-            if(termInt){
+            if(termInt != null){
                 let currentTerm = LismFunctions.GetTermURLS()[termInt];
                 SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, [currentTerm], false), filterString, true), interaction, "malaga",
                 `Assignments found with filter ${filterString}:`)
@@ -199,8 +199,7 @@ async function GetWantedAssignments(assignments, personName, filtering=false){
 
 function SendEmbedMessage(missingAssignments, interaction, personName, title="none", colour="#156385") {
     let embedMsg = new MessageEmbed();
-    //TODO use reduce, to add up all the strings in the array and check if it is greater than 1024
-    //then set message too long based of that
+
     if(title != "none"){
         embedMsg.setTitle(title)
     }
