@@ -33,7 +33,7 @@ module.exports = {
         
         //bypass loginscreen
         //the login URL doesn't really matter becuase getAssignments visits a different page anyways
-        await LismLogin(page, T2URL)
+        await LismLogin(page)
         //TODO have one to just return assignments for a week
 
         for(let i = 0;i < args.length; i++){

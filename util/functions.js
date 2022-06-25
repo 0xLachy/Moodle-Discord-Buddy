@@ -4,8 +4,18 @@ const getFiles = (path, ending) => {
     return fs.readdirSync(path).filter(f=> f.endsWith(ending))
 }
 
-const LismLogin = async (page, url) => {
-    await page.goto(url);
+//ENTER TERM URLS HERE
+const GetTermURLS = () => { 
+    return [ 
+        "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896",
+        "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=897",
+        "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=898"
+    ]; 
+}
+
+const LismLogin = async (page) => {
+    //CHANGE TERM URL HERE
+    await page.goto("https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896");
     // dom element selectors
     const USERNAME_SELECTOR = '#username';
     const PASSWORD_SELECTOR = '#password';
@@ -24,6 +34,7 @@ const LismLogin = async (page, url) => {
 
 const NicknameToRealName = async (inputName) => {
     //best band ever! 😍
+    //Enter your own nicknames here
     const nicknames = {
         "lachy": "lachlan",
         "lociānus": "lachlan",
@@ -50,6 +61,7 @@ const NicknameToRealName = async (inputName) => {
 
 module.exports = {
     getFiles,
+    GetTermURLS,
     LismLogin,
     NicknameToRealName
 }

@@ -18,6 +18,8 @@ let bot = {
 client.loadSlashCommands = (bot, reload) => require("./handlers/slashcommands")(bot, reload)
 client.loadSlashCommands(bot, false)
 
+//Change this to your discord server
+//TODO change this to array
 const guildId = "950154084441288724"
 
 client.on("ready", async () => {
@@ -25,10 +27,11 @@ client.on("ready", async () => {
 
     const guild = client.guilds.cache.get(guildId)
     if (!guild)
-        console.error("Target Guild not found")
+        return console.error("Target Guild not found")
 
     await guild.commands.set([...client.slashcommands.values()])
-    console.log("Finished")
+    console.log(`Successfully loaded in ${client.slashcommands.size} slash commands`)
+    //telling node that it has loaded in commands and now its done
     process.exit(0)
 })
 

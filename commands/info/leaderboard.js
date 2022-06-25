@@ -75,7 +75,7 @@ module.exports = {
                 show_leaderboard = false;
             }
         }
-        await LismLogin(page, URL)
+        await LismLogin(page)
         // message.guild.members.find(member => console.log(member.nickname));
         if(allTerms) {
             //TODO when t3 comes out add it in

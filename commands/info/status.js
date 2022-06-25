@@ -31,7 +31,7 @@ module.exports = {
         const page = await browser.newPage();
 
         // Gets past login screen.
-        await LismLogin(page, URL)
+        await LismLogin(page)
         // Did all that before getting to args, so that I can call functions using page
         for(let i = 0;i < args.length; i++){
             let arg = args[i].toLowerCase();
@@ -173,7 +173,7 @@ function SendEmbedMessage(participantData, message, title="none", colour="#15638
             for (const [key, value] of Object.entries(participant)) {
                 //console.log(`${key}: ${value}`);
                 //last online can be either included field or in name of field not sure what looks better
-                if(key != "Username" && key != "SecondsOnline"){
+                if(key != "Username" && key != "SecondsOnline" && key != "Thumbnail"){
                     participantInfoString += `**${key}** : ${value} `
                 }
             }
