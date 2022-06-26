@@ -14,6 +14,7 @@ const client = new Discord.Client({
 let bot = {
     client,
     prefix: "!",
+    classAmount: 26,
     mainColour: "#156385",
     errorColour: "#FF0000",
     owners: ["618689924970840103"]
@@ -51,7 +52,8 @@ client.on("ready", async () => {
         return console.error("Target Guild not found")
 
     await client.application.commands.set([...client.slashcommands.values()])
-    await guild.commands.set([...client.slashcommands.values()])
+    // await client.application.commands.set([])
+    // await guild.commands.set([...client.slashcommands.values()])
     //console.log(client.application.commands.s)
     console.log(`Successfully loaded in ${client.slashcommands.size} slash commands`)
 })

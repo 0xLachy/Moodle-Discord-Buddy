@@ -1,6 +1,6 @@
 const puppeteer = require('puppeteer');
 const {MessageEmbed} = require('discord.js');
-const { LismLogin, NicknameToRealName } = require("../../util/functions")
+const { LismLogin, NicknameToRealName, classAmount, courseIDs } = require("../../util/functions")
 
 module.exports = {
     name: "status",
@@ -13,12 +13,11 @@ module.exports = {
     devOnly: false,
     run: async ({client, message, args}) => {
         // {classAmount} = client; //TODO put that into client
-        classAmount = 26;
         //TODO maybe change the leaderboard to be in leaderboard.js instead of status or even LastOnline script itself
         //TODO instead of having these fuzz things, instead make them call the fuzz function or filter function etc
         //TODO make context id settable.
         //TODO change the url thing so that it fetches from util, the 896 is important
-        var URL = `https://moodle.oeclism.catholic.edu.au/user/index.php?contextid=123980&id=896&perpage=${classAmount}`;
+        var URL = `https://moodle.oeclism.catholic.edu.au/user/index.php?contextid=124194&id=896&perpage=${classAmount}`;
         var inputNames = [];
         var fuzz = false;
         var filterArg = "";
@@ -28,12 +27,13 @@ module.exports = {
         //TODO add nickname through slash command
 
         // Starts browser visible 
-        //const browser = await puppeteer.launch({ headless: false});
+        // const browser = await puppeteer.launch({ headless: false});
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
 
         // Gets past login screen.
-        await LismLogin(page)
+        await LismLogin(page, URL)
+        
         // Did all that before getting to args, so that I can call functions using page
         for(let i = 0;i < args.length; i++){
             let arg = args[i].toLowerCase();
@@ -102,11 +102,11 @@ module.exports = {
 //when calling this function use await
 async function GetPersonObj(page, i){
     return {
-        "Username": await GetUsername(page, i),
-        "Role": await GetRole(page, i),
-        "Group": await GetGroup(page, i),
-        "LastOnline": await GetLastOnStatus(page, i),
-        "Thumbnail": await GetProfilePic(page, i)
+        "Username": await GetUsername(page, i, 897),
+        "Role": await GetRole(page, i, 897),
+        "Group": await GetGroup(page, i, 897),
+        "LastOnline": await GetLastOnStatus(page, i, 897),
+        "Thumbnail": await GetProfilePic(page, i, 897)
     };  
 }
 
@@ -192,34 +192,34 @@ function SendEmbedMessage(participantData, message, title="none", colour="#15638
     message.channel.send({ embeds: [statusEmbed] });
 }
 
-async function GetUsername(page, i) {
+async function GetUsername(page, i, courseID) {
     return await page.evaluate((sel) => {
         return document.querySelector(sel).textContent;
-    }, `#user-index-participants-896_r${i}_c0 > a`);
+    }, `#user-index-participants-${courseID}_r${i}_c0 > a`);
 }
 
-async function GetRole(page, i) {
+async function GetRole(page, i, courseID) {
     return await page.evaluate((sel) => {
         return document.querySelector(sel).textContent;
-    }, `#user-index-participants-896_r${i}_c1`);
+    }, `#user-index-participants-${courseID}_r${i}_c1`);
 }
 
-async function GetGroup(page, i) {
+async function GetGroup(page, i, courseID) {
     return await page.evaluate((sel) => {
         return document.querySelector(sel).textContent;
-    }, `#user-index-participants-896_r${i}_c2`);
+    }, `#user-index-participants-${courseID}_r${i}_c2`);
 }
 
-async function GetLastOnStatus(page, i) {
+async function GetLastOnStatus(page, i, courseID) {
     return await page.evaluate((sel) => {
         return document.querySelector(sel).textContent;
-    }, `#user-index-participants-896_r${i}_c3`);
+    }, `#user-index-participants-${courseID}_r${i}_c3`);
 }
 
-async function GetProfilePic(page, i) {
+async function GetProfilePic(page, i, courseID) {
     return await page.evaluate((sel) => {
         return document.querySelector(sel).src;
-    }, `#user-index-participants-896_r${i}_c0 > a > img`);
+    }, `#user-index-participants-${courseID}_r${i}_c0 > a > img`);
 }
 
 

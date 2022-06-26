@@ -111,8 +111,6 @@ async function GetAllAssignments(page, term_urlsArr=LismFunctions.GetTermURLS(),
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
     assignmentObject = {}
     for (term_url of term_urlsArr){
-        //debug
-        console.log(term_url)
 
         
         await page.goto(term_url)
@@ -176,7 +174,6 @@ async function GetAllAssignments(page, term_urlsArr=LismFunctions.GetTermURLS(),
 
 async function GetWantedAssignments(assignments, personName, filtering=false){
     missingAssignments = {};
-    console.log(personName)
     for(term of Object.entries(assignments)){
         let [termName, assignmentsObj] = term;
         //sets { Term3: term3}
