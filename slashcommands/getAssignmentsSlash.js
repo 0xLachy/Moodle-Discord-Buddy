@@ -6,7 +6,7 @@ const LismFunctions = require("../util/functions")
 //.setRequired(true));
 const data = new SlashCommandBuilder()
 	.setName('assignments')
-	.setDescription('Get assignments for the lismore course')
+	.setDescription('Get assignments for the Moodle course')
     //.setDefaultPermission()
 	.addSubcommand(subcommand =>
 		subcommand
@@ -21,9 +21,15 @@ const data = new SlashCommandBuilder()
                 option.setName('term-to-filter')
                     .setDescription('Optionally choose only 1 term filter')
                     .setRequired(false)
-                    .addChoice("Term 1", 0)
-                    .addChoice("Term 2", 1)
-                    .addChoice("Term 3", 2)
+                    .addChoices(
+                        { name: 'Term 1', value: 0 },
+                        { name: 'Term 2', value: 1 },
+                        { name: 'Term 3', value: 2 },
+                    )
+
+                    // .addChoice("Term 1", 0)
+                    // .addChoice("Term 2", 1)
+                    // .addChoice("Term 3", 2)
             ))
 
 
@@ -42,18 +48,22 @@ const data = new SlashCommandBuilder()
                     .setDescription('Optionally choose only 1 term')
                     .setRequired(false)
                     //doesn't work because it expects array?
-                    // .addChoices(
-                    //     { name: 'Term 1', value: 0 },
-                    //     { name: 'Term 2', value: 1 },
-                    //     { name: 'Term 3', value: 2 },
-                    // )
-                    .addChoice("Term 1", 0)
-                    .addChoice("Term 2", 1)
-                    .addChoice("Term 3", 2)
+                    .addChoices(
+                        { name: 'Term 1', value: 0 },
+                        { name: 'Term 2', value: 1 },
+                        { name: 'Term 3', value: 2 },
+                    )
+                    // .addChoice("Term 1", 0)
+                    // .addChoice("Term 2", 1)
+                    // .addChoice("Term 3", 2)
             )
         );
 
 module.exports = {
+    category: "info",
+    permissions: [],
+    devOnly: false,
+
     ...data.toJSON(),
     run: async (client, interaction) => {
 
@@ -194,7 +204,7 @@ async function GetWantedAssignments(assignments, personName, filtering=false){
 }
 
 
-function SendEmbedMessage(missingAssignments, interaction, personName, title="none", colour="#156385") {
+function SendEmbedMessage(missingAssignments, interaction, personName, title="none", colour=LismFunctions.primaryColour) {
     let embedMsg = new MessageEmbed();
 
     if(title != "none"){

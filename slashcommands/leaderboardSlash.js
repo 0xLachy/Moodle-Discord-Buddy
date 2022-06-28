@@ -12,9 +12,11 @@ const data = new SlashCommandBuilder()
     .addIntegerOption(option =>
         option.setName('term')
             .setDescription('Optionally choose only 1 term')
-            .addChoice("Term 1", 0)
-            .addChoice("Term 2", 1)
-            .addChoice("Term 3", 2)
+            .addChoices(
+                { name: 'Term 1', value: 0 },
+                { name: 'Term 2', value: 1 },
+                { name: 'Term 3', value: 2 },
+            )
     )
     .addBooleanOption(option =>
         option
@@ -31,6 +33,10 @@ const data = new SlashCommandBuilder()
     .addStringOption(option => option.setName('rig').setDescription('rig the score for a person e.g Harrison Baird = 12'));
 
 module.exports = {
+    category: "info",
+    permissions: [],
+    devOnly: false,
+
     ...data.toJSON(),
     run: async (client, interaction) => {
 
@@ -123,7 +129,7 @@ async function FasterLeaderboard(page, term_urlArr=LismFunctions.GetTermURLS(), 
     return leaderboardResults;
 }
 
-function SendEmbedMessage(leaderboardResults, interaction, fieldName, title="default", colour="#156385") {
+function SendEmbedMessage(leaderboardResults, interaction, fieldName, title="default", colour=LismFunctions.primaryColour) {
     let embedMsg = new MessageEmbed();
 
     if(title != "default"){

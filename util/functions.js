@@ -4,6 +4,9 @@ const currentTerm = 2;
 const classAmount = 26;
 const contextId = 124194;
 
+const primaryColour = "#156385";
+const errorColour = "#FF0000";
+
 const mainStaticUrl = "https://moodle.oeclism.catholic.edu.au/";
 const courseIDs = ["896", "897", "898"]
 //example urls:
@@ -148,5 +151,7 @@ module.exports = {
     NicknameToRealName,
     ConvertTime,
     classAmount,
-    courseIDs
+    courseIDs,
+    primaryColour,
+    errorColour
 }

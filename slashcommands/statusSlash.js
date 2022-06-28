@@ -17,13 +17,13 @@ const LismFunctions = require("../util/functions");
 
 //Can't get addchoices to work :/ , the example on the docs gives an error
 const durations = [
-    { name: "60 seconds", value: 60 * 1000 },
-    { name: "5 minutes", value: 5 * 60 * 1000 },
-    { name: "10 minutes", value: 10 * 60 * 1000 },
-    { name: "30 minutes", value: 30 * 60 * 1000 },
-    { name: "1 hour", value: 60 * 60 * 1000 },
-    { name: "1 day", value: 24 * 60 * 60 * 1000 },
-    { name: "1 week", value: 7 * 24 * 60 * 60 * 1000 }
+    { name: "60 seconds", value: 60},
+    { name: "5 minutes", value: 5 * 60},
+    { name: "10 minutes", value: 10 * 60},
+    { name: "30 minutes", value: 30 * 60},
+    { name: "1 hour", value: 60 * 60},
+    { name: "1 day", value: 24 * 60 * 60},
+    { name: "1 week", value: 7 * 24 * 60 * 60 }
 ]
 
 //VERY INTERESTING NOTE -- every time the script is run, these variables run over, so if they are changed they stay changed, can use for cache.
@@ -65,16 +65,16 @@ const data = new SlashCommandBuilder()
                     .setName('last-online')
                     .setDescription('filter by time since last online')
                     .setRequired(false)
-                    .addChoice("60 seconds", 60)
-                    .addChoice("5 minutes", 5 * 60)
-                    .addChoice("10 minutes", 10 * 60)
-                    .addChoice("30 minutes", 30 * 60)
-                    .addChoice("1 hour", 60 * 60)
-                    .addChoice("3 hours", 3 * 60 * 60)
-                    .addChoice("6 hours", 6 * 60 * 60)
-                    .addChoice("1 day", 24 * 60 * 60)
-                    .addChoice("1 week", 7 * 24 * 60)
-                    //.addChoices(...durations)
+                    // .addChoice("60 seconds", 60)
+                    // .addChoice("5 minutes", 5 * 60)
+                    // .addChoice("10 minutes", 10 * 60)
+                    // .addChoice("30 minutes", 30 * 60)
+                    // .addChoice("1 hour", 60 * 60)
+                    // .addChoice("3 hours", 3 * 60 * 60)
+                    // .addChoice("6 hours", 6 * 60 * 60)
+                    // .addChoice("1 day", 24 * 60 * 60)
+                    // .addChoice("1 week", 7 * 24 * 60)
+                    .addChoices(...durations)
             )
             .addBooleanOption(option=>
                 option
@@ -98,6 +98,11 @@ const data = new SlashCommandBuilder()
  
 
 module.exports = {
+    category: "info",
+    usage: "status 'person <personName>' OR 'leaderboard <secs:true/false>' OR 'filter <includes-string> and/or <last-online> and/or <flip:true/false>(flips last online)", 
+    permissions: [],
+    devOnly: false,
+
     ...data.toJSON(),
     run: async (client, interaction) => {
         embedMessagesArr = [];
@@ -248,7 +253,7 @@ async function GetOnlineLeaderboard(page, interaction, showSeconds=false){
 
 }
 
-function CreateEmbedMessage(interaction, personData, leaderboard=false, title="none", colour="#156385") {
+function CreateEmbedMessage(interaction, personData, leaderboard=false, title="none", colour=LismFunctions.primaryColour) {
     let statusEmbed = new MessageEmbed();
     //check if data is obj or array
     //console.log(participantData.constructor.name);
