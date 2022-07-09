@@ -74,7 +74,14 @@ const LismLogin = async (page, TermURL=`${mainStaticUrl}course/recent.php?id=${c
     const USERNAME_SELECTOR = '#username';
     const PASSWORD_SELECTOR = '#password';
     const BUTTON_SELECTOR = 'body > div > div > div > div.uk-card-body.uk-text-left > div > div.uk-width-3-4 > form > div.uk-margin.uk-text-right > button';
-
+    
+    //TODO USE WAITFORSELECTOR
+    try {
+        await page.waitForSelector(USERNAME_SELECTOR)
+    } catch(err){
+        console.logError("login page not working, #Username not found")
+        console.log(err)
+    }
     await page.click(USERNAME_SELECTOR);
     await page.keyboard.type(process.env.LISMNAME);
 

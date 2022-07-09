@@ -99,8 +99,13 @@ async function FasterLeaderboard(page, term_urlArr=LismFunctions.GetTermURLS(), 
             page.waitForNavigation(),
         ]);
         
-        //Make sure it loads before grabbing people
-        await page.waitForSelector("table.assignment-recent > tbody > tr > td:nth-child(2) > div > a")
+        //Make sure it loads before grabbing people, Do the same thing here because if term exists but no assignments are done
+        try {
+            await page.waitForSelector("table.assignment-recent > tbody > tr > td:nth-child(2) > div > a")
+        } catch(err){
+            console.log("term doesn't exist yet")
+            break;
+        }
 
         leaderboardResults = await page.evaluate((leaderboardResults) => {             
             for (elem of document.querySelectorAll('table.assignment-recent > tbody > tr > td:nth-child(2) > div > a')){

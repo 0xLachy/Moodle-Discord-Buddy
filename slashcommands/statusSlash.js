@@ -91,7 +91,7 @@ const data = new SlashCommandBuilder()
             .addBooleanOption(option =>
                 option.setName('seconds')
                     .setDescription('Show Last online with seconds arg')
-                    .setRequired(true)
+                    .setRequired(false)
             )
 
         );
