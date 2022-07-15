@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { MessageEmbed } = require('discord.js');
-const LismFunctions = require("../util/functions")
+const UtilFunctions = require("../util/functions")
 
 //.setRequired(true));
 const data = new SlashCommandBuilder()
@@ -76,14 +76,14 @@ module.exports = {
         var filter = false;
         
         //log into the browser
-        await LismFunctions.LismLogin(page)
+        await UtilFunctions.LoginToMoodle(page)
 
         if (interaction.options.getSubcommand() === 'student') {
-            let studentName = await LismFunctions.NicknameToRealName(await interaction.options.getString("studentname"));
+            let studentName = await UtilFunctions.NicknameToRealName(await interaction.options.getString("studentname"));
             let termInt = await interaction.options.getInteger("term");
 
             if(termInt != null){
-                let currentTerm = LismFunctions.GetTermURLS()[termInt];
+                let currentTerm = UtilFunctions.GetTermURLS()[termInt];
                 SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, [currentTerm]), studentName), interaction, studentName);
             }
             else{
@@ -95,12 +95,12 @@ module.exports = {
             let termInt = await interaction.options.getInteger("term-to-filter");
 
             if(termInt != null){
-                let currentTerm = LismFunctions.GetTermURLS()[termInt];
+                let currentTerm = UtilFunctions.GetTermURLS()[termInt];
                 SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, [currentTerm], false), filterString, true), interaction, "malaga",
                 `Assignments found with filter ${filterString}:`)
             }
             else{
-                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, LismFunctions.GetTermURLS(), false), filterString, true), interaction, "malaga",
+                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, UtilFunctions.GetTermURLS(), false), filterString, true), interaction, "malaga",
                 `Assignments found with filter ${filterString}:`)
             }
             
@@ -117,7 +117,7 @@ module.exports = {
     }
 }
 
-async function GetAllAssignments(page, term_urlsArr=LismFunctions.GetTermURLS(), pushPeople=true, links=false){
+async function GetAllAssignments(page, term_urlsArr=UtilFunctions.GetTermURLS(), pushPeople=true, links=false){
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
     assignmentObject = {}
     for (term_url of term_urlsArr){
@@ -142,7 +142,7 @@ async function GetAllAssignments(page, term_urlsArr=LismFunctions.GetTermURLS(),
         //Debuging Purposes
         page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
         
-        assignmentObject[`Term ${LismFunctions.GetTermURLS().indexOf(term_url) + 1}`] = await page.evaluate((pushPeople, assignmentObject) => {   
+        assignmentObject[`Term ${UtilFunctions.GetTermURLS().indexOf(term_url) + 1}`] = await page.evaluate((pushPeople, assignmentObject) => {   
             let tempAssObj = {};
             for (elem of document.querySelectorAll('h3')){
                 if(elem.querySelector('img[title="Assignment"]')){
@@ -204,7 +204,7 @@ async function GetWantedAssignments(assignments, personName, filtering=false){
 }
 
 
-function SendEmbedMessage(missingAssignments, interaction, personName, title="none", colour=LismFunctions.primaryColour) {
+function SendEmbedMessage(missingAssignments, interaction, personName, title="none", colour=UtilFunctions.primaryColour) {
     let embedMsg = new MessageEmbed();
 
     if(title != "none"){

@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { MessageEmbed } = require('discord.js');
-const LismFunctions = require("../util/functions");
+const UtilFunctions = require("../util/functions");
 
 //TODO implement code for the role options
 //.setRequired(true));
@@ -46,13 +46,13 @@ module.exports = {
         const page = await browser.newPage();
         
         //log into the browser
-        await LismFunctions.LismLogin(page)
+        await UtilFunctions.LoginToMoodle(page)
 
         let termInt = await interaction.options.getInteger("term");
         let riggedTerm = await interaction.options.getString("rig");
         //has to be != null cause 0 fails it
         if(termInt != null){
-            let currentTerm = LismFunctions.GetTermURLS()[termInt];
+            let currentTerm = UtilFunctions.GetTermURLS()[termInt];
             if(riggedTerm){
                 SendEmbedMessage(await FasterLeaderboard(page, [currentTerm], riggedTerm), interaction, `Term ${termInt + 1} (:shushing_face: its rigged)`)
             }
@@ -64,10 +64,10 @@ module.exports = {
         else{
             //sendEmbed again
             if(riggedTerm != null){
-                SendEmbedMessage(await FasterLeaderboard(page, LismFunctions.GetTermURLS(), riggedTerm), interaction, "All Terms (totally not rigged :sweat_smile:)")
+                SendEmbedMessage(await FasterLeaderboard(page, UtilFunctions.GetTermURLS(), riggedTerm), interaction, "All Terms (totally not rigged :sweat_smile:)")
             }
             else{
-                SendEmbedMessage(await FasterLeaderboard(page, LismFunctions.GetTermURLS(), riggedTerm), interaction, "All Terms")
+                SendEmbedMessage(await FasterLeaderboard(page, UtilFunctions.GetTermURLS(), riggedTerm), interaction, "All Terms")
             }
         }
         //Once its done, close the browser to stop the browsers stacking up
@@ -75,7 +75,7 @@ module.exports = {
     }
 }
 
-async function FasterLeaderboard(page, term_urlArr=LismFunctions.GetTermURLS(), rigPerson=null){
+async function FasterLeaderboard(page, term_urlArr=UtilFunctions.GetTermURLS(), rigPerson=null){
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
     leaderboardResults = {};
     for (term_url of term_urlArr){
@@ -134,7 +134,7 @@ async function FasterLeaderboard(page, term_urlArr=LismFunctions.GetTermURLS(), 
     return leaderboardResults;
 }
 
-function SendEmbedMessage(leaderboardResults, interaction, fieldName, title="default", colour=LismFunctions.primaryColour) {
+function SendEmbedMessage(leaderboardResults, interaction, fieldName, title="default", colour=UtilFunctions.primaryColour) {
     let embedMsg = new MessageEmbed();
 
     if(title != "default"){

@@ -1,4 +1,5 @@
-const fs = require("fs")
+const fs = require("fs");
+const { MessageEmbed, MessageActionRow, MessageButton } = require('discord.js');
 //VARIABLES
 const currentTerm = 2;
 const classAmount = 26;
@@ -8,7 +9,9 @@ const primaryColour = "#156385";
 const errorColour = "#FF0000";
 
 const mainStaticUrl = "https://moodle.oeclism.catholic.edu.au/";
+const dashboardUrl = `${mainStaticUrl}my/index.php`
 const courseIDs = ["896", "897", "898"]
+
 //example urls:
 // const TermURLS = [ 
 //         "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896",
@@ -37,7 +40,7 @@ const getFiles = (path, ending) => {
 }
 
 //Default is leaderboard cause its used the most
-const GetTermURLS = (sectionOfWebsite="leaderboard") => { 
+const GetTermURLS = (sectionOfWebsite="leaderboard", termId=courseIDs[currentTerm - 1]) => { 
     generatedUrls = []
     switch (sectionOfWebsite) {
         case "leaderboard":
@@ -50,8 +53,8 @@ const GetTermURLS = (sectionOfWebsite="leaderboard") => {
             //     generatedUrls.push(`${mainStaticUrl}user/index.php?contextid=${contextId}&id=${id}&perpage=${classAmount}`)
             // }
             //Minus 1 because 0 indexing (you cant have term zero lol)
-            id = courseIDs[currentTerm - 1]
-            generatedUrls.push(`${mainStaticUrl}user/index.php?contextid=${contextId}&id=${id}&perpage=${classAmount}`)
+            // id = courseIDs[currentTerm - 1]
+            generatedUrls.push(`${mainStaticUrl}user/index.php?contextid=${contextId}&id=${termId}&perpage=5000`)
             break;
         default:
             break;
@@ -67,8 +70,12 @@ const GetTermURLS = (sectionOfWebsite="leaderboard") => {
 }
 
 
-const LismLogin = async (page, TermURL=`${mainStaticUrl}course/recent.php?id=${courseIDs[0]}`) => {
-    //CHANGE TERM URL HERE
+const LoginToMoodle = async (page, TermURL=dashboardUrl) => {
+    // if (TermURL == 'Null') {
+    //     console.log(Object.values(await GetCourseUrls(page))[currentTerm - 1])
+    //     TermURL = Object.values(await GetCourseUrls(page))[currentTerm - 1]
+    // }
+
     await page.goto(TermURL);
     // dom element selectors
     const USERNAME_SELECTOR = '#username';
@@ -91,6 +98,85 @@ const LismLogin = async (page, TermURL=`${mainStaticUrl}course/recent.php?id=${c
     page.click(BUTTON_SELECTOR),
     page.waitForNavigation()
     ])
+}
+
+const GetCourseUrls = async (page) => {
+    if(page.url() != dashboardUrl){
+        await page.goto(dashboardUrl)
+    }
+
+    try {
+        await page.waitForSelector('div[class*="block_myoverview"] div > a[class*="coursename"')
+    } catch(err){
+        console.log("Moodle website has been updated and doesn't work anymore with the bot")
+    }
+    
+    return await page.evaluate(() => {
+        let termInfo = {}
+        let aElements = document.querySelectorAll('div[class*="block_myoverview"] div > a[class*="coursename"')//#course-info-container-898-11 > div > div.w-100.text-truncate > a
+        for (const aElem of aElements) {
+            // This is the **child** part that contains the name of the term
+            console.log(aElem)
+            termInfo[aElem.querySelector('span.multiline').textContent.trim()] = [ aElem.href, aElem.querySelector('[data-course-id]').getAttribute("data-course-id") ]; // getting an element with the id, then getting that id
+        }
+        return termInfo
+
+    })
+}
+
+function AskForCourse(interaction, page){
+    // you aren't supposed to put async in new promise but oh well, WHOS GONNA STOP ME!!!
+    return new Promise(async (resolve, reject) => {
+        const termInfo = await GetCourseUrls(page)
+        const termsEmbed = new MessageEmbed()
+        .setColor(primaryColour)
+        .setTitle('Term / Course with user in it')
+        .setURL(dashboardUrl)
+        .setDescription("Click on one of the buttons bellow to choose the term, you might need to be logged in if the bot owner isn't in the same course");
+    
+        const row = new MessageActionRow();
+        // term info is <termname> = [ <url> , <id>]
+        for (const term of Object.keys(termInfo)) {
+            // let termButton = new MessageButton().setCustomId(term).setLabel(term).setStyle('PRIMARY')
+            // row.addComponents(termButton)
+            row.addComponents(
+                new MessageButton()
+                    .setCustomId(term)
+                    .setLabel(term)
+                    .setStyle('PRIMARY'),
+            );	
+        }
+        interaction.editReply({/*ephemeral: true,*/ embeds: [termsEmbed], components: [row]})
+    
+        // handle buttonMessage
+        const filter = i => Object.keys(termInfo).includes(i.customId);
+        const collector = interaction.channel.createMessageComponentCollector({ filter, time: 15000 });
+    
+        // So if one of the buttons was clicked, then update text
+        collector.on('collect', async i => {
+            await i.deferUpdate();
+            await i.editReply({ content: 'A button was clicked!', components: [] });
+            // callback(i.customId);
+            resolve(termInfo[i.customId])
+            collector.stop()
+            // return i;
+        });
+    
+        // when it ends, delete message maybe? from timer, or by the button clicked
+        collector.on('end', collected => {
+            // console.log(`Collected ${collected.size} items`)
+            // callback("Finished Now")
+            if(collected.size == 0) {
+                reject("No button was pressed")
+            }
+            //clean way to delete it, but maybe it's better to just edit the message? 
+            // interaction.deleteReply()
+
+            // callback(i.customId);
+            // return 
+        });
+    })
+
 }
 
 const NicknameToRealName = async (inputName) => {
@@ -154,11 +240,14 @@ async function ConvertTime(unsortedTime){
 module.exports = {
     getFiles,
     GetTermURLS,
-    LismLogin,
+    LoginToMoodle,
+    GetCourseUrls,
+    AskForCourse,
     NicknameToRealName,
     ConvertTime,
     classAmount,
     courseIDs,
     primaryColour,
+    mainStaticUrl,
     errorColour
 }

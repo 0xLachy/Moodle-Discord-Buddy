@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { MessageEmbed } = require('discord.js');
-const LismFunctions = require("../util/functions");
+const UtilFunctions = require("../util/functions");
 
 //INFO:
 /*
@@ -111,10 +111,10 @@ module.exports = {
         // const browser = await puppeteer.launch({ headless: false })
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
-        //console.log(LismFunctions.GetTermURLS("participants")[courseIDIndex])
+        //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 
         //log into the browser using url from functions, (only one in participants so 0 to get it)
-        await LismFunctions.LismLogin(page, LismFunctions.GetTermURLS("participants")[0])
+        await UtilFunctions.LoginToMoodle(page, UtilFunctions.GetTermURLS("participants")[0])
 
         // if (interaction.options.getSubcommand() === 'person'){
         //     //do person / regular use stuff
@@ -123,7 +123,7 @@ module.exports = {
             case "person":
                 let realInputName = await interaction.options.getString("person-name")
                 //Getting name (which is required) and converting it from nickname, also converts to lower case
-                let inputName = await LismFunctions.NicknameToRealName(realInputName);
+                let inputName = await UtilFunctions.NicknameToRealName(realInputName);
                 //console.log(await GetTableOfPeople(page));
 
                 const tableOfPeople = await GetTableOfPeople(page);
@@ -182,7 +182,7 @@ async function ParticipantsFilter(page, interaction, includeString, duration, fl
     for(personArr of tableOfPeople){
         if (duration){
             // console.log(personArr)
-            personTimeSeconds = await LismFunctions.ConvertTime(personArr[3]);
+            personTimeSeconds = await UtilFunctions.ConvertTime(personArr[3]);
             if(duration > personTimeSeconds || (flipDuration && duration < personTimeSeconds)){
                 if(includeString != null){
                     CheckNameIncludesString();
@@ -237,7 +237,7 @@ async function GetOnlineLeaderboard(page, interaction, showSeconds=false){
     for (personIndex in tableOfPeople){
         personTime = tableOfPeople[personIndex][3]
         //this will be index 5, seconds time.
-        convertedTime = await LismFunctions.ConvertTime(personTime);
+        convertedTime = await UtilFunctions.ConvertTime(personTime);
         tableOfPeople[personIndex].push(convertedTime)
         if(showSeconds){
             //This is their name
@@ -253,7 +253,7 @@ async function GetOnlineLeaderboard(page, interaction, showSeconds=false){
 
 }
 
-function CreateEmbedMessage(interaction, personData, leaderboard=false, title="none", colour=LismFunctions.primaryColour) {
+function CreateEmbedMessage(interaction, personData, leaderboard=false, title="none", colour=UtilFunctions.primaryColour) {
     let statusEmbed = new MessageEmbed();
     //check if data is obj or array
     //console.log(participantData.constructor.name);
