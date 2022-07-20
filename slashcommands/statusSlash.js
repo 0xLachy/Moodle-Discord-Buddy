@@ -114,7 +114,7 @@ module.exports = {
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 
         //log into the browser using url from functions, (only one in participants so 0 to get it)
-        await UtilFunctions.LoginToMoodle(page, UtilFunctions.GetTermURLS("participants")[0])
+        await UtilFunctions.LoginToMoodle(page, interaction.user.id, UtilFunctions.GetTermURLS("participants")[0]).catch(error => console.log(error))
 
         // if (interaction.options.getSubcommand() === 'person'){
         //     //do person / regular use stuff
@@ -214,6 +214,7 @@ async function ParticipantsFilter(page, interaction, includeString, duration, fl
 }
 
 async function GetTableOfPeople(page){
+    await page.waitForSelector('tr[id*="user-index-participant"]')
     return await page.evaluate(() => {
         let arrOfEveryone = [];
 
@@ -221,7 +222,7 @@ async function GetTableOfPeople(page){
         for (trElem of tableRows){
             
             // Gets table data elems from rows, then assigns the name to the other data of row, and add profile pic lastly
-            tdElems = trElem.querySelectorAll("td");
+            tdElems = trElem.querySelectorAll("td");//TODO SOMETHING WRONG WITH a.textcontent need to fix later
             // peopleObj[trElem.querySelector("a").textContent] =  [...Array.prototype.map.call(tdElems, function(t) { return t.textContent; }), trElem.querySelector("a > img").src]//.push(trElem.querySelector("a > img").src);
             arrOfEveryone.push([trElem.querySelector("a").textContent, ...Array.prototype.map.call(tdElems, function(t) { return t.textContent; }), trElem.querySelector("a > img").src])//.push(trElem.querySelector("a > img").src);
         }

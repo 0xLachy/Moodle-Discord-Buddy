@@ -1,17 +1,25 @@
 const fs = require("fs");
-const { MessageEmbed, MessageActionRow, MessageButton } = require('discord.js');
+const { MessageEmbed, MessageActionRow, MessageButton, ButtonInteraction } = require('discord.js');
+const { resolve } = require("path");
+const crypto = require("crypto");
+
 //VARIABLES
 const currentTerm = 2;
 const classAmount = 26;
 const contextId = 124194;
 
+//colour stuff
 const primaryColour = "#156385";
 const errorColour = "#FF0000";
 
+//course stuff
 const mainStaticUrl = "https://moodle.oeclism.catholic.edu.au/";
 const dashboardUrl = `${mainStaticUrl}my/index.php`
 const courseIDs = ["896", "897", "898"]
 
+//login stuff
+const algorithm = "aes-256-cbc"; 
+const loginGroups = {};
 //example urls:
 // const TermURLS = [ 
 //         "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896",
@@ -54,7 +62,8 @@ const GetTermURLS = (sectionOfWebsite="leaderboard", termId=courseIDs[currentTer
             // }
             //Minus 1 because 0 indexing (you cant have term zero lol)
             // id = courseIDs[currentTerm - 1]
-            generatedUrls.push(`${mainStaticUrl}user/index.php?contextid=${contextId}&id=${termId}&perpage=5000`)
+            //generatedUrls.push(`${mainStaticUrl}user/index.php?contextid=${contextId}&id=${termId}&perpage=5000`)
+            generatedUrls.push(`${mainStaticUrl}user/index.php?page=0&perpage=5000&contextid=${contextId}&id=${termId}&newcourse`)
             break;
         default:
             break;
@@ -70,13 +79,16 @@ const GetTermURLS = (sectionOfWebsite="leaderboard", termId=courseIDs[currentTer
 }
 
 
-const LoginToMoodle = async (page, TermURL=dashboardUrl) => {
+const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl, loginDetails=undefined) => {
     // if (TermURL == 'Null') {
     //     console.log(Object.values(await GetCourseUrls(page))[currentTerm - 1])
     //     TermURL = Object.values(await GetCourseUrls(page))[currentTerm - 1]
     // }
-
     await page.goto(TermURL);
+    
+    if (discordUserId != undefined){
+        if (loginGroups[discordUserId] != undefined) loginDetails = decrypt(...loginGroups[discordUserId]);
+    }
     // dom element selectors
     const USERNAME_SELECTOR = '#username';
     const PASSWORD_SELECTOR = '#password';
@@ -89,15 +101,37 @@ const LoginToMoodle = async (page, TermURL=dashboardUrl) => {
         console.logError("login page not working, #Username not found")
         console.log(err)
     }
+    
     await page.click(USERNAME_SELECTOR);
-    await page.keyboard.type(process.env.LISMNAME);
+    loginDetails != undefined ? await page.keyboard.type(loginDetails.username) : await page.keyboard.type(process.env.LISMNAME);
 
     await page.click(PASSWORD_SELECTOR);
-    await page.keyboard.type(process.env.PASSWORD);
+    loginDetails != undefined ? await page.keyboard.type(loginDetails.password) : await page.keyboard.type(process.env.PASSWORD);
+    // try {
+        
+    // } catch (error) {
+        
+    // }
     await Promise.all([
     page.click(BUTTON_SELECTOR),
     page.waitForNavigation()
     ])
+
+    //more specific way to get
+    let reasonForFailure = await page.evaluate(() => {
+        //
+        return document.querySelector('div.uk-alert-danger.uk-text-center.uk-alert > p')?.textContent//.textContent body -le
+    })
+    if (reasonForFailure != undefined && TermURL != page.url()) return new Promise((resolve, reject) => reject(reasonForFailure))
+    //If they haven't successfully gotten past login to the wanted url, it bugs out for other urls that aren't dashboard url
+    else if (TermURL != await page.url() && TermURL == dashboardUrl) return new Promise((resolve, reject) => reject("Login Failed, wrong username or password"))
+    else {
+        if (loginDetails != undefined) { loginGroups[discordUserId] = encrypt(loginDetails) };
+        return new Promise((resolve, reject) => resolve('Successfully logged in as ' + discordUserId));
+    }
+}
+const LogoutOfMoodle = async (discordUserId) => {
+    delete loginGroups[discordUserId]
 }
 
 const GetCourseUrls = async (page) => {
@@ -117,23 +151,24 @@ const GetCourseUrls = async (page) => {
         for (const aElem of aElements) {
             // This is the **child** part that contains the name of the term
             console.log(aElem)
-            termInfo[aElem.querySelector('span.multiline').textContent.trim()] = [ aElem.href, aElem.querySelector('[data-course-id]').getAttribute("data-course-id") ]; // getting an element with the id, then getting that id
+            termInfo[aElem.querySelector('span.multiline').textContent.trim()] = { "URL": aElem.href, "ID": aElem.querySelector('[data-course-id]').getAttribute("data-course-id")}; // getting an element with the id, then getting that id
         }
         return termInfo
 
     })
 }
 
-function AskForCourse(interaction, page){
+function AskForCourse(interaction, page, multipleTerms=false){
     // you aren't supposed to put async in new promise but oh well, WHOS GONNA STOP ME!!!
     return new Promise(async (resolve, reject) => {
         const termInfo = await GetCourseUrls(page)
         const termsEmbed = new MessageEmbed()
         .setColor(primaryColour)
-        .setTitle('Term / Course with user in it')
+        .setTitle('Term / Courses Select')
         .setURL(dashboardUrl)
         .setDescription("Click on one of the buttons bellow to choose the term, you might need to be logged in if the bot owner isn't in the same course");
-    
+        
+        if (multipleTerms) termsEmbed.setDescription("Click on Terms to disable them, if they are disabled they are grey, click on them again to make them blue, which means they are included!\n\nYou have 15 seconds to set up, or press enter to send it early!")
         const row = new MessageActionRow();
         // term info is <termname> = [ <url> , <id>]
         for (const term of Object.keys(termInfo)) {
@@ -146,27 +181,91 @@ function AskForCourse(interaction, page){
                     .setStyle('PRIMARY'),
             );	
         }
-        interaction.editReply({/*ephemeral: true,*/ embeds: [termsEmbed], components: [row]})
+        // If allowing multiple, have a enter button
+        if (multipleTerms){
+            row.addComponents(
+                new MessageButton()
+                .setCustomId('Enter')
+                .setLabel('Enter')
+                .setStyle('SUCCESS')
+            )           
+        }
+
+        await interaction.editReply({/*ephemeral: true,*/ embeds: [termsEmbed], components: [row]})
     
-        // handle buttonMessage
-        const filter = i => Object.keys(termInfo).includes(i.customId);
-        const collector = interaction.channel.createMessageComponentCollector({ filter, time: 15000 });
+        // handle buttonMessage only, doesn't work for enter terminfo thing // todo maybe make it so only the author of the button can click em
+        const filter = i => /*Object.keys(termInfo).includes(i.customId)*/i.user.id == 2343242342;
+        //set the channel to send the command
+        let channel = await interaction.channel
+        //If the channel isn't inside the guild, you need to create a custom cd channel
+        if(!interaction.inGuild()){
+            channel = await interaction.user.createDM(); 
+        }
+        // create collector to handle when button is clicked using the channel
+        const collector = await channel.createMessageComponentCollector({ /*filter, */time: 15000 });
+        let updatedButtons = row.components;
+        // console.log(updatedButtons)
     
         // So if one of the buttons was clicked, then update text
         collector.on('collect', async i => {
-            await i.deferUpdate();
-            await i.editReply({ content: 'A button was clicked!', components: [] });
-            // callback(i.customId);
-            resolve(termInfo[i.customId])
-            collector.stop()
+            if (multipleTerms) {
+                // if enter button, stop early
+                if(i.customId == 'Enter'){
+                    // console.log("Stopped on enter")
+                    await collector.stop()
+                    return;
+                }                
+                else if (i.component.style == 'PRIMARY'){
+                    // Change the style of the button component,
+                    // that triggered this interaction
+                    await i.component.setStyle('SECONDARY')
+                }
+                else if(i.component.style == 'SECONDARY') {
+                    // set it back to primary then
+                    await i.component.setStyle('PRIMARY');
+                }
+
+                // Respond to the interaction, 
+                // and send updated components to the Discord API
+                await i.update({components: i.message.components})
+                // Update button info because a button has been clicked
+                //message components are stored as an array as action rows, but all that matters is the components (The wanted buttons are in the first(only) row)
+                updatedButtons = await i.message.components[0].components;
+            }     
+            else {
+                await i.update({ content: 'A button was clicked!', components: [] });
+                resolve(termInfo[i.customId])
+                await collector.stop()
+            }
             // return i;
         });
     
-        // when it ends, delete message maybe? from timer, or by the button clicked
         collector.on('end', collected => {
-            // console.log(`Collected ${collected.size} items`)
-            // callback("Finished Now")
-            if(collected.size == 0) {
+            if (multipleTerms) {
+                // on end, remove the buttons and embed // maybe insteadof content, use a new embed that says the chosen terms
+                
+                leaderboardData = updatedButtons.reduce((leaderboardData, button) => {
+                    // If the Enter button is primary then do button.customId != 'Enter'
+                    if(button.style == 'PRIMARY') {
+                        leaderboardData[button.customId] = termInfo[button.customId]
+                    }
+                    return leaderboardData
+                }, {})
+                
+                let analyserEmbed = new MessageEmbed()
+                .setColor(primaryColour)
+                .setTitle('Analysing Terms / Courses')
+                .setURL(dashboardUrl)
+                .setDescription("Going To each Term / Course and Scraping data. The more here, the longer it will take :/ ");
+                
+                for (const termName of Object.keys(leaderboardData)) {
+                    analyserEmbed.addField(termName, `URL: ${leaderboardData[termName].URL}`)
+                }
+                interaction.editReply({components: [], embeds: [analyserEmbed]})
+
+                resolve(leaderboardData)
+            }
+            else if(collected.size == 0) {
                 reject("No button was pressed")
             }
             //clean way to delete it, but maybe it's better to just edit the message? 
@@ -237,10 +336,46 @@ async function ConvertTime(unsortedTime){
     //console.log(secondTime)
     return secondTime;
 }
+
+function encrypt(loginDetails){
+    // generate 16 bytes of random data
+    const initVector = crypto.randomBytes(16);;
+
+    // secret key generate 32 bytes of random data
+    const Securitykey = crypto.randomBytes(32);
+
+    // the cipher function
+    const cipher = crypto.createCipheriv(algorithm, Securitykey, initVector);
+
+    // encrypt the message
+    // input encoding
+    // output encoding
+    let encryptedPassword = cipher.update(loginDetails.password, "utf-8", "hex");
+
+    encryptedPassword += cipher.final("hex");
+
+    // console.log("Encrypted message: " + encryptedData);
+    return [ loginDetails.username, encryptedPassword, Securitykey, initVector]
+
+
+}
+
+function decrypt(username, encryptedPassword, Securitykey, initVector){
+    // the decipher function
+    const decipher = crypto.createDecipheriv(algorithm, Securitykey, initVector);
+
+    let decryptedData = decipher.update(encryptedPassword, "hex", "utf-8");
+
+    decryptedData += decipher.final("utf8");
+    
+    return { "username": username, "password": decryptedData }
+}
+
 module.exports = {
     getFiles,
     GetTermURLS,
     LoginToMoodle,
+    LogoutOfMoodle,
     GetCourseUrls,
     AskForCourse,
     NicknameToRealName,

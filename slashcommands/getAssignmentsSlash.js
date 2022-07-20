@@ -40,7 +40,7 @@ const data = new SlashCommandBuilder()
 			.setDescription('Get a students missing assignments')
             .addStringOption(option =>
                 option.setName('studentname')
-                    .setDescription('The name of student (doesn\'t need to be full name) e.g lachy')
+                    .setDescription('The name of student (doesn\'t need to be full name) e.g rita')
                     .setRequired(true)
             )
             .addIntegerOption(option =>
@@ -76,7 +76,7 @@ module.exports = {
         var filter = false;
         
         //log into the browser
-        await UtilFunctions.LoginToMoodle(page)
+        await UtilFunctions.LoginToMoodle(page, interaction.user.id)
 
         if (interaction.options.getSubcommand() === 'student') {
             let studentName = await UtilFunctions.NicknameToRealName(await interaction.options.getString("studentname"));

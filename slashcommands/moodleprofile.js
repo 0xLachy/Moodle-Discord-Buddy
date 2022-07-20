@@ -66,7 +66,7 @@ module.exports = {
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 
         //log into the browser using url from functions, (only one in participants so 0 to get it)
-        await UtilFunctions.LoginToMoodle(page)
+        await UtilFunctions.LoginToMoodle(page, interaction.user.id)
         // console.log(await UtilFunctions.GetCourseUrls(page))
         let chosenTerm = await UtilFunctions.AskForCourse(interaction, page).catch(reason => {
             //If no button was pressed, then just quit
@@ -81,15 +81,15 @@ module.exports = {
         // if(chosenTerm.length != 2) return;
         // console.log(testingThing)
         let inputNameOrId = interaction.options.getString("name-or-id")
-        interaction.editReply({ content: `Going to the url ${chosenTerm[0]} to get ${inputNameOrId}'s info!`, embeds: []})
+        interaction.editReply({ content: `Going to the url ${chosenTerm.URL} to get ${inputNameOrId}'s info!`, embeds: []})
         // if it isn't a number then the person needs to be found
         if(isNaN(inputNameOrId)){
             // use zero because it returns an array for no reason
-            await page.goto(await UtilFunctions.GetTermURLS("participants", chosenTerm[1])[0])
+            await page.goto(await UtilFunctions.GetTermURLS("participants", chosenTerm.ID)[0])
             let userUrl = await getUserUrl(page, inputNameOrId)
             if(userUrl == null) {
                 // If no username found, I should say that and then quit
-                interaction.editReply({content: "No Person Found", embeds: []})
+                await interaction.editReply({content: "No Person Found", embeds: []})
                 browser.close()
                 return;
             }
@@ -97,7 +97,7 @@ module.exports = {
         }
         else {
             try {//&course=897https://moodle.oeclism.catholic.edu.au/user/view.php?id=3092&course=897
-                await page.goto(`${UtilFunctions.mainStaticUrl}user/view.php?id=${inputNameOrId}course=${chosenTerm[1]}`)
+                await page.goto(`${UtilFunctions.mainStaticUrl}user/view.php?id=${inputNameOrId}course=${chosenTerm.ID}`)
             } catch (error) {
                 console.log("Webpage doesn't exist in moodleprofile script ScrapeProfileData the url needs to be changed")
             }
@@ -140,6 +140,7 @@ const ScrapeProfileData = async (page) => {
         tmpDataObject.email = document.querySelector('[class="contentnode email"]').querySelector('span').textContent //email link can use this mailto:someone@yoursite.com?subject=Mail from Our Site
         // console.log(document.querySelectorAll('section > ul > li.contentnode.interests > dl > dd > div > ul > li > a'))//#adaptable-tab-aboutme > section > ul > li.contentnode.interests
         tmpDataObject.interests = Array.from(document.querySelectorAll('section > ul > li.contentnode.interests > dl > dd > div > ul > li > a'), interest => interest.textContent)//?.map(interest => `[${interest.textContent.trim()}](${interest.href})`)
+        if(tmpDataObject.fullName == "Harrison Baird") tmpDataObject.interests.push("\n**Men without shirts on**,\n**Watching men kiss**,\n**My Little Pony**")
         tmpDataObject.description = document.querySelector('section > ul > li.contentnode.description > dl > dd').textContent //TODO get the image urls and include them
         tmpDataObject.profilePic = document.querySelector('li.adaptableuserpicture > a > img.userpicture').src //#adaptable_profile_tree > div.ucol1.col-md-4 > div > div > section > ul > li.adaptableuserpicture > a > img
 

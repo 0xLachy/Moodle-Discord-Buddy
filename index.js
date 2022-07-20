@@ -6,14 +6,16 @@ const client = new Discord.Client({
     intents: [
         "GUILDS",
         "GUILD_MESSAGES",
-        "GUILD_MEMBERS"
-    ]
+        "GUILD_MEMBERS",
+        "DIRECT_MESSAGES"
+    ]//, 
+    // partials: ["MESSAGE","CHANNEL"]
 })
 
 // to fetch config just put it inside const { <here> }
 let bot = {
     client,
-    prefix: "!",
+    prefix: "!", //Ɛ>this would be cool<3 
     classAmount: 26,
     mainColour: "#156385",
     errorColour: "#FF0000",
@@ -61,12 +63,15 @@ client.on("ready", async () => {
 client.on("interactionCreate", (interaction) => {
     //if its not a command
     if(!interaction.isCommand()) return
-    //if its not from within a guild
-    if(!interaction.inGuild()) return interaction.reply("This command can only be used in a server")
+    //if its not from within a guild 
+    // if(!interaction.inGuild()) return interaction.reply("This command can only be used in a server")
     
     const slashcmd = client.slashcommands.get(interaction.commandName)
 
     if(!slashcmd) return interaction.reply("Invalid slash command")
+
+    //If the command is guild only and not inside guild
+    if(slashcmd.guildOnly && !interaction.inGuild()) return;
 
     if(slashcmd.perms && !interaction.member.permissions.has(slashcmd.perm))
         return interaction.reply("You do not have permission for this command");
