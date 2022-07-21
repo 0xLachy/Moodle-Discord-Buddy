@@ -41,8 +41,9 @@ const nicknames = {
     "teacher": "michael",
     "sddmaster": "harrison",
     "jebidiah": "jeb"
-}  
+} 
 
+//USE LOGIN GROUPS TO GET ID
 const getFiles = (path, ending) => {
     return fs.readdirSync(path).filter(f=> f.endsWith(ending))
 }
@@ -278,6 +279,52 @@ function AskForCourse(interaction, page, multipleTerms=false){
 
 }
 
+const NameToID = async (interaction, page, nameToConvert) => {
+        // if it isn't a number then the person needs to be found
+        if(isNaN(nameToConvert)){
+            let chosenTerm = await AskForCourse(interaction, page).catch(async (reason) => {
+            //If no button was pressed, then just quit
+            console.log(reason)
+            // await interaction.deleteReply();
+            // interaction.editReply({content: reason, embeds: []})
+            // await browser.close()
+            return null;
+            })
+            if(chosenTerm == null) return;
+
+            interaction.editReply({ content: `Going to the url ${chosenTerm.URL} to find ${nameToConvert}`, embeds: []})
+            // use zero because it returns an array for no reason
+            await page.goto(await GetTermURLS("participants", chosenTerm.ID)[0])
+            let userUrl = await GetUserUrlByName(page, nameToConvert)
+            if(userUrl == null) {
+                // If no username found, I should say that and then quit
+                await interaction.editReply({content: "No Person Found", embeds: []})
+                // browser.close()
+                return;
+            }
+            await page.goto(userUrl) // I am asuming that it actually returns something
+            // assuming it returns the data id otherwise it should hopefully be null
+            return await page.evaluate(() => document.querySelector('#adaptable-message-user-button').getAttribute('data-userid'))
+
+        }
+        else { // if it was an id, just return that, pretty easy
+            return nameToConvert;
+        }
+}
+const GetUserUrlByName = async (page, inputName) => {
+    return await page.evaluate((cleanedName) => {
+        let tableRows = document.querySelectorAll('tr[id*="user-index-participant"]');
+        for (trElem of tableRows){
+            let personNodes = trElem.querySelectorAll("a")
+            for (person of personNodes){
+                // includes means they will get the first person and may not be the intended one
+                if (person.textContent.toLowerCase().includes(cleanedName)) return person.href
+            }
+        }
+        return null;
+    }, await NicknameToRealName(inputName))
+}
+
 const NicknameToRealName = async (inputName) => {
     inputName = inputName.toLowerCase(); 
     for(nicknamePair of Object.entries(nicknames)){
@@ -378,8 +425,10 @@ module.exports = {
     LogoutOfMoodle,
     GetCourseUrls,
     AskForCourse,
+    NameToID,
     NicknameToRealName,
     ConvertTime,
+    loginGroups,
     classAmount,
     courseIDs,
     primaryColour,

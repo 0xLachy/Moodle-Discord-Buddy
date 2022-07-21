@@ -137,6 +137,8 @@ const ScrapeProfileData = async (page) => {
     let profileDataObject = await page.evaluate(() => {
         let tmpDataObject = {}
         tmpDataObject.fullName = document.querySelector('[class="contentnode fullname"]').querySelector('span').textContent //works :D
+        //#adaptable-message-user-button
+        tmpDataObject.userId = document.querySelector('#adaptable-message-user-button').getAttribute('data-userid')
         tmpDataObject.email = document.querySelector('[class="contentnode email"]').querySelector('span').textContent //email link can use this mailto:someone@yoursite.com?subject=Mail from Our Site
         // console.log(document.querySelectorAll('section > ul > li.contentnode.interests > dl > dd > div > ul > li > a'))//#adaptable-tab-aboutme > section > ul > li.contentnode.interests
         tmpDataObject.interests = Array.from(document.querySelectorAll('section > ul > li.contentnode.interests > dl > dd > div > ul > li > a'), interest => interest.textContent)//?.map(interest => `[${interest.textContent.trim()}](${interest.href})`)
@@ -188,7 +190,7 @@ const getUserUrl = async (page, inputName) => {
 const SendProfileToDiscord = (interaction, profileDataObject) => {
     let profileEmbed = new MessageEmbed()
     .setColor(UtilFunctions.primaryColour)
-    .setTitle(profileDataObject.fullName)
+    .setTitle(`${profileDataObject.fullName} (${profileDataObject.userId})`)
     .setURL(profileDataObject.profileUrl) // replace this with their url
     .setDescription(profileDataObject.description)
     .setThumbnail(profileDataObject.profilePic)

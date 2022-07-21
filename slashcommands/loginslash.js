@@ -44,7 +44,7 @@ module.exports = {
             loggedInName = await page.evaluate(() => document.querySelector('#usermenu > span').textContent)
             const loginEmbed = new MessageEmbed()
 	            .setColor(UtilFunctions.primaryColour)
-	            .setTitle(`Your discord ID (${interaction.user.id}) is now associated with moodle account ${loggedInName}`)
+	            .setTitle(`Your discord ID (${interaction.user.id}) is now associated with the moodle account: ${loggedInName}`)
 	            .setDescription('When a command is run the bot will check the discord ID of the user and unencrypt and log in as you instead of the bot owners credentials, giving you access to more commands')
 	            .setThumbnail(await page.evaluate(() => document.querySelector('#usermenu > img').src))
 	// .addFields(
