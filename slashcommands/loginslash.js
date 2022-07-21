@@ -30,8 +30,12 @@ module.exports = {
 
     ...data.toJSON(),
     run: async (client, interaction) => {
-
         await interaction.deferReply();
+        if (UtilFunctions.loginGroups.hasOwnProperty(interaction.user.id)) {
+            interaction.editReply('Your Discord Id is already associated with a logged in account, use /logout to logout')
+            // quit the login process early
+            return;
+        }
         // const browser = await puppeteer.launch({ headless: false })
         const browser = await puppeteer.launch();
         const page = await browser.newPage();

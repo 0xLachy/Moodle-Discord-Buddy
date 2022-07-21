@@ -10,20 +10,40 @@ const UtilFunctions = require("../util/functions");
 
 const data = new SlashCommandBuilder()
 	.setName('message')
-	.setDescription('Message another user on moodle, you need to be logged in for this function')
+	.setDescription('Send or Read Messages to users on moodle, you need to be logged in for this function')
     // .setDefaultMemberPermissions(0) //admin can still use
-    .addStringOption(option => 
-        option
-            .setName('name-or-id') // todo add confirmation that they found the right person to message
-            .setDescription('Name or Id of person you want to message (if same name > 1 then use last name)')
-            .setRequired(true)
+    .addSubcommand(subcommand =>
+		subcommand
+			.setName('send')
+			.setDescription('Send a message to a user')
+            .addStringOption(option => 
+                option
+                    .setName('name-or-id') 
+                    .setDescription('Name or Id of person you want to message (if same name > 1 then use last name)')
+                    .setRequired(true)
+            )
+            .addStringOption(option => 
+                option
+                    .setName('message')
+                    .setDescription('Send normal text or you could send html like <p style="color: green;">green text</p>')
+                    .setRequired(true) // when I add the attachment option, don't make this required
+            )
+            //TODO add optional spam amount that lets you send in hundreds lol
     )
-    .addStringOption(option => 
-        option
-            .setName('message')
-            .setDescription('Send normal text or you could send html like <p style="color: green;">green text</p>')
-            .setRequired(true) // when I add the attachment option, don't make this required
+	.addSubcommand(subcommand =>
+		subcommand
+			.setName('read')
+			.setDescription('Read the messages from a user')
+            .addStringOption(option => 
+                option
+                    .setName('name-or-id')
+                    .setDescription('Name or Id of person you want to message (if same name > 1 then use last name)')
+                    .setRequired(true)
+            )
+            //TODO ADD BOOLEAN READ SELF MESSAGES
+            //TODO also make sure there aren't too many messages
     )
+
 
 module.exports = {
     category: "login",
@@ -31,6 +51,7 @@ module.exports = {
     devOnly: false,
     ...data.toJSON(),
     run: async (client, interaction) => {
+        //TODO modularise all the main body of this script
         //normal, cause 3 seconds isn't fast enough
         await interaction.deferReply();
         //Make sure the user is logged in
@@ -53,18 +74,73 @@ module.exports = {
         await page.goto(`${UtilFunctions.mainStaticUrl}message/index.php?id=${recipientID}`)
         let deletedReply = false;
 
-        await page.waitForSelector('div[data-region="header-content"] strong')
+        //TODO use try catch here because the person may not be accessable or real if they pass in a straight id
+        //#region-main > div > div.box.errorbox.alert.alert-danger check for existence of this
+        //maybe have a custom promise that waits for ONE, of them to return, and when they do continue maybe use .then
+        //TODO test this I don't know what will happen 777
+        // console.log("just before user header found funcion")
+        let userHeaderFound = await WaitForUserNameOrError(page)
+        // console.log(userHeaderFound)
+        if (!userHeaderFound) {
+            await interaction.editReply("User Could not be found or you have no access to them")
+            await browser.close();
+            return;
+        }
+        
+        // await page.waitForSelector('div[data-region="header-content"] strong')
         let recipientName = await page.evaluate(() => document.querySelector('div[data-region="header-content"] strong').textContent);
         let recipientImg = await page.evaluate(() => document.querySelector('div[data-region="header-content"] img').src)
 
-        await SendComfirmationMessage(interaction, page, recipientName, recipientImg).catch(async () => {
-            // await interaction.editReply({content: ""})
-            await interaction.deleteReply();
-            deletedReply = true;
-            //TODO find better way, return doesn't work
-            console.log("deleted reply")
-        })
-        if (deletedReply) { return; }
+        if (interaction.options.getSubcommand() === 'read') {
+            //read message and that is //#yui_3_17_2_1_1658434584419_54 message recieved class div
+            // try {
+            //     await page.waitForSelector('div.message')// instead just use message because there may not be any messagess recieved
+            // } catch (err) {
+            //     await interaction.editReply(`You have no messages with ${recipientName}`)  
+            //     return;  
+            // }//not really the best way, but for some reason it doesn't load before the div.message.received gets queried
+            await page.waitForSelector('div.message.received', {timeout: 5000}).catch((error) => {/*console.log(error)*/})
+            const messages = await page.evaluate(() => {
+                let recievedDivs = document.querySelectorAll('div.message.received');
+                let messages = {}
+                // console.log(recievedDivs)
+                for (const recievedDiv of recievedDivs) {
+                    //sets the obj to the time, and then holds array of messages text (it could be p, or hr, or other elems.textContent)
+                    messages[recievedDiv.querySelector('div[data-region="time-created"]').textContent] = Array.from(recievedDiv.querySelectorAll('div[data-region="text-container"] > *'), textItem => textItem.textContent);
+                }
+                // console.log(messages)
+                return messages
+            })
+            // console.log(messages)
+            messagesReadEmbed = new MessageEmbed()
+            .setColor(UtilFunctions.primaryColour)
+            .setTitle(`Received Messages from ${recipientName}`)
+            .setURL(page.url)
+            .setThumbnail(recipientImg)//TODO add read option and also make message text not required or do subcommand groups
+            .setDescription('If you don\'t want people seeing this, you can send the message through DMS with this discord bot.');
+            for (const messageTime of Object.keys(messages)) {
+                messagesReadEmbed.addField(messageTime, messages[messageTime].join("\n"))
+            }
+            if(Object.keys(messages).length == 0){
+                messagesReadEmbed.addField("No Messages Received", "It seems they haven't sent you any messages!")
+            }
+            interaction.editReply({embeds: [messagesReadEmbed]})
+            // .addField('Message Text', messageText)
+            // console.log(messages)
+            await browser.close()
+            return;
+        }
+        else {
+            await SendComfirmationMessage(interaction, page, recipientName, recipientImg).catch(async () => {
+                // await interaction.editReply({content: ""})
+                await interaction.deleteReply();
+                deletedReply = true;
+                //TODO find better way, return doesn't work
+                console.log("deleted reply")
+            })
+            if (deletedReply) { return; }
+        }
+
         // await interaction.editReply({content: 'Sending Embed', embeds: [], components:[]})
         //TODO add a confirm selected participant button
         //also that selector is pretty trash, i guess i only need the confirm on user if going by name
@@ -168,4 +244,11 @@ const SendComfirmationMessage = (interaction, page, recipientName, recipientImg)
             }
         });
     });
+}
+
+const WaitForUserNameOrError = (page) => {
+    return new Promise((resolve, reject) => {
+        page.waitForSelector('div[data-region="header-content"] strong').then(() => { resolve(true); return; }).catch(() => { resolve(false); return; })
+        page.waitForSelector('#region-main > div > div.box.errorbox.alert.alert-danger').then(() => { resolve(false); return; }).catch(() => { resolve(false); return; }) //RJECTING cause user not found
+    })
 }
