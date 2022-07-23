@@ -234,7 +234,7 @@ function AskForCourse(interaction, page, multipleTerms=false){
                 updatedButtons = await i.message.components[0].components;
             }     
             else {
-                await i.update({ content: 'A button was clicked!', components: [] });
+                await i.update({ content: 'Term Chosen, Scraping Now!', components: [], embeds: [] });
                 resolve(termInfo[i.customId])
                 await collector.stop()
             }
@@ -279,18 +279,21 @@ function AskForCourse(interaction, page, multipleTerms=false){
 
 }
 
-const NameToID = async (interaction, page, nameToConvert) => {
+const NameToID = async (interaction, page, nameToConvert, chosenTerm) => {
         // if it isn't a number then the person needs to be found
         if(isNaN(nameToConvert)){
-            let chosenTerm = await AskForCourse(interaction, page).catch(async (reason) => {
-            //If no button was pressed, then just quit
-            console.log(reason)
-            // await interaction.deleteReply();
-            // interaction.editReply({content: reason, embeds: []})
-            // await browser.close()
-            return null;
-            })
-            if(chosenTerm == null) return;
+            //if chosen term is undefined 
+            if(!chosenTerm) {
+                chosenTerm = await AskForCourse(interaction, page).catch(async (reason) => {
+                //If no button was pressed, then just quit
+                console.log(reason)
+                // await interaction.deleteReply();
+                // interaction.editReply({content: reason, embeds: []})
+                // await browser.close()
+                return null;
+                })
+                if(chosenTerm == null) return;
+            }
 
             interaction.editReply({ content: `Going to the url ${chosenTerm.URL} to find ${nameToConvert}`, embeds: []})
             // use zero because it returns an array for no reason

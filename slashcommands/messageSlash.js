@@ -30,10 +30,6 @@ const data = new SlashCommandBuilder()
                 option
                     .setName('times')
                     .setDescription('send heaps of messages to the person, min 1, max is 100!')
-                    // .addChoices(
-                    //     { name: "2", value: 2},
-                    //     { name: "5", value: 5},
-                    // )
             )
     )
 	.addSubcommand(subcommand =>
@@ -84,7 +80,7 @@ module.exports = {
         await UtilFunctions.LoginToMoodle(page, await interaction.user.id).catch(reason => {
             console.log(reason);
             interaction.editReply({content: reason});
-            // browser.close();
+            browser.close();
         })
         let recipientID = await UtilFunctions.NameToID(interaction, page, interaction.options.getString('name-or-id'))
         if (recipientID == null) { 
@@ -119,7 +115,7 @@ module.exports = {
             }
         }
 
-        // await browser.close();
+        await browser.close();
     }
 }
 
@@ -210,7 +206,10 @@ const readMessages = async (interaction, page, recipientName, recipientImg) => {
             let messageDivs = document.querySelectorAll(msgSelector); //div.message.send for user sent messages
 
             for (const messageDiv of messageDivs) {
-                messages[`${name}: ${messageDiv.querySelector('div[data-region="time-created"]').textContent.trim()}`] = Array.from(messageDiv.querySelectorAll('div[data-region="text-container"] > *'), textElem => textElem.textContent.trim()).filter(msgString => msgString != '');
+                // console.log(messageDiv.querySelectorAll('div[data-region="text-container"] > *'))
+                let messageKey = `${name}: ${messageDiv.querySelector('div[data-region="time-created"]').textContent.trim()}`;
+                let messageDataArr = Array.from(messageDiv.querySelectorAll('div[data-region="text-container"] > *'), textElem => textElem.textContent.trim()).filter(msgString => msgString != '');
+                messages[messageKey] = messages.hasOwnProperty(messageKey) ? messages[messageKey].concat(messageDataArr) : messageDataArr;
             }
         }
     }, showReceived, showSent, recipientName)
@@ -253,60 +252,11 @@ const readMessages = async (interaction, page, recipientName, recipientImg) => {
 const SendMessageToUser = async (interaction, page, recipientName, recipientImg) => {
     messageText = await interaction.options.getString('message');
     sendAmount = await interaction.options.getInteger('times') || 1;
-    // if send amount is greater than 100 then it is just gonna be 100 else just be
+    // if send amount is greater than 100 then it is just gonna be 100 
     if(sendAmount > 100) sendAmount = 100; //shorthand looked too confusing
-    // .setDescription(``);
+
     await page.waitForSelector('button[data-action="send-message"]')
-    // const dataButtons3 = await page.evaluate(async (messageText, sendAmount) => { 
-    //     return {
-    //         "textBox": document.querySelector('textarea[data-region="send-message-txt"]'),
-    //         "sendButton": document.querySelector('button[data-action="send-message"]')
-    //     }
-    //     let textBox = document.querySelector('textarea[data-region="send-message-txt"]')//.innerText = messageText;
-    //     let sendButton = document.querySelector('button[data-action="send-message"]')//.click();
-        // let messagesSize = document.querySelectorAll('div.message.send').length;
-        // await myButton.click();
-        // await page.waitFor(() => document.querySelectorAll('ul.specialList li').length > listSize);
-        // for (let index = 0; index < sendAmount;) {
-        //         // textBox = document.querySelector('textarea[data-region="send-message-txt"]')//.innerText = messageText;
-        //         // sendButton =  document.querySelector('button[data-action="send-message"]')//.click();
-        //     console.log(textBox)
-        //     console.log(sendButton)
-        //     textBox.innerText = messageText;
-            
-        //     await sendButton.click();
-        //     // sendButton.click(); //DOESN"T WORK
-        //     // await new Promise((resolve, reject) => {
-        //     //     sendButton.addEventListener('click',function(e) {
-        //     //         /// do something to process the answer
-        //     //         resolve(something);
-        //     //     }, {once: true});
-        //     //     sendButton.click();
-        //     // });
-        //     console.log("sent a message")
-        // }
-    // }, messageText, sendAmount)
-    // console.log(dataButtons)
-    // await myButton.click();
-    // await page.waitFor(() => document.querySelectorAll('ul.specialList li').length > listSize);
-    // const dataButtons = await page.evaluateHandle(() => {
-    //     return {
-    //         "textBox": document.querySelector('textarea[data-region="send-message-txt"]'),
-    //         "sendButton": document.querySelector('button[data-action="send-message"]')
-    //     }
-    // })
-    // let textHandles = await page.evaluateHandle(() => document.querySelector('textarea[data-region="send-message-txt"]'));
-    // let sendHandles = await page.evaluateHandle(() => document.querySelector('button[data-action="send-message"]'));
-    // let textBox = Array.from(await textHandles.getProperties())[0];
-    // let sendButton = Array.from(await sendHandles.getProperties())[0];
-    // console.log(sendButton)
-//     let elementsHendles = await page.evaluateHandle(() => document.querySelectorAll('a'));
-// let elements = await elementsHendles.getProperties();
-// let elements_arr = Array.from(elements.values());
-    // dataButtons['textBox'] = await page.$$('textarea[data-region="send-message-txt"]');
-    // dataButtons['sendButton'] = await page.$$('textarea[data-region="send-message-txt"]')
-    // let sendButton = await page.$('button[data-action="send-message"]')
-    // console.log(dataButtons)
+
     let sentSize = await page.evaluate(() => document.querySelectorAll('div.message.send').length);
     // console.log(sentSize)
     for (let index = 0; index < sendAmount; index++) {
@@ -314,18 +264,14 @@ const SendMessageToUser = async (interaction, page, recipientName, recipientImg)
         //TODO getting the elems every time is inefficient
         await page.evaluate((messageText) => {document.querySelector('textarea[data-region="send-message-txt"]').value = messageText}, messageText);
         await page.evaluate(() => document.querySelector('button[data-action="send-message"]').click());
-        // await page.evaluate(() =>)
-        //     textBox = document.querySelector('textarea[data-region="send-message-txt"]')//.innerText = messageText;
-        //     sendButton =  document.querySelector('button[data-action="send-message"]')//.click();
-        // console.log("before await watifor")
-        // console.log(await page.evaluate(() => document.querySelectorAll('div.message.send').length))
+
+        //Whenever a new message send is loaded into the page
         await page.waitForFunction(
             sentSize => document.querySelectorAll('div.message.send').length > sentSize,
             {},
             sentSize
         );
-        // await page.waitForFunction((sentSize) => {document.querySelectorAll('div.message.send').length > sentSize}, {}, sentSize)
-        // console.log("aftermessagewassent")
+
         sentSize += 1;
     }
 

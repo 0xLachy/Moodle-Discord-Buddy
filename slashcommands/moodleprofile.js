@@ -21,34 +21,7 @@ const data = new SlashCommandBuilder()
             .setDescription("If there are 2 people with the name, also use last name")
             .setRequired(true)
     )
-    // .addSubcommand(subcommand =>
-	// 	subcommand /*person cause they can be the teacher too*/
-	// 		.setName('info')
-	// 		.setDescription('Get A persons interests, bio, profile pic, courses etc (need to be in the same course)')
-    //         .addStringOption(option =>
-    //             option
-    //                 .setName('name-or-id')
-    //                 .setDescription("If there are 2 people with the name, also use last name")
-    //                 .setRequired(true)
-    //         )
-    // )
-    // .addSubcommand(subcommand =>
-    //     subcommand
-    //         .setName('message')
-    //         .setDescription('Message a user, you need to be logged in')
-    //         .addStringOption(option =>
-    //             option
-    //                 .setName('recipientname-or-id')
-    //                 .setDescription("If there are 2 people with the name, also use last name")
-    //                 .setRequired(true)
-    //         )
-    //         .addStringOption(option =>
-    //             option
-    //                 .setName('message-text')
-    //                 .setDescription("Send something like 'hello', you can use html, like <p color=red>hi</p>")
-    //                 .setRequired(true)
-    //         )
-    // )
+
 
 module.exports = {
     category: "utility",
@@ -65,73 +38,53 @@ module.exports = {
         const page = await browser.newPage();
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 
-        //log into the browser using url from functions, (only one in participants so 0 to get it)
-        await UtilFunctions.LoginToMoodle(page, interaction.user.id)
-        // console.log(await UtilFunctions.GetCourseUrls(page))
+        //Login to moodle and catch any errors that occur
+        await UtilFunctions.LoginToMoodle(page, await interaction.user.id).catch(reason => {
+            console.log(reason);
+            interaction.editReply({content: reason});
+            browser.close();
+        })
+        //Get the term to use as context id (IT is needed unfortunately)
         let chosenTerm = await UtilFunctions.AskForCourse(interaction, page).catch(reason => {
             //If no button was pressed, then just quit
             console.log(reason)
-            interaction.deleteReply();
             // interaction.editReply({content: reason, embeds: []})
             browser.close()
             return null;
         })
-        if(chosenTerm == null) return;
-        // if it isn't an array with 2 values, it isn't the term data, update this if more term data
-        // if(chosenTerm.length != 2) return;
-        // console.log(testingThing)
-        let inputNameOrId = interaction.options.getString("name-or-id")
-        interaction.editReply({ content: `Going to the url ${chosenTerm.URL} to get ${inputNameOrId}'s info!`, embeds: []})
-        // if it isn't a number then the person needs to be found
-        if(isNaN(inputNameOrId)){
-            // use zero because it returns an array for no reason
-            await page.goto(await UtilFunctions.GetTermURLS("participants", chosenTerm.ID)[0])
-            let userUrl = await getUserUrl(page, inputNameOrId)
-            if(userUrl == null) {
-                // If no username found, I should say that and then quit
-                await interaction.editReply({content: "No Person Found", embeds: []})
-                browser.close()
-                return;
-            }
-            await page.goto(userUrl)
+        
+        if(chosenTerm == null) return await interaction.deleteReply();
+        //Get their id
+        let userProfileID = await UtilFunctions.NameToID(interaction, page, await interaction.options.getString('name-or-id'), chosenTerm)
+        if (userProfileID == null) { 
+            await interaction.editReply('Recipient ID could not be found')
+            await browser.close(); 
+            return;
+        };
+        try {
+            await page.goto(`${UtilFunctions.mainStaticUrl}user/view.php?id=${userProfileID}&course=${chosenTerm.ID}`)
+        } catch (error) {
+            console.log("Webpage doesn't exist in moodleprofile script ScrapeProfileData the url needs to be changed")
         }
-        else {
-            try {//&course=897https://moodle.oeclism.catholic.edu.au/user/view.php?id=3092&course=897
-                await page.goto(`${UtilFunctions.mainStaticUrl}user/view.php?id=${inputNameOrId}course=${chosenTerm.ID}`)
-            } catch (error) {
-                console.log("Webpage doesn't exist in moodleprofile script ScrapeProfileData the url needs to be changed")
-            }
-            // https://moodle.oeclism.catholic.edu.au/user/profile.php?id=3062
-        }
+
         SendProfileToDiscord(interaction, await ScrapeProfileData(page))
-        browser.close()
-        // switch (interaction.options.getSubcommand()) {
-        //     case "info":
-        //         let realInputName = await interaction.options.getString("name-or-id")
-        //         //check if it is number or not int.tryparse or something
-        //         //Getting name (which is required) and converting it from nickname, also converts to lower case
-        //         let inputName = await UtilFunctions.NicknameToRealName(realInputName);
-        //         break;
-        //     case "message":
-        //         //DO A CHECK FOR DISCORD ID IF THEY ARE LOGGED IN, IF THEY ARENT REGECT THEM
-        //         let recipientName = await interaction.options.getString("recipientname-or-id");
-        //         //DO the check for Id again, make function for this
-        //         let moodleMessageToSend = await interaction.options.getString("message-text");
-
-
-        //         break;
-        //     default:
-        //         interaction.editReply(`Something went wrong with ${interaction.options.getSubcommand()}`)
-        //         break;
-        // }
-        // SendEmbedsToDiscord(interaction);
-        // browser.close();
+        await browser.close()
     }
+}
+
+const WaitForUserDetailsOrError = (page) => {
+    return new Promise((resolve, reject) => {
+        //It's a race to see what loads first lol
+        page.waitForSelector('section > ul > li.contentnode.interests').then(() => { resolve(true); return; }).catch(() => { resolve(false); return; })
+        page.waitForSelector('#region-main > div > div.box.errorbox.alert.alert-danger').then(() => { resolve(false); return; }).catch(() => { resolve(false); return; }) //RJECTING cause user not found
+    })
 }
 //Maybe add this to main functions so that it can be changed easier
 const ScrapeProfileData = async (page) => {
     // interaction.editReply("MADE IT TO THE SCRAPING STAGE")
-    await page.waitForSelector('section > ul > li.contentnode.interests')
+    let interestsLoaded = await WaitForUserDetailsOrError(page)
+    //If they didn't load return null
+    if (!interestsLoaded) return null;
     await page.waitForSelector('img.userpicture')
     await page.waitForSelector('#coursedetails')
     let profileDataObject = await page.evaluate(() => {
@@ -154,40 +107,14 @@ const ScrapeProfileData = async (page) => {
         return tmpDataObject
     })
     profileDataObject.profileUrl = page.url()
-    // await page.waitForSelector('section > ul > li.contentnode.courseprofiles > dl > dd > ul > li')
-    // await page.waitForSelector('section > ul > li.contentnode.roles > dl > dd > a')
-    // profileDataObject = await page.evaluate((dataObject) => {
 
-    //     return dataObject
-    // }, profileDataObject)
-    // page.click()
-    // console.log(await profileDataObject)
     return profileDataObject;
 }
-const getUserUrl = async (page, inputName) => {
-    return await page.evaluate((cleanedName) => {
-        let tableRows = document.querySelectorAll('tr[id*="user-index-participant"]');
-        console.log(cleanedName)
-        for (trElem of tableRows){
-            // Gets table data elems from rows, then assigns the name to the other data of row, and add profile pic lastly
-            // tdElems = trElem.querySelectorAll("td");
-            let personNodes = trElem.querySelectorAll("a")
-            for (person of personNodes){
-                // console.log(person.textContent)
-                if (person.textContent.toLowerCase().includes(cleanedName)) return person.href
-            }
-            //console.log(personNode)
-            // if (personNode.textContent.includes(UtilFunctions.NicknameToRealName(inputName))) return personNode.href
-            // peopleObj[trElem.querySelector("a").textContent] =  [...Array.prototype.map.call(tdElems, function(t) { return t.textContent; }), trElem.querySelector("a > img").src]//.push(trElem.querySelector("a > img").src);
-            //arrOfEveryone.push([trElem.querySelector("a").textContent, ...Array.prototype.map.call(tdElems, function(t) { return t.textContent; }), trElem.querySelector("a > img").src])//.push(trElem.querySelector("a > img").src);
-        }
-        //if it failed return null
-        return null;
-    }, await UtilFunctions.NicknameToRealName(inputName))
-}
-
     //Not async because send message to discord, but maybe it can be?
 const SendProfileToDiscord = (interaction, profileDataObject) => {
+    if (profileDataObject == null) {
+        interaction.editReply("Content Couldn't be loaded, you may not have access to this user, are you sure you chose the right person?")
+    }
     let profileEmbed = new MessageEmbed()
     .setColor(UtilFunctions.primaryColour)
     .setTitle(`${profileDataObject.fullName} (${profileDataObject.userId})`)
@@ -205,6 +132,5 @@ const SendProfileToDiscord = (interaction, profileDataObject) => {
     //footer doesn't allow linked text
     // .setFooter({ text: profileDataObject.miscellaneous.join(",")/*, iconURL: 'https://i.imgur.com/AfFp7pu.png'*/ }) // change icon
 
-    //TODO find a way to make the content empty (leaving it out just leaves old text, and blank string gives error)
     interaction.editReply({content: " ", embeds: [profileEmbed]})
 }
