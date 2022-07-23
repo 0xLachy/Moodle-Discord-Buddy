@@ -69,7 +69,7 @@ module.exports = {
             return null;
         })
 
-        let mergeResults = await interaction.options.getBoolean('merge') | true;
+        let mergeResults = await interaction.options.getBoolean('merge') || true; // doesn't seem to work
         // if(mergeResults == undefined) mergeResults = true; // default value is now true
         let riggedTerm = await interaction.options.getString("rig");
         let leaderboardTitle = riggedTerm ? "Leaderboard For Selected Terms (totally not rigged :sweat_smile:)" : "Leaderboard For Selected Terms"; // could use += and add the total not rigged part but but yeah

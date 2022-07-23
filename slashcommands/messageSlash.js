@@ -6,8 +6,6 @@ const { MessageEmbed, MessageActionRow, MessageButton, ButtonInteraction } = req
 const UtilFunctions = require("../util/functions");
 
 
-
-
 const data = new SlashCommandBuilder()
 	.setName('message')
 	.setDescription('Send or Read Messages to users on moodle, you need to be logged in for this function')
@@ -28,7 +26,15 @@ const data = new SlashCommandBuilder()
                     .setDescription('Send normal text or you could send html like <p style="color: green;">green text</p>')
                     .setRequired(true) // when I add the attachment option, don't make this required
             )
-            //TODO add optional spam amount that lets you send in hundreds lol
+            .addIntegerOption(option =>
+                option
+                    .setName('times')
+                    .setDescription('send heaps of messages to the person, min 1, max is 100!')
+                    // .addChoices(
+                    //     { name: "2", value: 2},
+                    //     { name: "5", value: 5},
+                    // )
+            )
     )
 	.addSubcommand(subcommand =>
 		subcommand
@@ -40,7 +46,18 @@ const data = new SlashCommandBuilder()
                     .setDescription('Name or Id of person you want to message (if same name > 1 then use last name)')
                     .setRequired(true)
             )
-            //TODO ADD BOOLEAN READ SELF MESSAGES
+            .addBooleanOption(option => 
+                option
+                    .setName('received')
+                    .setDescription('Show recieved messages from person (default is true)')
+                    .setRequired(false)
+            )
+            .addBooleanOption(option => 
+                option
+                    .setName('sent')
+                    .setDescription('Show messages you sent to the person (default is false)')
+                    .setRequired(false)
+            )
             //TODO also make sure there aren't too many messages
     )
 
@@ -60,7 +77,7 @@ module.exports = {
             //break out of this function early because they need to be logged in and they aren't
             return;
         }
-        // const browser = await puppeteer.launch({ headless: false })
+        // const browser = await puppeteer.launch({ headless: false }) //slowMo:100
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
         //log into the browser todo find a better way to do this
@@ -70,19 +87,17 @@ module.exports = {
             // browser.close();
         })
         let recipientID = await UtilFunctions.NameToID(interaction, page, interaction.options.getString('name-or-id'))
-        if (recipientID == null) interaction.editReply('Recipient ID could not be found');// maybe use a message box to show that the id didn't work
+        if (recipientID == null) { 
+            await interaction.editReply('Recipient ID could not be found')
+            await browser.close(); 
+            return;
+        };
         await page.goto(`${UtilFunctions.mainStaticUrl}message/index.php?id=${recipientID}`)
-        let deletedReply = false;
 
-        //TODO use try catch here because the person may not be accessable or real if they pass in a straight id
-        //#region-main > div > div.box.errorbox.alert.alert-danger check for existence of this
-        //maybe have a custom promise that waits for ONE, of them to return, and when they do continue maybe use .then
-        //TODO test this I don't know what will happen 777
-        // console.log("just before user header found funcion")
         let userHeaderFound = await WaitForUserNameOrError(page)
         // console.log(userHeaderFound)
         if (!userHeaderFound) {
-            await interaction.editReply("User Could not be found or you have no access to them")
+            await interaction.editReply("User Could not be found in messages or you have no access to them")
             await browser.close();
             return;
         }
@@ -92,101 +107,19 @@ module.exports = {
         let recipientImg = await page.evaluate(() => document.querySelector('div[data-region="header-content"] img').src)
 
         if (interaction.options.getSubcommand() === 'read') {
-            //read message and that is //#yui_3_17_2_1_1658434584419_54 message recieved class div
-            // try {
-            //     await page.waitForSelector('div.message')// instead just use message because there may not be any messagess recieved
-            // } catch (err) {
-            //     await interaction.editReply(`You have no messages with ${recipientName}`)  
-            //     return;  
-            // }//not really the best way, but for some reason it doesn't load before the div.message.received gets queried
-            await page.waitForSelector('div.message.received', {timeout: 5000}).catch((error) => {/*console.log(error)*/})
-            const messages = await page.evaluate(() => {
-                let recievedDivs = document.querySelectorAll('div.message.received');
-                let messages = {}
-                // console.log(recievedDivs)
-                for (const recievedDiv of recievedDivs) {
-                    //sets the obj to the time, and then holds array of messages text (it could be p, or hr, or other elems.textContent)
-                    messages[recievedDiv.querySelector('div[data-region="time-created"]').textContent] = Array.from(recievedDiv.querySelectorAll('div[data-region="text-container"] > *'), textItem => textItem.textContent);
-                }
-                // console.log(messages)
-                return messages
-            })
-            // console.log(messages)
-            messagesReadEmbed = new MessageEmbed()
-            .setColor(UtilFunctions.primaryColour)
-            .setTitle(`Received Messages from ${recipientName}`)
-            .setURL(page.url)
-            .setThumbnail(recipientImg)//TODO add read option and also make message text not required or do subcommand groups
-            .setDescription('If you don\'t want people seeing this, you can send the message through DMS with this discord bot.');
-            for (const messageTime of Object.keys(messages)) {
-                messagesReadEmbed.addField(messageTime, messages[messageTime].join("\n"))
-            }
-            if(Object.keys(messages).length == 0){
-                messagesReadEmbed.addField("No Messages Received", "It seems they haven't sent you any messages!")
-            }
-            interaction.editReply({embeds: [messagesReadEmbed]})
-            // .addField('Message Text', messageText)
-            // console.log(messages)
-            await browser.close()
-            return;
+            await readMessages(interaction, page, recipientName, recipientImg)
         }
-        else {
-            await SendComfirmationMessage(interaction, page, recipientName, recipientImg).catch(async () => {
-                // await interaction.editReply({content: ""})
-                await interaction.deleteReply();
-                deletedReply = true;
-                //TODO find better way, return doesn't work
-                console.log("deleted reply")
-            })
-            if (deletedReply) { return; }
+        else if (interaction.options.getSubcommand() === 'send') {
+            let cancelSending = await SendComfirmationMessage(interaction, page, recipientName, recipientImg)
+            if(cancelSending){
+                await interaction.deleteReply(); // just don't send it
+            }
+            else{
+                await SendMessageToUser(interaction, page, recipientName, recipientImg)
+            }
         }
 
-        // await interaction.editReply({content: 'Sending Embed', embeds: [], components:[]})
-        //TODO add a confirm selected participant button
-        //also that selector is pretty trash, i guess i only need the confirm on user if going by name
-        //div[data-region="header-content"] ~ strong
-        //that is honestly the best way to do it to be honest
-        
-        //await interaction.editReply("Sending Message To " + await page.evaluate(() => document.querySelector('#yui_3_17_2_1_1658394340641_52 > div.d-flex.text-truncate > a > div.w-100.text-truncate.ml-2 > div > strong')))
-        //click on the text box and type
-        //#yui_3_17_2_1_1658367166412_44 > div.col-8.d-flex.flex-column > div.footer-container.position-relative > div > div:nth-child(1) > div.d-flex.mt-1 > textarea
-        //textarea[data-region="send-message-txt"] dir="auto" //TODO SORT ISSUE IF WRONG ONE SELECTED
-        // await page.click('textarea[data-region="send-message-txt"]');
-        // await page.keyboard.type(await interaction.options.getString('message'));
-        //document.getElementById("sample").innerText = "your text"
-        //#yui_3_17_2_1_1658367166412_64 > div > button.btn.btn-link.btn-icon.icon-size-3.ml-1.mt-auto
-        //can't just use .click() inside this function because of it moving or nested divs... tbh idk
-        messageText = await interaction.options.getString('message');
-
-
-        // .setDescription(``);
-        await page.waitForSelector('button[data-action="send-message"]')
-        await page.evaluate((messageText) => { 
-            document.querySelector('textarea[data-region="send-message-txt"]').innerText = messageText;
-            /*let elemThing = */document.querySelector('button[data-action="send-message"]').click();//#yui_3_17_2_1_1658391746948_38document.querySelector('button[data-action="send-message"]');//#yui_3_17_2_1_1658391746948_38
-            // console.log(elemThing)
-            // elemThing.click();//#yui_3_17_2_1_1658391746948_38
-            // console.log('WOrked')
-        }, messageText)
-
-        // await page.click('button[data-action="send-message"]')
-
-        messageSendEmbed = new MessageEmbed()
-        .setColor(UtilFunctions.primaryColour)
-        .setTitle(`Sent a Message to ${recipientName}`)
-        .setURL(page.url)
-        .setThumbnail(recipientImg)//TODO add read option and also make message text not required or do subcommand groups
-        .setDescription('If you don\'t want people seeing this, you can send the message through DMS with this discord bot.\n You can also read messages with read=true option')
-        .addField('Message Text', messageText)
-        interaction.editReply({content: ' ', embeds: [messageSendEmbed], components: []})
-        
-        // await page.click('button[data-action="send-message"]');
-        // that should be sent now. I should also have an option to read the messages
-        //<p style="color: green;"> another green </p> that will make green text
-        //TODO just go to this after you get their username if they didn't pass in an ID
-        //https://moodle.oeclism.catholic.edu.au/message/index.php?id=${id}
-        //maybe use a name to id function
-        await browser.close();
+        // await browser.close();
     }
 }
 
@@ -197,7 +130,7 @@ const SendComfirmationMessage = (interaction, page, recipientName, recipientImg)
 			.setTitle('Confirmation')
 			.setURL(page.url)
             .setThumbnail(recipientImg)
-			.setDescription(`Do you want to Message ${recipientName}?\n\nYou have 3 seconds to answer (default is yes)`);
+			.setDescription(`Do you want to Message ${recipientName}?\n\nYou have 5 seconds to answer (default is yes)`);
         const confirmationRow = new MessageActionRow()
 			.addComponents(
 				new MessageButton()
@@ -220,27 +153,29 @@ const SendComfirmationMessage = (interaction, page, recipientName, recipientImg)
             channel = await interaction.user.createDM(); 
         }
         // create collector to handle when button is clicked using the channel
-        const collector = await channel.createMessageComponentCollector({ /*filter, */time: 3000 });
+        const collector = await channel.createMessageComponentCollector({ /*filter, */time: 5000 });
 
         await interaction.editReply({embeds: [confirmationEmbed], components: [confirmationRow]})
         
         collector.on('collect', async i => {
-            console.log(i.customId)
+            // console.log(i.customId)
             if(i.customId == 'No'){
-                //reject I guess or return null
-                reject()
+                //setting cancel early to true
+                resolve(true)
                 collector.stop()
+                //so it doesn't say sending message
+                return;
             }
-            else if (i.customId == 'yes') { 
-                resolve()
-                collector.stop()
+            else if (i.customId == 'Yes') { 
+                await i.update({ content: 'Sending Message', embeds: [], components: []});
+                resolve(false)
+                await collector.stop()
             }
-            await i.update({ content: 'Sending Message', embeds: [], components: []});
         });
 
         collector.on('end', collected => {
             if (collected.size == 0) {
-                resolve()
+                resolve(false)
             }
         });
     });
@@ -251,4 +186,159 @@ const WaitForUserNameOrError = (page) => {
         page.waitForSelector('div[data-region="header-content"] strong').then(() => { resolve(true); return; }).catch(() => { resolve(false); return; })
         page.waitForSelector('#region-main > div > div.box.errorbox.alert.alert-danger').then(() => { resolve(false); return; }).catch(() => { resolve(false); return; }) //RJECTING cause user not found
     })
+}
+
+const readMessages = async (interaction, page, recipientName, recipientImg) => {
+    let showReceived = await interaction.options.getBoolean('received') || true; // default values for these
+    let showSent = await interaction.options.getBoolean('sent') || false; // default value if null
+    
+    await page.waitForSelector('div.message', {timeout: 5000}).catch((error) => {/*console.log(error)*/})
+    const messages = await page.evaluate((showReceived, showSent, recipientName) => {
+        // console.log(showReceived)
+        // console.log(showSent)
+        let messages = {}
+        if(showReceived){
+            GetWantedMessages('div.message.received', recipientName);
+        } 
+        if(showSent){ // that is the user who sent it's name
+            senderName = document.querySelector('#usermenu > span').textContent;
+            GetWantedMessages('div.message.send', senderName);
+        }
+        return messages
+
+        function GetWantedMessages(msgSelector, name) {
+            let messageDivs = document.querySelectorAll(msgSelector); //div.message.send for user sent messages
+
+            for (const messageDiv of messageDivs) {
+                messages[`${name}: ${messageDiv.querySelector('div[data-region="time-created"]').textContent.trim()}`] = Array.from(messageDiv.querySelectorAll('div[data-region="text-container"] > *'), textElem => textElem.textContent.trim()).filter(msgString => msgString != '');
+            }
+        }
+    }, showReceived, showSent, recipientName)
+    // console.log(messages)
+    let messagesReadEmbedArr = [CreateNewMessageReadEmbed(0)];
+    //MAX IS 25!!!
+    let fieldCounter = 0;
+    let currentEmbed = 0; //25 is max messages per embed, and 10 is max embeds. maybe display messages from recent first? using time idk
+    if(Object.keys(messages).length > 25 * 10) { await interaction.editReply('There are so many messages there is no point trying!'); return; }
+    // console.log(Object.keys(messages).length)
+    for (const messageTime of Object.keys(messages)) {
+        //They only allow 25 as the max, but as it's zero indexed 25 won't work
+        if (fieldCounter == 25) {
+            currentEmbed += 1;
+            messagesReadEmbedArr.push(CreateNewMessageReadEmbed(currentEmbed));
+            fieldCounter = 0;
+        }
+        if(messages[messageTime].length > 0) messagesReadEmbedArr[currentEmbed].addField(messageTime, messages[messageTime].join("\n"));
+        fieldCounter += 1;
+    }
+    if(Object.keys(messages).length == 0){
+        messagesReadEmbedArr[currentEmbed].addField("No Messages Received", "It seems they haven't sent you any messages!")
+    }
+    await interaction.editReply({embeds: messagesReadEmbedArr})
+    return;
+
+    function CreateNewMessageReadEmbed(currentEmbed) {
+        // console.log(currentEmbed)
+        let title = `Messages With ${recipientName}`
+        if (currentEmbed > 0) title += `, Part: ${currentEmbed + 1}`
+        return new MessageEmbed()
+            .setColor(UtilFunctions.primaryColour)
+            .setTitle(title)
+            .setURL(page.url)
+            .setThumbnail(recipientImg)
+            .setDescription('If you don\'t want people seeing this, you can read messages through DMS with this discord bot.');
+    }
+}
+
+const SendMessageToUser = async (interaction, page, recipientName, recipientImg) => {
+    messageText = await interaction.options.getString('message');
+    sendAmount = await interaction.options.getInteger('times') || 1;
+    // if send amount is greater than 100 then it is just gonna be 100 else just be
+    if(sendAmount > 100) sendAmount = 100; //shorthand looked too confusing
+    // .setDescription(``);
+    await page.waitForSelector('button[data-action="send-message"]')
+    // const dataButtons3 = await page.evaluate(async (messageText, sendAmount) => { 
+    //     return {
+    //         "textBox": document.querySelector('textarea[data-region="send-message-txt"]'),
+    //         "sendButton": document.querySelector('button[data-action="send-message"]')
+    //     }
+    //     let textBox = document.querySelector('textarea[data-region="send-message-txt"]')//.innerText = messageText;
+    //     let sendButton = document.querySelector('button[data-action="send-message"]')//.click();
+        // let messagesSize = document.querySelectorAll('div.message.send').length;
+        // await myButton.click();
+        // await page.waitFor(() => document.querySelectorAll('ul.specialList li').length > listSize);
+        // for (let index = 0; index < sendAmount;) {
+        //         // textBox = document.querySelector('textarea[data-region="send-message-txt"]')//.innerText = messageText;
+        //         // sendButton =  document.querySelector('button[data-action="send-message"]')//.click();
+        //     console.log(textBox)
+        //     console.log(sendButton)
+        //     textBox.innerText = messageText;
+            
+        //     await sendButton.click();
+        //     // sendButton.click(); //DOESN"T WORK
+        //     // await new Promise((resolve, reject) => {
+        //     //     sendButton.addEventListener('click',function(e) {
+        //     //         /// do something to process the answer
+        //     //         resolve(something);
+        //     //     }, {once: true});
+        //     //     sendButton.click();
+        //     // });
+        //     console.log("sent a message")
+        // }
+    // }, messageText, sendAmount)
+    // console.log(dataButtons)
+    // await myButton.click();
+    // await page.waitFor(() => document.querySelectorAll('ul.specialList li').length > listSize);
+    // const dataButtons = await page.evaluateHandle(() => {
+    //     return {
+    //         "textBox": document.querySelector('textarea[data-region="send-message-txt"]'),
+    //         "sendButton": document.querySelector('button[data-action="send-message"]')
+    //     }
+    // })
+    // let textHandles = await page.evaluateHandle(() => document.querySelector('textarea[data-region="send-message-txt"]'));
+    // let sendHandles = await page.evaluateHandle(() => document.querySelector('button[data-action="send-message"]'));
+    // let textBox = Array.from(await textHandles.getProperties())[0];
+    // let sendButton = Array.from(await sendHandles.getProperties())[0];
+    // console.log(sendButton)
+//     let elementsHendles = await page.evaluateHandle(() => document.querySelectorAll('a'));
+// let elements = await elementsHendles.getProperties();
+// let elements_arr = Array.from(elements.values());
+    // dataButtons['textBox'] = await page.$$('textarea[data-region="send-message-txt"]');
+    // dataButtons['sendButton'] = await page.$$('textarea[data-region="send-message-txt"]')
+    // let sendButton = await page.$('button[data-action="send-message"]')
+    // console.log(dataButtons)
+    let sentSize = await page.evaluate(() => document.querySelectorAll('div.message.send').length);
+    // console.log(sentSize)
+    for (let index = 0; index < sendAmount; index++) {
+        // textBox.innerText = messageText;
+        //TODO getting the elems every time is inefficient
+        await page.evaluate((messageText) => {document.querySelector('textarea[data-region="send-message-txt"]').value = messageText}, messageText);
+        await page.evaluate(() => document.querySelector('button[data-action="send-message"]').click());
+        // await page.evaluate(() =>)
+        //     textBox = document.querySelector('textarea[data-region="send-message-txt"]')//.innerText = messageText;
+        //     sendButton =  document.querySelector('button[data-action="send-message"]')//.click();
+        // console.log("before await watifor")
+        // console.log(await page.evaluate(() => document.querySelectorAll('div.message.send').length))
+        await page.waitForFunction(
+            sentSize => document.querySelectorAll('div.message.send').length > sentSize,
+            {},
+            sentSize
+        );
+        // await page.waitForFunction((sentSize) => {document.querySelectorAll('div.message.send').length > sentSize}, {}, sentSize)
+        // console.log("aftermessagewassent")
+        sentSize += 1;
+    }
+
+    // await page.click('button[data-action="send-message"]')
+    let title = `Sent a Message to ${recipientName}`
+    if(sendAmount > 1) title += ` ${sendAmount} times!`;
+
+    messageSendEmbed = new MessageEmbed()
+    .setColor(UtilFunctions.primaryColour)
+    .setTitle(title)
+    .setURL(page.url)
+    .setThumbnail(recipientImg)
+    .setDescription('If you don\'t want people seeing this, you can send the message through DMS with this discord bot.\n You can also read messages with the read subcommand!')
+    .addField('Message Text', messageText)
+    interaction.editReply({content: ' ', embeds: [messageSendEmbed], components: []})
 }
