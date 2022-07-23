@@ -10,7 +10,7 @@ const UtilFunctions = require("../util/functions");
     Add info about this script here
 */
 
-//TODO implement code for the role options
+//TODO implement code for editing moodle profile
 //.setRequired(true));
 const data = new SlashCommandBuilder()
 	.setName('moodleprofile')

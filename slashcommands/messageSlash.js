@@ -59,7 +59,7 @@ const data = new SlashCommandBuilder()
 
 
 module.exports = {
-    category: "login",
+    category: "utility",
     permissions: [],
     devOnly: false,
     ...data.toJSON(),

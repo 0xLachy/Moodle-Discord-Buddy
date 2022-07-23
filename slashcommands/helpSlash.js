@@ -42,34 +42,34 @@ module.exports = {
             let embed = new MessageEmbed()
             .setTitle(`List of available slash commands (${client.slashcommands.size})`)
             .setColor(LismFunctions.primaryColour)
+            // .setFooter('The options count is the amount of sub commands and choices in each command per category')
 
             //Get all the slash commands and put them into categories
             slashCategoryObject = {}
-            client.slashcommands.forEach(slashcmd => {
-
-                if(slashCategoryObject[slashcmd.category]){
-                    slashCategoryObject[slashcmd.category].push(slashcmd.name)
-                }
-                else{
-                    slashCategoryObject[slashcmd.category] = []
-                    slashCategoryObject[slashcmd.category].push(slashcmd.name)
-                }
-            })
-
+            for await (const slashcmdArr of client.slashcommands) {
+                //it has the name at the start of the array, really weird and pointless
+                const slashcmd = slashcmdArr[1]
+                let optionsCount = await GetOptionsCount(slashcmd);
+                if(slashCategoryObject[slashcmd.category] == undefined) slashCategoryObject[slashcmd.category] = { categoryOptionCount: 0, categoryItems: []};
+                slashCategoryObject[slashcmd.category].categoryOptionCount += optionsCount
+                slashCategoryObject[slashcmd.category].categoryItems.push(slashcmd.name)
+            }
+  
             for(category in slashCategoryObject){
-                //skip undefined one, don't know why
+                //skip undefined one, like for devonly commands
                 if(category == undefined) continue;
                 const capitalisedName = category.slice(0, 1).toUpperCase() + category.slice(1);
 
-                let categoryItems = slashCategoryObject[category]
+                let { categoryOptionCount, categoryItems } = slashCategoryObject[category]
+                
                 try {
-                    embed.addField(`${capitalisedName} [${categoryItems.length}]:`, categoryItems?.map(c => `${c}`).join(", "))
+                    embed.addField(`${capitalisedName} [${categoryItems.length}] (Options ${categoryOptionCount})`, categoryItems?.map(c => `${c}`).join(", "))
                 } catch(e){
                     console.log(e)
                 }
                 
             }
-
+            
             // And finally we return the embed
             return interaction.editReply({ embeds: [embed]})
 
@@ -88,12 +88,13 @@ module.exports = {
                 // return interaction.channel.send(embed)
             }
             // If it does exist, continue with this code.
-
+            // console.log(cmd)
             // This is an embed with all the command's information.
             let embed = new MessageEmbed()
             .setTitle(`Information for command: **${cmd.name}**`)
             .addField(`Name`, cmd.name)
             .addField(`Description`, cmd.description)
+            // .addField(`SubCommands`, cmd.subcommands)
             //.addField(`Usage`, `${prefix}${cmd.usage}`)
             //.addField(`Accessible by`, cmd.accessible) change that to permissions thing
             // .addField(`Aliases`, `${cmd.aliases ? cmd.aliases.join(", ") : "None"}`) // If the command has aliases, write them all separated by commas, if it doesnt have any, write "None".
@@ -103,7 +104,46 @@ module.exports = {
             if(cmd.usage != undefined  && cmd.usage != null){
                 embed.addField(`Usage`, `${cmd.usage}`)
             }
+            let cmdArgs = []
+            for (const cmdOption of cmd.options) {
+                if(cmdOption.type == 1) {
+                    // if(cmdOption.options.length > 0) {
+                        // console.log(cmdOption.name)//category.slice(0, 1).toUpperCase() + category.slice(1);
+                        // console.log(cmdOption.options.join(','))
+                        embed.addField(`Subcommand: ${cmdOption.name.slice(0, 1).toUpperCase() + cmdOption.name.slice(1)}`, `Args: ${cmdOption.options?.map(option => option.name).join(', ') || 'no args'}`)
+                    // }
+                    // else {
+                    //     embed.addField(`Subcommand ${cmdOption.name}`, o)
+                    // }
+                }
+                else {
+                    cmdArgs.push(await cmdOption.name)
+                }
+            }
+            if (cmdArgs.length > 0) embed.addField(`Args:`, cmdArgs.join(', '))
             return interaction.editReply({embeds: [embed]})
         }
     }
+}
+
+const GetOptionsCount = async (slashcmd) => {
+    let optionsCount = 0;
+    for (const optionOrSubCommand of slashcmd.options) {
+        //if it is a sub command, in the future use recursion for this nested sub commands!
+        if (optionOrSubCommand.type == 1) {
+            //loop through sub commands
+            for (const option of optionOrSubCommand.options) {
+                //if type is 1 make this a recursive thing, I don't know if that is even possible
+                optionsCount++;
+            }
+            if(optionOrSubCommand.options.length == 0) optionsCount++;
+        }
+        else {
+            optionsCount++;
+        }
+    }
+    //if no options set it to one because you can at least call the command
+    if(slashcmd.options.length == 0) optionsCount++;
+    return optionsCount;
+    // throw new NotImplementedExeption
 }
