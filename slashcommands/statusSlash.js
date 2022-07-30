@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
-const { MessageEmbed } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
 
 //INFO:
@@ -255,7 +255,7 @@ async function GetOnlineLeaderboard(page, interaction, showSeconds=false){
 }
 
 function CreateEmbedMessage(interaction, personData, leaderboard=false, title="none", colour=UtilFunctions.primaryColour) {
-    let statusEmbed = new MessageEmbed();
+    let statusEmbed = new EmbedBuilder();
     //check if data is obj or array
     //console.log(participantData.constructor.name);
     if(!leaderboard){
@@ -283,7 +283,7 @@ function CreateEmbedMessage(interaction, personData, leaderboard=false, title="n
         for(person of personData){
             //person 4 is thumbnail, 5 is the new seconds online section
             let infoString = `Roles: ${person[1]} Groups: ${person[2]} Last-Online: ${person[3]}`
-            statusEmbed.addField(person[0], infoString)
+            statusEmbed.addFields({ name: person[0], value: infoString })
         }
     }
 

@@ -1,6 +1,6 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
+// const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
-const { MessageEmbed } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
 
 
@@ -46,7 +46,7 @@ module.exports = {
         await UtilFunctions.LoginToMoodle(page, await interaction.user.id, undefined, loginDetails).then(async (result) => {
             // console.log(result);
             loggedInName = await page.evaluate(() => document.querySelector('#usermenu > span').textContent)
-            const loginEmbed = new MessageEmbed()
+            const loginEmbed = new EmbedBuilder()
 	            .setColor(UtilFunctions.primaryColour)
 	            .setTitle(`Your discord ID (${interaction.user.id}) is now associated with the moodle account: ${loggedInName}`)
 	            .setDescription('When a command is run the bot will check the discord ID of the user and unencrypt and log in as you instead of the bot owners credentials, giving you access to more commands')

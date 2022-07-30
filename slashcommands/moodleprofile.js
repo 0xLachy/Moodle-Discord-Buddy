@@ -1,7 +1,7 @@
 
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
-const { MessageEmbed, MessageActionRow, MessageButton, Util } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, Util } = require('discord.js');
 const UtilFunctions = require("../util/functions");
 // const wait = require('node:timers/promises').setTimeout;
 
@@ -62,7 +62,7 @@ module.exports = {
             return;
         };
         try {
-            await page.goto(`${UtilFunctions.mainStaticUrl}user/view.php?id=${userProfileID}&course=${chosenTerm.ID}`)
+            await page.goto(`${UtilFunctions.mainStaticUrl}/user/view.php?id=${userProfileID}&course=${chosenTerm.ID}`)
         } catch (error) {
             console.log("Webpage doesn't exist in moodleprofile script ScrapeProfileData the url needs to be changed")
         }
@@ -115,20 +115,27 @@ const SendProfileToDiscord = (interaction, profileDataObject) => {
     if (profileDataObject == null) {
         interaction.editReply("Content Couldn't be loaded, you may not have access to this user, are you sure you chose the right person?")
     }
-    let profileEmbed = new MessageEmbed()
-    .setColor(UtilFunctions.primaryColour)
-    .setTitle(`${profileDataObject.fullName} (${profileDataObject.userId})`)
-    .setURL(profileDataObject.profileUrl) // replace this with their url
-    .setDescription(profileDataObject.description)
-    .setThumbnail(profileDataObject.profilePic)
-    //mailto dosen't make it an actual link :/
-    // .addField("Email", `[${profileDataObject.email}](mailto:${profileDataObject.email}?subject=Hello, I was sent from the discord bot!)`)
-    .addField("Email", profileDataObject.email)
-    .addField("Interests", profileDataObject.interests.length != 0 ? profileDataObject.interests.join(", ") : "none")
-    .addField("Courses", profileDataObject.courses.length != 0 ? profileDataObject.courses.join(", ") : "none? :confused:")
-    .addField("Roles", profileDataObject.roles.length != 0 ? profileDataObject.roles.join(", ") : "No Roles")
-    .addField('Last Access', profileDataObject.lastAccess)
-    .addField("Miscellaneous", profileDataObject.miscellaneous.join(", ")) // should always have these
+    let profileEmbed = new EmbedBuilder()
+        .setColor(UtilFunctions.primaryColour)
+        .setTitle(`${profileDataObject.fullName} (${profileDataObject.userId})`)
+        .setURL(profileDataObject.profileUrl) // replace this with their url
+        .setDescription(profileDataObject.description)
+        .setThumbnail(profileDataObject.profilePic)
+        //TODO FIX THIS
+        .addFields(
+            { name: 'Email', value: profileDataObject.email },
+            { name: 'Interests', value: profileDataObject.interests.length != 0 ? profileDataObject.interests.join(", ") : "none" },
+            { name: 'Courses', value: profileDataObject.courses.length != 0 ? profileDataObject.courses.join(', ') : 'none? :confused:', inline: true },
+            { name: 'Roles', value: profileDataObject.roles.length != 0 ? profileDataObject.roles.join(', ') : 'No Roles', inline: true },
+            { name: 'last Access', value: profileDataObject.lastAccess, inline: true },
+            { name: 'Miscellaneous', value: profileDataObject.miscellaneous.join(', ') },
+            )
+        //.addField("Email", profileDataObject.email)
+        //.addField("Interests", profileDataObject.interests.length != 0 ? profileDataObject.interests.join(", ") : "none")
+        //.addField("Courses", profileDataObject.courses.length != 0 ? profileDataObject.courses.join(", ") : "none? :confused:")
+        //.addField("Roles", profileDataObject.roles.length != 0 ? profileDataObject.roles.join(", ") : "No Roles")
+        //.addField('Last Access', profileDataObject.lastAccess)
+        //.addField("Miscellaneous", profileDataObject.miscellaneous.join(", ")) // should always have these
     //footer doesn't allow linked text
     // .setFooter({ text: profileDataObject.miscellaneous.join(",")/*, iconURL: 'https://i.imgur.com/AfFp7pu.png'*/ }) // change icon
 

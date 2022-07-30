@@ -1,4 +1,3 @@
-
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const UtilFunctions = require("../util/functions");
 

@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
-const { MessageEmbed } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions")
 
 //.setRequired(true));
@@ -205,7 +205,7 @@ async function GetWantedAssignments(assignments, personName, filtering=false){
 
 
 function SendEmbedMessage(missingAssignments, interaction, personName, title="none", colour=UtilFunctions.primaryColour) {
-    let embedMsg = new MessageEmbed();
+    let embedMsg = new EmbedBuilder();
 
     if(title != "none"){
         embedMsg.setTitle(title)
@@ -274,11 +274,11 @@ function SendEmbedMessage(missingAssignments, interaction, personName, title="no
                 chunks.push(tempStr)
             }
 
-            chunks.forEach((biggerChunk, index) => embedMsg.addField(`${fieldName} part ${index+1}`, biggerChunk))
+            chunks.forEach((biggerChunk, index) => embedMsg.addFields({ name:`${fieldName} part ${index+1}`, value: biggerChunk}))
         }
         else{
             //Add the assignments that were done to the message
-            embedMsg.addField(fieldName, msgString)
+            embedMsg.addFields({ name: fieldName, value: msgString})
         }
 
     }

@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { MessageEmbed, MessageActionRow, MessageButton, ButtonInteraction } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle  } = require('discord.js');
 const { resolve } = require("path");
 const crypto = require("crypto");
 
@@ -9,12 +9,12 @@ const classAmount = 26;
 const contextId = 124194;
 
 //colour stuff
-const primaryColour = "#156385";
-const errorColour = "#FF0000";
+const primaryColour = 0x156385;
+const errorColour = 0xFF0000;
 
 //course stuff
-const mainStaticUrl = "https://moodle.oeclism.catholic.edu.au/";
-const dashboardUrl = `${mainStaticUrl}my/index.php`
+const mainStaticUrl = "https://moodle.oeclism.catholic.edu.au";
+const dashboardUrl = `${mainStaticUrl}/my/index.php`
 const courseIDs = ["896", "897", "898"]
 
 //login stuff
@@ -54,7 +54,7 @@ const GetTermURLS = (sectionOfWebsite="leaderboard", termId=courseIDs[currentTer
     switch (sectionOfWebsite) {
         case "leaderboard":
             for (id of courseIDs){
-                generatedUrls.push(`${mainStaticUrl}course/recent.php?id=${id}`)
+                generatedUrls.push(`${mainStaticUrl}/course/recent.php?id=${id}`)
             }
             break;
         case "participants":
@@ -64,7 +64,7 @@ const GetTermURLS = (sectionOfWebsite="leaderboard", termId=courseIDs[currentTer
             //Minus 1 because 0 indexing (you cant have term zero lol)
             // id = courseIDs[currentTerm - 1]
             //generatedUrls.push(`${mainStaticUrl}user/index.php?contextid=${contextId}&id=${termId}&perpage=5000`)
-            generatedUrls.push(`${mainStaticUrl}user/index.php?page=0&perpage=5000&contextid=${contextId}&id=${termId}&newcourse`)
+            generatedUrls.push(`${mainStaticUrl}/user/index.php?page=0&perpage=5000&contextid=${contextId}&id=${termId}&newcourse`)
             break;
         default:
             break;
@@ -163,32 +163,32 @@ function AskForCourse(interaction, page, multipleTerms=false){
     // you aren't supposed to put async in new promise but oh well, WHOS GONNA STOP ME!!!
     return new Promise(async (resolve, reject) => {
         const termInfo = await GetCourseUrls(page)
-        const termsEmbed = new MessageEmbed()
+        const termsEmbed = new EmbedBuilder()
         .setColor(primaryColour)
         .setTitle('Term / Courses Select')
         .setURL(dashboardUrl)
         .setDescription("Click on one of the buttons bellow to choose the term, you might need to be logged in if the bot owner isn't in the same course");
         
         if (multipleTerms) termsEmbed.setDescription("Click on Terms to disable them, if they are disabled they are grey, click on them again to make them blue, which means they are included!\n\nYou have 15 seconds to set up, or press enter to send it early!")
-        const row = new MessageActionRow();
+        const row = new ActionRowBuilder();
         // term info is <termname> = [ <url> , <id>]
         for (const term of Object.keys(termInfo)) {
-            // let termButton = new MessageButton().setCustomId(term).setLabel(term).setStyle('PRIMARY')
+            // let termButton = new ButtonBuilder().setCustomId(term).setLabel(term).setStyle(ButtonStyle.Primary)
             // row.addComponents(termButton)
             row.addComponents(
-                new MessageButton()
+                new ButtonBuilder()
                     .setCustomId(term)
                     .setLabel(term)
-                    .setStyle('PRIMARY'),
+                    .setStyle(ButtonStyle.Primary),
             );	
         }
         // If allowing multiple, have a enter button
         if (multipleTerms){
             row.addComponents(
-                new MessageButton()
+                new ButtonBuilder()
                 .setCustomId('Enter')
                 .setLabel('Enter')
-                .setStyle('SUCCESS')
+                .setStyle(ButtonStyle.Success)
             )           
         }
 
@@ -199,36 +199,36 @@ function AskForCourse(interaction, page, multipleTerms=false){
         //set the channel to send the command
         let channel = await interaction.channel
         //If the channel isn't inside the guild, you need to create a custom cd channel
+    //        -channel.isDM()
+            //+channel.type === ChannelType.DM
         if(!interaction.inGuild()){
             channel = await interaction.user.createDM(); 
         }
         // create collector to handle when button is clicked using the channel
         const collector = await channel.createMessageComponentCollector({ /*filter, */time: 15000 });
-        let updatedButtons = row.components;
+        let updatedButtons = row.components
         // console.log(updatedButtons)
     
         // So if one of the buttons was clicked, then update text
         collector.on('collect', async i => {
+
             if (multipleTerms) {
                 // if enter button, stop early
                 if(i.customId == 'Enter'){
                     // console.log("Stopped on enter")
                     await collector.stop()
                     return;
-                }                
-                else if (i.component.style == 'PRIMARY'){
-                    // Change the style of the button component,
-                    // that triggered this interaction
-                    await i.component.setStyle('SECONDARY')
-                }
-                else if(i.component.style == 'SECONDARY') {
-                    // set it back to primary then
-                    await i.component.setStyle('PRIMARY');
-                }
+                }   
+                // let updatedActionRowComponent = []
+
+                //loop through each action row on the embed and update it accordingly
+                await UpdateActionRowButtons(i);           
 
                 // Respond to the interaction, 
                 // and send updated components to the Discord API
-                await i.update({components: i.message.components})
+                //update it to new updated action row
+                // await i.update({components: newActionRowEmbeds})
+                // await i.update({components: i.message.components})
                 // Update button info because a button has been clicked
                 //message components are stored as an array as action rows, but all that matters is the components (The wanted buttons are in the first(only) row)
                 updatedButtons = await i.message.components[0].components;
@@ -244,23 +244,22 @@ function AskForCourse(interaction, page, multipleTerms=false){
         collector.on('end', collected => {
             if (multipleTerms) {
                 // on end, remove the buttons and embed // maybe insteadof content, use a new embed that says the chosen terms
-                
                 leaderboardData = updatedButtons.reduce((leaderboardData, button) => {
                     // If the Enter button is primary then do button.customId != 'Enter'
-                    if(button.style == 'PRIMARY') {
-                        leaderboardData[button.customId] = termInfo[button.customId]
+                    if(button.data.style == ButtonStyle.Primary) {
+                        leaderboardData[button.data.custom_id] = termInfo[button.data.custom_id]
                     }
                     return leaderboardData
                 }, {})
                 
-                let analyserEmbed = new MessageEmbed()
+                let analyserEmbed = new EmbedBuilder()
                 .setColor(primaryColour)
                 .setTitle('Analysing Terms / Courses')
                 .setURL(dashboardUrl)
                 .setDescription("Going To each Term / Course and Scraping data. The more here, the longer it will take :/ ");
                 
                 for (const termName of Object.keys(leaderboardData)) {
-                    analyserEmbed.addField(termName, `URL: ${leaderboardData[termName].URL}`)
+                    analyserEmbed.addFields({ name: termName, value: `URL: ${leaderboardData[termName].URL}` })
                 }
                 interaction.editReply({components: [], embeds: [analyserEmbed]})
 
@@ -339,6 +338,33 @@ const NicknameToRealName = async (inputName) => {
     }
     //returns original name if the for loop didn't work
     return inputName;
+}
+
+async function UpdateActionRowButtons(i) {
+    let newActionRowEmbeds = i.message.components.map(oldActionRow => {
+        //create a new action row to add the new data
+        updatedActionRow = new ActionRowBuilder();
+
+        // Loop through old action row components (which are buttons in this case) 
+        updatedActionRow.addComponents(oldActionRow.components.map(buttonComponent => {
+            //create a new button from the old button, to change it if necessary
+            newButton = ButtonBuilder.from(buttonComponent);
+
+            //if this was the button that was clicked, this is the one to change!
+            if (i.component.customId == buttonComponent.customId) {
+                //If the button was a primary button then change to secondary, or vise versa
+                if (buttonComponent.style == ButtonStyle.Primary) {
+                    newButton.setStyle(ButtonStyle.Secondary);
+                }
+                else if (buttonComponent.style == ButtonStyle.Secondary) {
+                    newButton.setStyle(ButtonStyle.Primary);
+                }
+            }
+            return newButton;
+        }));
+        return updatedActionRow;
+    });
+    return await i.update({components: newActionRowEmbeds});
 }
 
 async function ConvertTime(unsortedTime){
@@ -431,6 +457,7 @@ module.exports = {
     NameToID,
     NicknameToRealName,
     ConvertTime,
+    UpdateActionRowButtons,
     loginGroups,
     classAmount,
     courseIDs,

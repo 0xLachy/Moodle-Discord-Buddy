@@ -1,13 +1,17 @@
-const Discord = require("discord.js");
+// const Discord = require("discord.js");
+const { Client, GatewayIntentBits, Partials, Collection, InteractionType } = require('discord.js');
 const slashcommands = require("./handlers/slashcommands");
+const mongoose = require('mongoose')
 require("dotenv").config()
 
-const client = new Discord.Client({
+//+ const client = new Client({ intents: [GatewayIntentBits.Guilds], partials: [Partials.Channel] });
+const client = new Client({
     intents: [
-        "GUILDS",
-        "GUILD_MESSAGES",
-        "GUILD_MEMBERS",
-        "DIRECT_MESSAGES"
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent
     ]//, 
     // partials: ["MESSAGE","CHANNEL"]
 })
@@ -22,14 +26,14 @@ let bot = {
     owners: ["618689924970840103"]
 }
 
-client.commands = new Discord.Collection();
-client.slashcommands = new Discord.Collection();
-client.events = new Discord.Collection();
+client.commands = new Collection();
+client.slashcommands = new Collection();
+client.events = new Collection();
 
 //different way to do that
 //["aliases", "commands"].forEach(x => (client[x] = new Discord.Collection()))
 
-client.aliases = new Discord.Collection();
+client.aliases = new Collection();
 // client.slashcommands = new Discord.Collection()
 
 // client.loadEvents = (bot, reload) => require("./handlers/events")(bot, reload)
@@ -48,6 +52,9 @@ module.exports = bot
 const guildId = "950154084441288724"
 
 client.on("ready", async () => {
+    await mongoose.connect(process.env.MONGO_URI, {
+        keepAlive: true
+    })
     console.log(`Loading ${client.slashcommands.size} slash commands`)
     const guild = client.guilds.cache.get(guildId)
     if (!guild)
@@ -61,8 +68,9 @@ client.on("ready", async () => {
 })
 
 client.on("interactionCreate", (interaction) => {
-    //if its not a command
-    if(!interaction.isCommand()) return
+    //if its not a command //-interaction.isCommand();
+//+interaction.type === InteractionType.ApplicationCommand;
+    if(interaction.type !== InteractionType.ApplicationCommand) return
     //if its not from within a guild 
     // if(!interaction.inGuild()) return interaction.reply("This command can only be used in a server")
     

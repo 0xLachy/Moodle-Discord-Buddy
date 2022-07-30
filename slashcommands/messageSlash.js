@@ -1,9 +1,11 @@
 //when user logs in add their user id to the perms to this command and the edit profile command
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
-const { MessageEmbed, MessageActionRow, MessageButton, ButtonInteraction } = require('discord.js');
-// const { MessageEmbed, Util, MessageButton } = require('discord.js');
+const superagent = require('superagent').agent();
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } = require('discord.js');
+// const { EmbedBuilder, Util, ButtonBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+require("dotenv").config()
 
 
 const data = new SlashCommandBuilder()
@@ -64,31 +66,49 @@ module.exports = {
     devOnly: false,
     ...data.toJSON(),
     run: async (client, interaction) => {
-        //TODO modularise all the main body of this script
+        //https://moodle.oeclism.catholic.edu.au/lib/ajax/service.php?sesskey=YZhK6oSvAI&info=core_message_send_messages_to_conversation
+//        [
+//     {
+//         "index": 0,
+//         "methodname": "core_message_send_messages_to_conversation",
+//         "args": {
+//             "conversationid": 329,
+//             "messages": [
+//                 {
+//                     "text": "DONKEYDONKEY"
+//                 }
+//             ]
+//         }
+//     }
+// ]
         //normal, cause 3 seconds isn't fast enough
+        // await loginToMoodleReq(50); 
         await interaction.deferReply();
         //Make sure the user is logged in
-        if(!UtilFunctions.loginGroups.hasOwnProperty(interaction.user.id)) {
-            await interaction.editReply("You must login first to use this feature, You can log in here or in direct messages with this bot")
-            //break out of this function early because they need to be logged in and they aren't
-            return;
-        }
+        // if(!UtilFunctions.loginGroups.hasOwnProperty(interaction.user.id)) {
+        //     await interaction.editReply("You must login first to use this feature, You can log in here or in direct messages with this bot")
+        //     //break out of this function early because they need to be logged in and they aren't
+        //     return;
+        // }
         // const browser = await puppeteer.launch({ headless: false }) //slowMo:100
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
         //log into the browser todo find a better way to do this
+        let failedToLogin = false
         await UtilFunctions.LoginToMoodle(page, await interaction.user.id).catch(reason => {
             console.log(reason);
-            interaction.editReply({content: reason});
+            interaction.editReply({content: 'Failed to login to moodle'});
+            failedToLogin = true;
             browser.close();
         })
+        if(failedToLogin) return;
         let recipientID = await UtilFunctions.NameToID(interaction, page, interaction.options.getString('name-or-id'))
         if (recipientID == null) { 
             await interaction.editReply('Recipient ID could not be found')
             await browser.close(); 
             return;
         };
-        await page.goto(`${UtilFunctions.mainStaticUrl}message/index.php?id=${recipientID}`)
+        await page.goto(`${UtilFunctions.mainStaticUrl}/message/index.php?id=${recipientID}`)
 
         let userHeaderFound = await WaitForUserNameOrError(page)
         // console.log(userHeaderFound)
@@ -103,7 +123,7 @@ module.exports = {
         let recipientImg = await page.evaluate(() => document.querySelector('div[data-region="header-content"] img').src)
 
         if (interaction.options.getSubcommand() === 'read') {
-            await readMessages(interaction, page, recipientName, recipientImg)
+            await ReadMessages(interaction, page, recipientName, recipientImg)
         }
         else if (interaction.options.getSubcommand() === 'send') {
             let cancelSending = await SendComfirmationMessage(interaction, page, recipientName, recipientImg)
@@ -120,28 +140,29 @@ module.exports = {
 }
 
 const SendComfirmationMessage = (interaction, page, recipientName, recipientImg) => {
+    console.log(" I am just before returning a promise")
     return new Promise(async (resolve, reject) => {
-		const confirmationEmbed = new MessageEmbed()
+		const confirmationEmbed = new EmbedBuilder()
 			.setColor(UtilFunctions.primaryColour)
 			.setTitle('Confirmation')
-			.setURL(page.url)
+			.setURL(page.url())
             .setThumbnail(recipientImg)
 			.setDescription(`Do you want to Message ${recipientName}?\n\nYou have 5 seconds to answer (default is yes)`);
-        const confirmationRow = new MessageActionRow()
+        const confirmationRow = new ActionRowBuilder()
 			.addComponents(
-				new MessageButton()
+				new ButtonBuilder()
 					.setCustomId('No')
 					.setLabel('No')
-					.setStyle('DANGER'),
+					.setStyle(ButtonStyle.Danger),
 		    )
             .addComponents(
-                new MessageButton()
+                new ButtonBuilder()
                 .setCustomId('Yes')
                 .setLabel('Yes')
-                .setStyle('SUCCESS')
+                .setStyle(ButtonStyle.Success)
             )
         ;
-        
+        console.log("created component")
         // const collector = await interaction.channel.createMessageComponentCollector({ time: 3000 });
         let channel = await interaction.channel
         //If the channel isn't inside the guild, you need to create a custom cd channel
@@ -184,8 +205,10 @@ const WaitForUserNameOrError = (page) => {
     })
 }
 
-const readMessages = async (interaction, page, recipientName, recipientImg) => {
-    let showReceived = await interaction.options.getBoolean('received') || true; // default values for these
+const ReadMessages = async (interaction, page, recipientName, recipientImg) => {
+    let showReceived = await interaction.options.getBoolean('received')  // default values for these
+    if (showReceived == undefined) showReceived = true;
+
     let showSent = await interaction.options.getBoolean('sent') || false; // default value if null
     
     await page.waitForSelector('div.message', {timeout: 5000}).catch((error) => {/*console.log(error)*/})
@@ -227,11 +250,11 @@ const readMessages = async (interaction, page, recipientName, recipientImg) => {
             messagesReadEmbedArr.push(CreateNewMessageReadEmbed(currentEmbed));
             fieldCounter = 0;
         }
-        if(messages[messageTime].length > 0) messagesReadEmbedArr[currentEmbed].addField(messageTime, messages[messageTime].join("\n"));
+        if (messages[messageTime].length > 0) messagesReadEmbedArr[currentEmbed].addFields({ name: messageTime, value: messages[messageTime].join("\n") });
         fieldCounter += 1;
     }
     if(Object.keys(messages).length == 0){
-        messagesReadEmbedArr[currentEmbed].addField("No Messages Received", "It seems they haven't sent you any messages!")
+        messagesReadEmbedArr[currentEmbed].addFields( { name: "No Messages Received", value: "It seems they haven't sent you any messages!" } )
     }
     await interaction.editReply({embeds: messagesReadEmbedArr})
     return;
@@ -240,7 +263,7 @@ const readMessages = async (interaction, page, recipientName, recipientImg) => {
         // console.log(currentEmbed)
         let title = `Messages With ${recipientName}`
         if (currentEmbed > 0) title += `, Part: ${currentEmbed + 1}`
-        return new MessageEmbed()
+        return new EmbedBuilder()
             .setColor(UtilFunctions.primaryColour)
             .setTitle(title)
             .setURL(page.url)
@@ -259,6 +282,7 @@ const SendMessageToUser = async (interaction, page, recipientName, recipientImg)
 
     let sentSize = await page.evaluate(() => document.querySelectorAll('div.message.send').length);
     // console.log(sentSize)
+    console.time('Sending heaps of messages')
     for (let index = 0; index < sendAmount; index++) {
         // textBox.innerText = messageText;
         //TODO getting the elems every time is inefficient
@@ -274,17 +298,57 @@ const SendMessageToUser = async (interaction, page, recipientName, recipientImg)
 
         sentSize += 1;
     }
-
+    console.timeEnd('Sending heaps of messages')
     // await page.click('button[data-action="send-message"]')
     let title = `Sent a Message to ${recipientName}`
     if(sendAmount > 1) title += ` ${sendAmount} times!`;
 
-    messageSendEmbed = new MessageEmbed()
-    .setColor(UtilFunctions.primaryColour)
-    .setTitle(title)
-    .setURL(page.url)
-    .setThumbnail(recipientImg)
-    .setDescription('If you don\'t want people seeing this, you can send the message through DMS with this discord bot.\n You can also read messages with the read subcommand!')
-    .addField('Message Text', messageText)
+    messageSendEmbed = new EmbedBuilder()
+        .setColor(UtilFunctions.primaryColour)
+        .setTitle(title)
+        .setURL(page.url())
+        .setThumbnail(recipientImg)
+        .setDescription('If you don\'t want people seeing this, you can send the message through DMS with this discord bot.\n You can also read messages with the read subcommand!')
+        .addFields({ name: 'Message Text', value: messageText } )
     interaction.editReply({content: ' ', embeds: [messageSendEmbed], components: []})
+}
+
+const loginToMoodleReq = async (messageAmount) => {
+    let dataObj =  [{
+        "index": 0,
+        "methodname": "core_message_send_messages_to_conversation",
+        "args": {
+            "conversationid": 329,
+            "messages": [
+                {
+                    "text": "<button>Superagent speed test</button>"
+                }
+            ]
+        }
+    }];
+
+    let loginurl = "https://login.lism.catholic.edu.au/idp/profile/cas/login?execution=e1s1"
+    let msgSendUrlFix = 'https://moodle.oeclism.catholic.edu.au/lib/ajax/service.php'
+
+    let loginObj = {'j_username': process.env.LISMNAME, 'j_password': process.env.PASSWORD, '_eventId_proceed': 'Login'}
+
+    let moodlhting = await superagent.get('https://moodle.oeclism.catholic.edu.au/course/view.php?id=898')
+
+    let dashboard = await superagent.post(loginurl).send(loginObj).type('form').accept('json')
+
+    let sesskey = dashboard.text.split('sesskey":', 2)[1].split('"')[1]
+
+    console.log(sesskey)
+
+    console.time('moodleReq')
+    for (let i = 0; i < messageAmount; i++) {
+        await superagent.post(msgSendUrlFix).send(dataObj)
+        .query({
+            'sesskey': sesskey
+        })
+        .query({
+            'info': 'core_message_send_messages_to_conversation'
+        })
+    }
+    console.timeEnd('moodleReq')
 }

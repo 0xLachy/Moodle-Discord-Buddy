@@ -1,14 +1,15 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
-const { MessageEmbed } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+const { merge } = require('superagent');
 
 //TODO implement code for the role options and also todo, when those roles are added make sure not in dm
 //.setRequired(true));
 const data = new SlashCommandBuilder()
 	.setName('leaderboard')
 	.setDescription('Get leaderboard for the lismore course')
-    .setDMPermission(false)
+    //.setDMPermission(false)
     //.setDefaultPermission()
     // .addIntegerOption(option =>
     //     option.setName('term')
@@ -68,8 +69,9 @@ module.exports = {
             browser.close()
             return null;
         })
+        let mergeResults = await interaction.options.getBoolean('merge') // doesn't seem to work
+        if(mergeResults == null) { mergeResults = true }  // default value!
 
-        let mergeResults = await interaction.options.getBoolean('merge') || true; // doesn't seem to work
         // if(mergeResults == undefined) mergeResults = true; // default value is now true
         let riggedTerm = await interaction.options.getString("rig");
         let leaderboardTitle = riggedTerm ? "Leaderboard For Selected Terms (totally not rigged :sweat_smile:)" : "Leaderboard For Selected Terms"; // could use += and add the total not rigged part but but yeah
@@ -153,7 +155,7 @@ async function FasterLeaderboard(page, chosenTerms, rigPerson=null, mergeResults
 
 function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, title, colour=UtilFunctions.primaryColour) {
     // Create the Message Embed to send to the channel
-    let embedMsg = new MessageEmbed();
+    let embedMsg = new EmbedBuilder();
     title ? embedMsg.setTitle(title) : embedMsg.setTitle(`Leaderboard Results:`);
     // if(title != "default"){
     //     embedMsg.setTitle(title)
@@ -168,7 +170,6 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
     else { // otherwise loop through the terms, and set field name to be the term name
         for (const termResultName of Object.keys(leaderboardResults)) {
             // console.log(termResultName);
-            console.log(leaderboardResults[termResultName]);
             AddToLeaderboardResultToEmbed(leaderboardResults[termResultName], termResultName);
         }
     }
@@ -222,11 +223,11 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
                 chunks.push(tempStr)
             }
 
-            chunks.forEach((biggerChunk, index) => embedMsg.addField(`${fieldName} part ${index+1}`, biggerChunk))
+            chunks.forEach((biggerChunk, index) => embedMsg.addFields({ name: `${fieldName} part ${index + 1}`, value: biggerChunk }))
         }
         else{
             //Add the assignments that were done to the message
-            embedMsg.addField(fieldName, msgString)
+            embedMsg.addFields( { name: fieldName, value: msgString } )
         }
 
     }
