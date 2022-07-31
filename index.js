@@ -86,6 +86,19 @@ client.on("interactionCreate", (interaction) => {
 
     slashcmd.run(client, interaction)
 })
+//discord error handling things that might help
+process.on("unhandledRejection", async (err) => {
+  console.error("Unhandled Promise Rejection:\n", err);
+});
+process.on("uncaughtException", async (err) => {
+  console.error("Uncaught Promise Exception:\n", err);
+});
+process.on("uncaughtExceptionMonitor", async (err) => {
+  console.error("Uncaught Promise Exception (Monitor):\n", err);
+});
+// process.on("multipleResolves", async (type, promise, reason) => {
+//   console.error("Multiple Resolves:\n", type, promise, reason);
+// });
 
 //That .then is not needed, but idk
 client.login(process.env.TOKEN)//.then(client.user.setActivity("Reading Moodle Data", {type: "PLAYING"}))
