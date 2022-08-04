@@ -53,8 +53,8 @@ module.exports = {
             //break out of this function early because they need to be logged in and they aren't
             return;
         }
-        const browser = await puppeteer.launch({ headless: false })
-        // const browser = await puppeteer.launch();
+        // const browser = await puppeteer.launch({ headless: false })
+        const browser = await puppeteer.launch();
         const page = await browser.newPage();
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 

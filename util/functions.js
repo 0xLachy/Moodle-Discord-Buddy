@@ -135,7 +135,7 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
     }
     
     await page.click(USERNAME_SELECTOR);
-    loginDetails != undefined ? await page.keyboard.type(loginDetails.username) : await page.keyboard.type(process.env.LISMNAME);
+    loginDetails != undefined ? await page.keyboard.type(loginDetails.username) : await page.keyboard.type(process.env.MOODLENAME);
 
     await page.click(PASSWORD_SELECTOR);
     loginDetails != undefined ? await page.keyboard.type(loginDetails.password) : await page.keyboard.type(process.env.PASSWORD);
@@ -522,7 +522,7 @@ function decrypt(loginObj){
 async function SaveSecurityKey(moodleName, Securitykey) {
     //*dir needs that extra slash thing before file name
     // fs.writeFile(__dirname + "/SecurityKey.env")
-    console.log('Func called')
+    // console.log('Func called')
     //From stack overflow thanks to AJ https://stackoverflow.com/questions/3459476/how-to-append-to-a-file-in-node
     //Security key is a buffer, I don't know what will happen if I actually try this
     if(process.env[moodleName] == undefined) {

@@ -103,6 +103,6 @@ process.on("uncaughtExceptionMonitor", async (err) => {
 // process.on("multipleResolves", async (type, promise, reason) => {
 //   console.error("Multiple Resolves:\n", type, promise, reason);
 // });
-
+console.log(process.env.john_doe20)
 //That .then is not needed, but idk
 client.login(process.env.TOKEN)//.then(client.user.setActivity("Reading Moodle Data", {type: "PLAYING"}))
