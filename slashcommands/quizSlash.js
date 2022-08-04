@@ -35,6 +35,7 @@ const moodleQuizSchema = new mongoose.Schema({
     }
 })    
 
+
 module.exports = {
     category: "utility",
     usage: 'Do a quiz from the moodle course (The bot can help you with answers if you need it to)', 
@@ -52,8 +53,8 @@ module.exports = {
             //break out of this function early because they need to be logged in and they aren't
             return;
         }
-        // const browser = await puppeteer.launch({ headless: false })
-        const browser = await puppeteer.launch();
+        const browser = await puppeteer.launch({ headless: false })
+        // const browser = await puppeteer.launch();
         const page = await browser.newPage();
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 
@@ -78,10 +79,11 @@ module.exports = {
         if(chosenQuiz.url == null) return await browser.close();
         let scrapedQuestions = await GetQuizQuestions(page, chosenQuiz.url)
         
+        //* This can't be global unfortunately
         const quiz_db = mongoose.createConnection(process.env.MONGO_URI, {
             dbName: 'Quizzes'
         });
-        // console.log(chosenQuiz.name)
+
         //if the quiz isn't in the database it just returns the same scrapedQuestions :/
         scrapedQuestions = await FetchQuizFromDatabase(quiz_db, chosenQuiz.name, scrapedQuestions)
         
@@ -90,7 +92,7 @@ module.exports = {
         //TODO set all the scraped questions to be like the autofill is clicked once and then display overview at the start 
         // await FetchQuizFromDatabase(chosenQuiz.name)
         const correctedAnswers = autoFillEverything === true ? await AutoFillAnswers(interaction, page, chosenQuiz.name, scrapedQuestions) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
-        
+        console.log(correctedAnswers)
         //it will add the answers to the database (if it isn't null)
         await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers)
 
@@ -100,7 +102,7 @@ module.exports = {
     }
 }
 
-const AutoFillAnswers = async (interaction, page, quizTitle, scrapedQuestions) => {
+const AutoFillAnswers = async (interaction, page, quizTitle, scrapedQuestions, lastI) => {
     for (const question of scrapedQuestions) {
         if(question.questionType == 'text') {
             question.answerData[0].value = question.answerData[0].correctStrings[0];
@@ -125,7 +127,10 @@ const AutoFillAnswers = async (interaction, page, quizTitle, scrapedQuestions) =
         }
 
     }
-   return await DisplayQuizSummary(interaction, page, quizTitle, scrapedQuestions)
+    // update the the quiz to have the new values
+    await UpdateQuizzesWithInputValues(page, scrapedQuestions)
+    // then show the summary of what has happened
+    return await DisplayQuizSummary(interaction, page, quizTitle, scrapedQuestions, lastI)
 }
 const GetCorrectAnswersFromResultsPage = async (page, updatedQuestions) => {
     // console.log(updatedQuestions)
@@ -153,7 +158,7 @@ const UpdateQuizzesWithInputValues = async (page, updatedQuestions) => {
 
 const FetchQuizFromDatabase = async (quiz_db, quizTitle, scrapedQuestions) => {
     //create the schema that fetches the 
-
+    console.log(quizTitle)
     const MoodleQuiz = quiz_db.model('Moodle', moodleQuizSchema, 'Moodle')
     // await Kitten.find({ name: /^fluff/ });
     const quizAnswers = Array.from(await MoodleQuiz.find({ name: quizTitle }))[0]?.questions;
@@ -224,12 +229,15 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
                 newQuiz.questions[question.questionName] = { correct: question.answerData[0].correctStrings }
             }
         }
+        {
+            newQuiz.questions[question.questionName] = { correct: question.answerData.filter(answer => answer.correct === true).map(answer => answer.label), incorrect: question.answerData.filter(answer => answer.correct === false && question.QuestionType === 'checkbox').map(answer => answer.label) }
+        }
         //if there are no answers that are true than the answers will be an empty array
         //then I guess if checking answers if it is empty than it knows that it is unknown, or if the quiz hasn't been submited yet
         //Set then correctness of the answer strings by category of whether false or true, and if it isn't known yet it will be null so it won't be added to the things
-        newQuiz.questions[question.questionName] = { correct: question.answerData.filter(answer => answer.correct === true).map(answer => answer.label), incorrect: question.answerData.filter(answer => answer.correct === false).map(answer => answer.label) }
         // newQuiz.questions.set(question.questionName, { correct: question.answerData.filter(answer => answer.correct === true).map(answer => answer.label), incorrect: question.answerData.filter(answer => answer.correct === false).map(answer => answer.label) })
     }
+    console.log(newQuiz)
     //TODO this is probably not how to do the replacing, because I am using a schema thing, but oh well
     await MoodleQuiz.replaceOne({ name: quizTitle }, { name: newQuiz.name, questions: newQuiz.questions }, { upsert: true })
 
@@ -288,7 +296,7 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
     }
     //as long as it is not 0
     const buttonMoveRow = preSubmission ?  [ CreateMoveRow(3, 'Submit!') ] : [] // CreateMoveRow(3, 'Done')
-    if(lastI) await lastI.update({ files: []})
+    if(lastI) await lastI.update({ files: []}).catch(err => console.log(err))
     await interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) 
     
     let channel = await interaction.channel
@@ -299,16 +307,27 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
     const collector = await channel.createMessageComponentCollector({ time: 180 * 1000 });
     // The back buttonn won't work for this because this function won't be called again
     let failed = false;
-    let finalQuestions = await WaitForNextOrBack(collector, interaction, page, updatedQuestions, quizTitle, !preSubmission).catch(() => failed=true);
     //don't submit if they didn't click the submit, but it auto - dones
-    if(failed) return null;
-    let correctedAnswers;
+    // let correctedAnswers;
     if(preSubmission){
-        correctedAnswers = await GetCorrectAnswersFromResultsPage(page, finalQuestions)
-        return await DisplayQuizSummary(interaction, page, quizTitle, correctedAnswers, false)
-    }
+        //TODO, leave final questions as is because inside the waitfornextorback is a call to this function which runs before this finishes,
+        //whats happening is that when autofill is clicked it calls the display quiz summary again, but this hasn't even finished yet so..
+        // let finalQuestions = await WaitForNextOrBack(collector, interaction, page, updatedQuestions, quizTitle, !preSubmission).catch(() => failed=true);
+        return await WaitForNextOrBack(collector, interaction, page, updatedQuestions, quizTitle, !preSubmission).catch(() => failed=true);
+        // if it failed, they didn't submit and return nothing as they timed out
+        //TODO remove the component buttons when it times out
+        if(failed) return null;
 
-    return finalQuestions;
+        //TODO  I need to return something
+
+        // let correctedAnswers = await GetCorrectAnswersFromResultsPage(page, finalQuestions)
+        //I DON"T UNDERSTAND WHY IT GOES PAST THIS OUTER PRESUBMISSION BLOCK, THEN IT HOPS BACK UP AFTER THE RETURN UPDATED QUESTIONS TO HERE
+        // if(preSubmission) return await DisplayQuizSummary(interaction, page, quizTitle, correctedAnswers, false)
+    }
+    else {
+        //if it has already been submitted the updated questions will be the correct ones
+        return updatedQuestions;
+    }
 }
 
 //back applies -1 to question Index, whilst next adds 1, simple
@@ -872,8 +891,11 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
                 // await i.update({ content: ' ' }); // acknowledge it was clicked
                 await i.deferUpdate();
                 await collector.stop();
-                if(finish) interaction.editReply({ components: []})
-                return resolve(updatedQuestions)
+                if(finish) await interaction.editReply({ components: []})
+                let correctedAnswers = await GetCorrectAnswersFromResultsPage(page, updatedQuestions)
+                // display the quiz summary for the last time with the corrected answers
+                return resolve(await DisplayQuizSummary(interaction, page, quizName, correctedAnswers, false));
+                // return resolve(updatedQuestions)
             }
             else if (i.customId == 'Back') {
                 // await i.update({ content: ' ' }); // just acknowledge the button click
@@ -882,9 +904,9 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
                 return resolve(await DisplayQuestionEmbed(interaction, page, updatedQuestions, quizName, updatedQuestions.length - 1));
             }
             else if (i.customId == 'AutoFill'){
-                await i.update({content: ' '});
+                // await i.update({content: ' '});
                 await collector.stop();
-                return resolve(AutoFillAnswers(interaction, page, quizName, updatedQuestions))
+                return resolve(await AutoFillAnswers(interaction, page, quizName, updatedQuestions, i))
             }
             else if (i.customId == 'Quit') {
                 await i.update({content: 'Quit Successfully, answers are saved when overview is looked at.', components: [], embeds: []})

@@ -2,6 +2,8 @@ const fs = require("fs");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle  } = require('discord.js');
 const { resolve } = require("path");
 const crypto = require("crypto");
+const mongoose = require('mongoose')
+require("dotenv").config()
 
 //VARIABLES
 const currentTerm = 2;
@@ -20,6 +22,35 @@ const courseIDs = ["896", "897", "898"]
 //login stuff
 const algorithm = "aes-256-cbc"; 
 const loginGroups = {};
+const login_db = mongoose.createConnection(process.env.MONGO_URI, {
+    dbName: 'Logins'
+});
+const loginSchema = new mongoose.Schema({
+    name: String,
+    discordId: String,
+    initVector: Buffer,
+    Securitykey: Buffer,
+    encryptedPassword: String,
+}) 
+//TODO when this script is first loaded, fetch all the logins and add them to the loginGroups
+const Login = login_db.model('Logins', loginSchema, 'Logins')
+
+// TODO call and await this function inside the index.js so that the user cann't use the bot until this has finished
+async function GetLoginsFromDatabase() {
+    //empty filter to get all of the logins from the db
+    let dbLogins = Array.from(await Login.find({}))
+    console.log(`${dbLogins.map(loginData => loginData.name).join(', ')} are now logged in`)
+    for (const loginUser of dbLogins) {
+        loginGroups[loginUser.discordId] =  loginUser
+        loginGroups[loginUser.discordId].Securitykey = Buffer.from(process.env[loginUser.name], 'binary')
+    }
+}
+// (async() => {
+// //   console.log('1')
+// //   await getHtml()  
+//   await GetLoginsFromDatabase()
+// //   console.log('2')
+// })()
 //example urls:
 // const TermURLS = [ 
 //         "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896",
@@ -88,7 +119,7 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
     await page.goto(TermURL);
     
     if (discordUserId != undefined){
-        if (loginGroups[discordUserId] != undefined) loginDetails = decrypt(...loginGroups[discordUserId]);
+        if (loginGroups[discordUserId] != undefined) loginDetails = decrypt(loginGroups[discordUserId]);
     }
     // dom element selectors
     const USERNAME_SELECTOR = '#username';
@@ -127,11 +158,52 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
     //If they haven't successfully gotten past login to the wanted url, it bugs out for other urls that aren't dashboard url
     else if (TermURL != await page.url() && TermURL == dashboardUrl) return new Promise((resolve, reject) => reject("Login Failed, wrong username or password"))
     else {
-        if (loginDetails != undefined) { loginGroups[discordUserId] = encrypt(loginDetails) };
+        //if the login details aren't undefined, but they haven't been logged in yet, then log them in
+        if (loginDetails != undefined && loginGroups[discordUserId] == undefined) { 
+            loginGroups[discordUserId] = { discordId: discordUserId, ...encrypt(loginDetails)}
+            const currentUser = loginGroups[discordUserId]
+            await SaveSecurityKey(currentUser.name, currentUser.Securitykey)
+            const newLogin = new Login({
+                //TODO fix this up
+                name: currentUser.name,
+                discordId: discordUserId,
+                initVector: currentUser.initVector,
+                encryptedPassword: currentUser.encryptedPassword
+                    // name: String,
+                    // discordId: String,
+                    // initVector: Buffer,
+                    // Securitykey: Buffer,
+                    // encryptedPassword: String,
+            //either add them in one by one, or pass them all in and delete the security key one
+                // currentUser.name,
+                // discordId: discordUserId,
+                // currentUser.Initvector,
+                // currentUser.encryptedPassword
+                // ...currentUser
+                // ...loginGroups[discordUserId]
+            })
+            //don't save the security key to the database
+            // delete newLogin.Securitykey
+            await newLogin.save()
+            //Get the security Keys from in here
+            // loginGroups[discordUserId]
+            // loginGroups[discordUserId] = encrypt(loginDetails) 
+        };
         return new Promise((resolve, reject) => resolve('Successfully logged in as ' + discordUserId));
     }
 }
 const LogoutOfMoodle = async (discordUserId) => {
+    //TODO use Login.deleteOne() // deletes the first one that matches
+    Login.deleteOne({ discordId: discordUserId}, err => {
+        if(err) {
+            //todo tell the person there was an error
+            console.log(error)
+        }
+        else {
+            console.log(`${discordUserId} successfully logged out`)
+        }
+    })
+    await DeleteSecuritykey(loginGroups[discordUserId].name, loginGroups[discordUserId].Securitykey)
     delete loginGroups[discordUserId]
 }
 
@@ -419,7 +491,7 @@ function encrypt(loginDetails){
 
     // secret key generate 32 bytes of random data
     const Securitykey = crypto.randomBytes(32);
-
+    
     // the cipher function
     const cipher = crypto.createCipheriv(algorithm, Securitykey, initVector);
 
@@ -431,22 +503,75 @@ function encrypt(loginDetails){
     encryptedPassword += cipher.final("hex");
 
     // console.log("Encrypted message: " + encryptedData);
-    return [ loginDetails.username, encryptedPassword, Securitykey, initVector]
-
-
+    return { name: loginDetails.username, initVector, Securitykey, encryptedPassword }
 }
 
-function decrypt(username, encryptedPassword, Securitykey, initVector){
+// function decrypt(username, encryptedPassword, Securitykey, initVector){
+function decrypt(loginObj){
     // the decipher function
-    const decipher = crypto.createDecipheriv(algorithm, Securitykey, initVector);
-
-    let decryptedData = decipher.update(encryptedPassword, "hex", "utf-8");
+    // const decipher = crypto.createDecipheriv(algorithm, loginObj.Securitykey, loginObj.initVector);
+    const decipher = crypto.createDecipheriv(algorithm, loginObj.Securitykey /*Buffer.from(process.env[loginObj.name], 'binary')*/, loginObj.initVector);
+    let decryptedData = decipher.update(loginObj.encryptedPassword, "hex", "utf-8");
 
     decryptedData += decipher.final("utf8");
-    
-    return { "username": username, "password": decryptedData }
+
+    return { "username": loginObj.name, "password": decryptedData }
 }
 
+//TODO need a delete security key func
+async function SaveSecurityKey(moodleName, Securitykey) {
+    //*dir needs that extra slash thing before file name
+    // fs.writeFile(__dirname + "/SecurityKey.env")
+    console.log('Func called')
+    //From stack overflow thanks to AJ https://stackoverflow.com/questions/3459476/how-to-append-to-a-file-in-node
+    //Security key is a buffer, I don't know what will happen if I actually try this
+    if(process.env[moodleName] == undefined) {
+        fs.writeFileSync('.env', `\n${moodleName}="${Securitykey.toString('binary')}"`,  {'flag':'a'},  function(err) {
+            if (err) {
+                return console.error(err);
+            }
+        });
+    }
+    // DeleteSecuritykey(moodleName, Securitykey)
+    // console.log(process.env)
+    // console.log(process)
+    // console.log(Securitykey)
+    // console.log(Buffer.from(process.env[moodleName], 'binary'))
+    // console.log(Buffer.from(Securitykey.toString()))
+    //*this is the security key!!!!
+    //Buffer.from(process.env[MoodleName], 'binary')
+
+}
+
+async function DeleteSecuritykey(moodleName, Securitykey) {
+    // const fileStream = fs.createReadStream('.env');
+    // console.log(fileStream.toString())
+    // const fileSTring = fileStream.toString()
+    // console.log('asetn')
+    console.log("CLAEEDN")
+    const data = fs.readFileSync('.env', 'utf-8');
+    // const ip = "STRING_TO_REMOVE";
+    // const regString = `/${moodleName}[=].+?(?=\n)/`
+    // var find = '/foo/(' + regexp_quote( name ) + ')/bar';
+    console.log(`${moodleName}="${Securitykey.toString('binary')}"`)
+    const newValue = data.replace(`\n${moodleName}="${Securitykey.toString('binary')}"`, '');
+    // console.log(newValue)
+    fs.writeFileSync('.env', newValue, 'utf-8');
+    // const rl = readline.createInterface({
+    // input: fileStream,
+    // crlfDelay: Infinity
+    // });
+
+    // // Note: crlfDelay recognize all instances of CR LF
+    // // ('\r\n') in file as a single line break.
+
+    // for await (const line of rl) {
+    // // each line will be here as domain
+    // // create a write stream and append it to the file
+    // // line by line using { flag: a }
+
+    // }
+}
 module.exports = {
     getFiles,
     GetTermURLS,
@@ -458,6 +583,7 @@ module.exports = {
     NicknameToRealName,
     ConvertTime,
     UpdateActionRowButtons,
+    GetLoginsFromDatabase,
     loginGroups,
     classAmount,
     courseIDs,

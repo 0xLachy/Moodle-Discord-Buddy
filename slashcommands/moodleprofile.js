@@ -121,7 +121,6 @@ const SendProfileToDiscord = (interaction, profileDataObject) => {
         .setURL(profileDataObject.profileUrl) // replace this with their url
         .setDescription(profileDataObject.description)
         .setThumbnail(profileDataObject.profilePic)
-        //TODO FIX THIS
         .addFields(
             { name: 'Email', value: profileDataObject.email },
             { name: 'Interests', value: profileDataObject.interests.length != 0 ? profileDataObject.interests.join(", ") : "none" },

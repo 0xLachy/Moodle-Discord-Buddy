@@ -85,11 +85,11 @@ module.exports = {
         // await loginToMoodleReq(50); 
         await interaction.deferReply();
         //Make sure the user is logged in
-        // if(!UtilFunctions.loginGroups.hasOwnProperty(interaction.user.id)) {
-        //     await interaction.editReply("You must login first to use this feature, You can log in here or in direct messages with this bot")
-        //     //break out of this function early because they need to be logged in and they aren't
-        //     return;
-        // }
+        if(!UtilFunctions.loginGroups.hasOwnProperty(interaction.user.id)) {
+            await interaction.editReply("You must login first to use this feature, You can log in here or in direct messages with this bot")
+            //break out of this function early because they need to be logged in and they aren't
+            return;
+        }
         // const browser = await puppeteer.launch({ headless: false }) //slowMo:100
         const browser = await puppeteer.launch();
         const page = await browser.newPage();

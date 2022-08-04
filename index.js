@@ -1,6 +1,7 @@
 // const Discord = require("discord.js");
 const { Client, GatewayIntentBits, Partials, Collection, InteractionType } = require('discord.js');
 const slashcommands = require("./handlers/slashcommands");
+const { GetLoginsFromDatabase } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
 
@@ -52,13 +53,16 @@ module.exports = bot
 const guildId = "950154084441288724"
 
 client.on("ready", async () => {
-    await mongoose.connect(process.env.MONGO_URI, {
+    mongoose.connect(process.env.MONGO_URI, {
         keepAlive: true
     })
     console.log(`Loading ${client.slashcommands.size} slash commands`)
     const guild = client.guilds.cache.get(guildId)
-    if (!guild)
+    if (!guild){
         return console.error("Target Guild not found")
+    }
+
+    await GetLoginsFromDatabase();
 
     await client.application.commands.set([...client.slashcommands.values()])
     // await client.application.commands.set([])

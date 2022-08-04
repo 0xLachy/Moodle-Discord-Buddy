@@ -3,10 +3,8 @@ const puppeteer = require('puppeteer');
 const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
 
-
-
-
 //TODO have an option to parse in cookies instead of password, or even provide a custom link that gets the cookies
+//* There is a link that works, but it is only with web services enabled unfortunately
 const data = new SlashCommandBuilder()
 	.setName('login')
 	.setDescription('Login to moodle so you can message people and do other stuff')
@@ -30,11 +28,20 @@ module.exports = {
 
     ...data.toJSON(),
     run: async (client, interaction) => {
-        await interaction.deferReply();
+        // if(interaction.inGuild()){
+        //     let channel = await interaction.user.createDM(); 
+        //     await channel.send('Login here, not in the Guild')
+        //     await interaction.reply({content: "Only login through DMS", ephemeral: true})
+        //     return;
+        // }
+        // const channel = await interaction.user.createDM();
+
+        await interaction.deferReply({ephemeral: true});
         if (UtilFunctions.loginGroups.hasOwnProperty(interaction.user.id)) {
-            interaction.editReply('Your Discord Id is already associated with a logged in account, use /logout to logout')
+            return interaction.editReply('Your Discord Id is already associated with a logged in account, use /logout to logout')
+            
             // quit the login process early
-            return;
+            // return await channel.send('Your Discord Id is already associated with a logged in account, use /logout to logout');
         }
         // const browser = await puppeteer.launch({ headless: false })
         const browser = await puppeteer.launch();
@@ -51,26 +58,19 @@ module.exports = {
 	            .setTitle(`Your discord ID (${interaction.user.id}) is now associated with the moodle account: ${loggedInName}`)
 	            .setDescription('When a command is run the bot will check the discord ID of the user and unencrypt and log in as you instead of the bot owners credentials, giving you access to more commands')
 	            .setThumbnail(await page.evaluate(() => document.querySelector('#usermenu > img').src))
-	// .addFields(
-	// 	{ name: 'Regular field title', value: 'Some value here' },
-	// 	{ name: '\u200B', value: '\u200B' },
-	// 	{ name: 'Inline field title', value: 'Some value here', inline: true },
-	// 	{ name: 'Inline field title', value: 'Some value here', inline: true },
-	// )
-	// .addField('Inline field title', 'Some value here', true)
 
-
+            // await channel.send({ embeds: [loginEmbed] })
             await interaction.editReply({embeds:[loginEmbed]});
-            //TODO use the page to get their full name and do fullname => discordname (userid)
+
             await browser.close();
-            //ADD TO LOGIN PEOPLE
-        }).catch(reason => {
+
+            //if there is an error, tell them what went wrong
+        }).catch(async (reason) => {
             console.log(reason);
-            interaction.editReply({content: reason});
-            browser.close();
+            // await channel.send({content: reason})
+            await interaction.editReply({content: reason});
+            await browser.close();
         })
-        // console.log("got past retrn")
-        //TODO if I add a logged in role, in logged out I would have to remove that
     }
 }
 
