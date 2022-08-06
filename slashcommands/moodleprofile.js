@@ -21,6 +21,13 @@ const data = new SlashCommandBuilder()
             .setDescription("If there are 2 people with the name, also use last name")
             .setRequired(true)
     )
+    .addBooleanOption(option =>
+        option
+            .setName('context')
+            .setDescription("View the persons profile with course id context (default is true)")
+            .setRequired(false)
+    )
+    
 
 
 module.exports = {
@@ -44,28 +51,41 @@ module.exports = {
             interaction.editReply({content: reason});
             browser.close();
         })
-        //Get the term to use as context id (IT is needed unfortunately)
-        let chosenTerm = await UtilFunctions.AskForCourse(interaction, page).catch(reason => {
-            //If no button was pressed, then just quit
-            console.log(reason)
-            // interaction.editReply({content: reason, embeds: []})
-            browser.close()
-            return null;
-        })
-        
-        if(chosenTerm == null) return await interaction.deleteReply();
+
+        // nullish operator assigns true to it if it is null by default
+        const courseContext = await interaction.options.getBoolean('context') ?? true;
+        const nameOrId = await interaction.options.getString('name-or-id');
+
+        //outer scope so it can be used later
+        let chosenTerm = null;
+        //If it needs course context
+        if(courseContext || isNaN(nameOrId)) {
+            //Get the term to use as context id (IT is needed unfortunately)
+            chosenTerm = await UtilFunctions.AskForCourse(interaction, page).catch(reason => {
+                //If no button was pressed, then just quit
+                console.log(reason)
+                // interaction.editReply({content: reason, embeds: []})
+                browser.close()
+                return null;
+            })
+            
+            if(chosenTerm == null) return await interaction.deleteReply();
+        }
         //Get their id
-        let userProfileID = await UtilFunctions.NameToID(interaction, page, await interaction.options.getString('name-or-id'), chosenTerm)
+        let userProfileID = await UtilFunctions.NameToID(interaction, page, nameOrId, chosenTerm)
         if (userProfileID == null) { 
             await interaction.editReply('Recipient ID could not be found')
             await browser.close(); 
             return;
         };
         try {
-            await page.goto(`${UtilFunctions.mainStaticUrl}/user/view.php?id=${userProfileID}&course=${chosenTerm.ID}`)
+            let urlString = `${UtilFunctions.mainStaticUrl}/user/view.php?id=${userProfileID}`
+            if(courseContext) urlString += `&course=${chosenTerm.ID}`
+            await page.goto(urlString)
         } catch (error) {
             console.log("Webpage doesn't exist in moodleprofile script ScrapeProfileData the url needs to be changed")
         }
+
 
         SendProfileToDiscord(interaction, await ScrapeProfileData(page))
         await browser.close()
@@ -89,15 +109,18 @@ const ScrapeProfileData = async (page) => {
     await page.waitForSelector('#coursedetails')
     let profileDataObject = await page.evaluate(() => {
         let tmpDataObject = {}
-        tmpDataObject.fullName = document.querySelector('[class="contentnode fullname"]').querySelector('span').textContent //works :D
+        //if the name is not accessable, undefined
+        tmpDataObject.fullName = document.querySelector('[class="contentnode fullname"]')?.querySelector('span').textContent //works :D
         //#adaptable-message-user-button
         tmpDataObject.userId = document.querySelector('#adaptable-message-user-button').getAttribute('data-userid')
-        tmpDataObject.email = document.querySelector('[class="contentnode email"]').querySelector('span').textContent //email link can use this mailto:someone@yoursite.com?subject=Mail from Our Site
+        //if not accessable, undefined
+        tmpDataObject.email = document.querySelector('[class="contentnode email"]')?.querySelector('span').textContent //email link can use this mailto:someone@yoursite.com?subject=Mail from Our Site
         // console.log(document.querySelectorAll('section > ul > li.contentnode.interests > dl > dd > div > ul > li > a'))//#adaptable-tab-aboutme > section > ul > li.contentnode.interests
         tmpDataObject.interests = Array.from(document.querySelectorAll('section > ul > li.contentnode.interests > dl > dd > div > ul > li > a'), interest => interest.textContent)//?.map(interest => `[${interest.textContent.trim()}](${interest.href})`)
         if(tmpDataObject.fullName == "Harrison Baird") tmpDataObject.interests.push("\n**Men without shirts on**,\n**Watching men kiss**,\n**My Little Pony**")
         tmpDataObject.description = document.querySelector('section > ul > li.contentnode.description > dl > dd').textContent //TODO get the image urls and include them
-        tmpDataObject.profilePic = document.querySelector('li.adaptableuserpicture > a > img.userpicture').src //#adaptable_profile_tree > div.ucol1.col-md-4 > div > div > section > ul > li.adaptableuserpicture > a > img
+        
+        tmpDataObject.profilePic = document.querySelector('li.adaptableuserpicture > a > img.userpicture').src 
 
         tmpDataObject.courses = Array.from(document.querySelectorAll('section > ul > li.contentnode.courseprofiles > dl > dd > ul > li'), course => course.textContent)//]?.map(course => course.textContent)
         tmpDataObject.roles = Array.from(document.querySelectorAll('section > ul > li.contentnode.roles > dl > dd > a'), role => role.textContent)//]?.map(role => role.textContent)
@@ -117,12 +140,12 @@ const SendProfileToDiscord = (interaction, profileDataObject) => {
     }
     let profileEmbed = new EmbedBuilder()
         .setColor(UtilFunctions.primaryColour)
-        .setTitle(`${profileDataObject.fullName} (${profileDataObject.userId})`)
+        .setTitle(`${profileDataObject.fullName || ''} (${profileDataObject.userId})`.trim())
         .setURL(profileDataObject.profileUrl) // replace this with their url
         .setDescription(profileDataObject.description)
         .setThumbnail(profileDataObject.profilePic)
         .addFields(
-            { name: 'Email', value: profileDataObject.email },
+            { name: 'Email', value: profileDataObject.email || 'ʰ̶̳͎̔̄ⁱ̷͉̲̠̈́̽ᵈ̵̼͖͝ᵈ̵̥͙͎͒ᵉ̸̯̖̈́̒͜ⁿ̷̢͚̦͐̉'},
             { name: 'Interests', value: profileDataObject.interests.length != 0 ? profileDataObject.interests.join(", ") : "none" },
             { name: 'Courses', value: profileDataObject.courses.length != 0 ? profileDataObject.courses.join(', ') : 'none? :confused:', inline: true },
             { name: 'Roles', value: profileDataObject.roles.length != 0 ? profileDataObject.roles.join(', ') : 'No Roles', inline: true },

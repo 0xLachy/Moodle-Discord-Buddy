@@ -7,7 +7,7 @@ const data = new SlashCommandBuilder()
 	.setDescription('logout of the discord bot moodle sign in');
 
 module.exports = {
-    category: "logout",
+    category: "authorisation",
     permissions: [],
     devOnly: false,
 

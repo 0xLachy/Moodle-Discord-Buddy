@@ -22,7 +22,7 @@ const data = new SlashCommandBuilder()
     )
 
 module.exports = {
-    category: "login",
+    category: "authorisation",
     permissions: [],
     devOnly: false,
 
