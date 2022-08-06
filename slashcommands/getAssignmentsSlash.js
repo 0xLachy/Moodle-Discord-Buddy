@@ -43,20 +43,20 @@ const data = new SlashCommandBuilder()
                     .setDescription('The name of student (doesn\'t need to be full name) e.g rita')
                     .setRequired(true)
             )
-            .addIntegerOption(option =>
-                option.setName('term')
-                    .setDescription('Optionally choose only 1 term')
-                    .setRequired(false)
-                    //doesn't work because it expects array?
-                    .addChoices(
-                        { name: 'Term 1', value: 0 },
-                        { name: 'Term 2', value: 1 },
-                        { name: 'Term 3', value: 2 },
-                    )
-                    // .addChoice("Term 1", 0)
-                    // .addChoice("Term 2", 1)
-                    // .addChoice("Term 3", 2)
-            )
+            // .addIntegerOption(option =>
+            //     option.setName('term')
+            //         .setDescription('Optionally choose only 1 term')
+            //         .setRequired(false)
+            //         //doesn't work because it expects array?
+            //         .addChoices(
+            //             { name: 'Term 1', value: 0 },
+            //             { name: 'Term 2', value: 1 },
+            //             { name: 'Term 3', value: 2 },
+            //         )
+            //         // .addChoice("Term 1", 0)
+            //         // .addChoice("Term 2", 1)
+            //         // .addChoice("Term 3", 2)
+            // )
         );
 
 module.exports = {
@@ -71,59 +71,46 @@ module.exports = {
 
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
-
-        var assignmentObject = {};
-        var filter = false;
         
         //log into the browser
         await UtilFunctions.LoginToMoodle(page, interaction.user.id)
 
+        const chosenTerms = await UtilFunctions.AskForCourse(interaction, page, true).catch(reason => {
+            //If no button was pressed, then just quit
+            console.log(reason)
+            interaction.deleteReply();
+            // interaction.editReply({content: reason, embeds: []})
+            browser.close()
+            return null;
+        })//).map(term => term.ID)
+
+        if(chosenTerms == null) return;
+
         if (interaction.options.getSubcommand() === 'student') {
             let studentName = await UtilFunctions.NicknameToRealName(await interaction.options.getString("studentname"));
-            let termInt = await interaction.options.getInteger("term");
-
-            if(termInt != null){
-                let currentTerm = UtilFunctions.GetTermURLS()[termInt];
-                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, [currentTerm]), studentName), interaction, studentName);
-            }
-            else{
-                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page), studentName), interaction, studentName);
-            }
+            SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, chosenTerms), studentName), interaction, studentName);
         }
         else if (interaction.options.getSubcommand() === 'filter'){
             let filterString = await interaction.options.getString("filterstring")
-            let termInt = await interaction.options.getInteger("term-to-filter");
-
-            if(termInt != null){
-                let currentTerm = UtilFunctions.GetTermURLS()[termInt];
-                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, [currentTerm], false), filterString, true), interaction, "malaga",
-                `Assignments found with filter ${filterString}:`)
-            }
-            else{
-                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, UtilFunctions.GetTermURLS(), false), filterString, true), interaction, "malaga",
-                `Assignments found with filter ${filterString}:`)
-            }
             
-
-            // SendEmbedMessage(allAssignments.filter(assignment => assignment.toLowerCase().includes(args[i]?.toLowerCase())), 
-            //     message, "null", "Filtered Assignments");
+            SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, chosenTerms, false), filterString, true), interaction, "malaga",
+            `Assignments found with filter ${filterString}:`)
         }
         else {
             //can editReply or follow up
             interaction.editReply(`Didn't code the use of ${interaction.options.getSubcommand()} yet, sorry`)
         }
         //Once its done, close the browser to stop the browsers stacking up
-        browser.close();
+        await browser.close();
     }
 }
 
-async function GetAllAssignments(page, term_urlsArr=UtilFunctions.GetTermURLS(), pushPeople=true, links=false){
+async function GetAllAssignments(page, chosenTerms, pushPeople=true, links=false){
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
     assignmentObject = {}
-    for (term_url of term_urlsArr){
+    for (termName in chosenTerms){
 
-        
-        await page.goto(term_url)
+        await page.goto(`${UtilFunctions.mainStaticUrl}/course/recent.php?id=${chosenTerms[termName].ID}`)
         // console.log(await page.content())
     
         try {
@@ -142,7 +129,7 @@ async function GetAllAssignments(page, term_urlsArr=UtilFunctions.GetTermURLS(),
         //Debuging Purposes
         page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
         
-        assignmentObject[`Term ${UtilFunctions.GetTermURLS().indexOf(term_url) + 1}`] = await page.evaluate((pushPeople, assignmentObject) => {   
+        assignmentObject[`Term ${termName}`] = await page.evaluate((pushPeople, assignmentObject) => {   
             let tempAssObj = {};
             for (elem of document.querySelectorAll('h3')){
                 if(elem.querySelector('img[title="Assignment"]')){

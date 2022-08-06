@@ -58,7 +58,7 @@ module.exports = {
         try {
             await UtilFunctions.LoginToMoodle(page, interaction.user.id)
         } catch (error) {
-            interaction.editReply("The Wifi is Too Slow and timed out on Navigation, here is the error") // TODO put in error name and title
+            return await interaction.editReply("The Wifi is Too Slow and timed out on Navigation, here is the error") // TODO put in error name and title
         }
 
         let chosenTerms = await UtilFunctions.AskForCourse(interaction, page, true).catch(reason => {

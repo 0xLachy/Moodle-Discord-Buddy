@@ -1,4 +1,4 @@
-# Moodle Discord Buddy - Bypasses Moodle Webservices Disabled!
+# Moodle Discord Buddy - Bypasses Moodle Webservices Being Disabled!
 A very handy discord bot for people who use moodle for their school and have a discord group! It can display leaderboards, get assignments, get peoples profiles, send messages and the coolest of all, do the quizzes for you!
 ## Set up
 1. First thing you need to do is rename example.env to just ".env"

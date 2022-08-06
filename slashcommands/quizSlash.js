@@ -92,7 +92,7 @@ module.exports = {
         //TODO set all the scraped questions to be like the autofill is clicked once and then display overview at the start 
         // await FetchQuizFromDatabase(chosenQuiz.name)
         const correctedAnswers = autoFillEverything === true ? await AutoFillAnswers(interaction, page, chosenQuiz.name, scrapedQuestions) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
-        console.log(correctedAnswers)
+        // console.log(correctedAnswers)
         //it will add the answers to the database (if it isn't null)
         await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers)
 
@@ -118,12 +118,27 @@ const AutoFillAnswers = async (interaction, page, quizTitle, scrapedQuestions, l
                 // the answer is selected if it is true, if it doesn't know, then it will still be false
                 answer.value = answer.correct === true
             }
-
+            
+            //if no answers are found that are true (selected), choose a random one
             if(!question.answerData.some(answer => answer.value === true)){
-                //Sets a random one to be selected (true) :)
-                question.answerData[Math.floor(Math.random() * question.answerData.length)].value = true;
+                // just select all of them if it is a checkbox, because you usually get a higher grade lol, like no penalty
+                if(question.questionType === 'checkbox') {
+                    for (const questionAnswer of question.answerData) {
+                        questionAnswer.value = true
+                    }
+                }
+                else {
+                    //Sets a random one to be selected (true), if it isn't an incorrect answer, loop through heaps
+                    let currentAnswer;
+                    //make sure that it doesn't loop forever, just in case a bug happens
+                    let emergencyBreaker = 0;
+                    do {
+                        emergencyBreaker++;
+                        currentAnswer = question.answerData[Math.floor(Math.random() * question.answerData.length)]//= true;
+                        if(currentAnswer.correct !== false) currentAnswer.value = true;
+                    } while (currentAnswer.value === false || emergencyBreaker > 10)
+                }
             }
-                
         }
 
     }
@@ -224,7 +239,7 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
         if(question.questionType == 'text')  {
             // question.answerData[0].label = question.answerData[0].value;
             if(question.answerData[0].correct === true){
-                console.log(question.answerData)
+                // console.log(question.answerData)
                 textAnswerString = question.answerData[0].value.toLowerCase();
                 newQuiz.questions[question.questionName] = { correct: question.answerData[0].correctStrings }
             }
@@ -292,12 +307,20 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
         }
         if(questionAnswersString == '') questionAnswersString = 'No Value Entered';
         if(question.outcome) questionAnswersString += `\n${question.outcome}`;
-        quizSummaryEmbed.addFields({ name: `${Number(questionIndex) + 1} ${question.questionName}`, value: questionAnswersString })
+        if(question.questionName.length <= 256) {
+            quizSummaryEmbed.addFields({ name: `${Number(questionIndex) + 1} ${question.questionName}`, value: questionAnswersString })
+        }
+        else {
+            quizSummaryEmbed.addFields({ name: `${Number(questionIndex) + 1} Question: `, value: `${question.questionName}\n ${questionAnswersString}` })
+        }
     }
     //as long as it is not 0
     const buttonMoveRow = preSubmission ?  [ CreateMoveRow(3, 'Submit!') ] : [] // CreateMoveRow(3, 'Done')
-    if(lastI) await lastI.update({ files: []}).catch(err => console.log(err))
-    await interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) 
+    let promises = [ interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) ]
+    if (lastI) promises.push( lastI.update({ files: []}).catch(err => console.log(err)) )
+    await Promise.all(promises)
+    // if(lastI) await lastI.update({ files: []}).catch(err => console.log(err))
+    // await interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) 
     
     let channel = await interaction.channel
     //If the channel isn't inside the guild, you need to create a custom cd channel
@@ -416,16 +439,15 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
         }
         else if(questionData.questionType == 'text'){
             // when referring to the correct answers use answers[0].value because this will be the text
-            //TODO add if statement to show previous value was:
             // quizStartEmbed.setDescription('Type The answer into this channel:')
             let answer = questionData.answerData[0].value || 'Not Attemped Yet';
             if (questionData.answerData[0].correctStrings.includes(answer.toLowerCase())) answer += ' ✓'
             // answer = 'not attempted yet'
             quizStartEmbed.addFields({ name: 'Answer', value: answer})
-            //TODO make a message channel collector here
-            // add back adn forword row / component
             // let promises = [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]}) ]
             // // if(lastI) promises.push(lastI.update({content: ' '}))
+            //TODO CHECK THIS
+            if(lastI) await lastI.update({content: ' '})
             quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
             // await Promise.all(promises)
             // await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
@@ -454,8 +476,8 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 await collector.stop();
                 // TODO test if it still stops and stuff
                 await msgCollector.stop();
+                await i.deferUpdate();
                 if (scrapedQuestions.length != questionIndex + 1) {
-                    await i.deferUpdate();
                     return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quizName, questionIndex + 1));
                 }
                 else {
@@ -478,7 +500,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
             }
             else if (i.customId == 'Overview') {
                 // await i.update({ content: ' '});
-                // await i.deferUpdate(); 
+                await i.deferUpdate(); 
                 await collector.stop();
                 await msgCollector.stop();
                 await UpdateQuizzesWithInputValues(page, scrapedQuestions)
@@ -904,7 +926,7 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
                 return resolve(await DisplayQuestionEmbed(interaction, page, updatedQuestions, quizName, updatedQuestions.length - 1));
             }
             else if (i.customId == 'AutoFill'){
-                // await i.update({content: ' '});
+                await i.update({content: ' '});
                 await collector.stop();
                 return resolve(await AutoFillAnswers(interaction, page, quizName, updatedQuestions, i))
             }

@@ -144,13 +144,18 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
     // } catch (error) {
         
     // }
+    let reasonForFailure = '';
     await Promise.all([
     page.click(BUTTON_SELECTOR),
-    page.waitForNavigation()
-    ])
+    page.waitForNavigation({timeout: 600000}) // takes a while to load
+    ]).catch((err) => {
+        reasonForFailure = 'Navigation Timed Out';
+        console.log(err);
+    })
 
+    if(reasonForFailure != '') return new Promise((resolve, reject) => reject(reasonForFailure))
     //more specific way to get
-    let reasonForFailure = await page.evaluate(() => {
+    reasonForFailure = await page.evaluate(() => {
         //
         return document.querySelector('div.uk-alert-danger.uk-text-center.uk-alert > p')?.textContent//.textContent body -le
     })
@@ -184,7 +189,7 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
             })
             //don't save the security key to the database
             // delete newLogin.Securitykey
-            await newLogin.save()
+            await newLogin.save();
             //Get the security Keys from in here
             // loginGroups[discordUserId]
             // loginGroups[discordUserId] = encrypt(loginDetails) 

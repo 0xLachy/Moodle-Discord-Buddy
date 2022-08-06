@@ -26,9 +26,6 @@ const durations = [
     { name: "1 week", value: 7 * 24 * 60 * 60 }
 ]
 
-//VERY INTERESTING NOTE -- every time the script is run, these variables run over, so if they are changed they stay changed, can use for cache.
-let embedMessagesArr = [];
-
 //TODO implement code for the role options
 //.setRequired(true));
 const data = new SlashCommandBuilder()
@@ -105,8 +102,9 @@ module.exports = {
 
     ...data.toJSON(),
     run: async (client, interaction) => {
-        embedMessagesArr = [];
+        const embedMessagesArr = [];
         await interaction.deferReply();
+        // `${mainStaticUrl}/user/index.php?page=0&perpage=5000&contextid=${contextId}&id=${termId}&newcourse`
 
         // const browser = await puppeteer.launch({ headless: false })
         const browser = await puppeteer.launch();
@@ -114,7 +112,25 @@ module.exports = {
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 
         //log into the browser using url from functions, (only one in participants so 0 to get it)
-        await UtilFunctions.LoginToMoodle(page, interaction.user.id, UtilFunctions.GetTermURLS("participants")[0]).catch(error => console.log(error))
+        // await UtilFunctions.LoginToMoodle(page, interaction.user.id, UtilFunctions.GetTermURLS("participants")[0]).catch(error => console.log(error))
+
+        try {
+            await UtilFunctions.LoginToMoodle(page, interaction.user.id)
+        } catch (error) {
+            return await interaction.editReply("The Wifi is Too Slow and timed out on Navigation")
+        }
+        let chosenTerm = await UtilFunctions.AskForCourse(interaction, page).catch(reason => {
+            //If no button was pressed, then just quit
+            console.log(reason)
+            // interaction.editReply({content: reason, embeds: []})
+            browser.close()
+            return null;
+        })
+        // if the user didn't select any in time just delete the reply, the browser should be closed anyways
+        if(chosenTerm == null) return await interaction.deleteReply();
+        // console.log(chosenTerm)
+        // otherwise free to continue
+        await page.goto(`${UtilFunctions.mainStaticUrl}/user/index.php?id=${chosenTerm.ID}&perpage=5000`)
 
         // if (interaction.options.getSubcommand() === 'person'){
         //     //do person / regular use stuff
@@ -138,10 +154,10 @@ module.exports = {
                         //CreateEmbedMessage(personObj, interaction);
                         //console.log(personObj)
                         if(await interaction.options.getBoolean("show-input-name")){
-                            CreateEmbedMessage(interaction, tableOfPeople[personIndex], false, realInputName)
+                            await CreateEmbedMessage(embedMessagesArr, tableOfPeople[personIndex], false, realInputName)
                         }
                         else{
-                            CreateEmbedMessage(interaction, tableOfPeople[personIndex])
+                            await CreateEmbedMessage(embedMessagesArr, tableOfPeople[personIndex])
                         }
                         // console.log("SUCESS")
                         break;
@@ -158,59 +174,48 @@ module.exports = {
                 let duration = await interaction.options.getNumber("last-online");
                 let flipDuration = await interaction.options.getBoolean("flip");
 
-                await ParticipantsFilter(page, interaction, includesString, duration, flipDuration)
+                await ParticipantsFilter(page, interaction, embedMessagesArr, includesString, duration, flipDuration)
                 break;
             case "leaderboard":
                 let showSeconds = await interaction.options.getBoolean("seconds")
-                await GetOnlineLeaderboard(page, interaction, showSeconds);
+                await GetOnlineLeaderboard(page, embedMessagesArr, showSeconds);
                 break;
             default:
                 interaction.editReply(`Something went wrong with ${interaction.options.getSubcommand()}`)
                 break;
         }
-        SendEmbedsToDiscord(interaction);
-        browser.close();
+        SendEmbedsToDiscord(interaction, embedMessagesArr);
+        return await browser.close();
     }
 }
 
 
-async function ParticipantsFilter(page, interaction, includeString, duration, flipDuration=false){
+async function ParticipantsFilter(page, interaction, embedMessagesArr, includeString, duration, flipDuration=false){
     let foundPerson = false;
-
     let tableOfPeople = await GetTableOfPeople(page);
-    //I think if I use of it acts a bit wrong
-    for(personArr of tableOfPeople){
-        if (duration){
-            // console.log(personArr)
-            personTimeSeconds = await UtilFunctions.ConvertTime(personArr[3]);
-            if(duration > personTimeSeconds || (flipDuration && duration < personTimeSeconds)){
-                if(includeString != null){
-                    CheckNameIncludesString();
-                }
-                else{
-                    CreateEmbedMessage(interaction, personArr);
-                    foundPerson = true;
-                }
-            }
-            else if (includeString != null){
-              CheckNameIncludesString();  
-            }
-        }
+
+    // make sure the include string is lowercase
+    includeString = includeString.toLowerCase();
+    if(includeString != null){
+        tableOfPeople = tableOfPeople.filter(personArr => personArr[0].toLowerCase().includes(includeString))
+    }
+    if(duration) {
+        tableOfPeople = await tableOfPeople.filter(async (personArr) => {
+            const personTimeSeconds = await UtilFunctions.ConvertTime(personArr[3])
+            return (duration > personTimeSeconds || (flipDuration && duration < personTimeSeconds))
+        })
     }
 
-    if(!foundPerson){
-        interaction.editReply(`Couldn't find anyone with include-string: "${includeString}" and/or duration "${duration}"`)
+    for(const personArr of tableOfPeople){
+        CreateEmbedMessage(embedMessagesArr, personArr)
     }
 
-
-    function CheckNameIncludesString() {
-        console.log(personArr[0])
-        if (personArr[0].includes(includeString)) {
-            CreateEmbedMessage(interaction, personArr);
-            foundPerson = true;
-        }
+    if(tableOfPeople.length == 0){
+        let replyString = 'Couldn\'t find anyone with:'
+        if(includeString) replyString += ` include-string: "${includeString}"`
+        if(duration) replyString +=  `duration: "${duration}"`
+        interaction.editReply(replyString)
     }
-    // function checkTo()
 }
 
 async function GetTableOfPeople(page){
@@ -218,7 +223,7 @@ async function GetTableOfPeople(page){
     return await page.evaluate(() => {
         let arrOfEveryone = [];
 
-        let tableRows = document.querySelectorAll('tr[id*="user-index-participant"]');
+        let tableRows = document.querySelectorAll('tr[id*="user-index-participant"]:not(.emptyrow)');
         for (trElem of tableRows){
             
             // Gets table data elems from rows, then assigns the name to the other data of row, and add profile pic lastly
@@ -231,7 +236,7 @@ async function GetTableOfPeople(page){
     })
 }
 
-async function GetOnlineLeaderboard(page, interaction, showSeconds=false){
+async function GetOnlineLeaderboard(page, embedMessagesArr, showSeconds=false){
     let leaderboardArr = []
 
     let tableOfPeople = await GetTableOfPeople(page);
@@ -250,56 +255,56 @@ async function GetOnlineLeaderboard(page, interaction, showSeconds=false){
     // and it's job is to determine which of the two comes first.
 
     tableOfPeople.sort((a, b) => a[5] - b[5])
-    CreateEmbedMessage(interaction, tableOfPeople, true);
+    CreateEmbedMessage(embedMessagesArr, tableOfPeople, true);
 
 }
 
-function CreateEmbedMessage(interaction, personData, leaderboard=false, title="none", colour=UtilFunctions.primaryColour) {
-    let statusEmbed = new EmbedBuilder();
-    //check if data is obj or array
-    //console.log(participantData.constructor.name);
-    if(!leaderboard){
-        if(title != "none"){
-            statusEmbed.setTitle(title)
-        }
-        else{
-            statusEmbed.setTitle(personData[0]);
-        }
-        statusEmbed.addFields(
-            { name: "Roles", value: personData[1] },
-            { name: "Groups", value: personData[2] },
-            { name: "Last Online", value: personData[3] }
-        ); 
-        statusEmbed.setThumbnail(personData[4])   
-    }//if it isn't just one person
-    else{
+function CreateEmbedMessage(embedMessagesArr, personData, leaderboard=false, title="none", colour=UtilFunctions.primaryColour) {
 
-        if(title != "none"){
-            statusEmbed.setTitle(title)
-        }
+    let embedCounter = Math.ceil((personData.length) / 25)
+    let personIndex = 0;
+    for (embedCounter; embedCounter > 0; embedCounter--) {
+        let statusEmbed = new EmbedBuilder();
+        //check if data is obj or array
+        //console.log(participantData.constructor.name);
+        if(!leaderboard){
+            if(title != "none"){
+                statusEmbed.setTitle(title)
+            }
+            else{
+                statusEmbed.setTitle(personData[0]);
+            }
+            statusEmbed.addFields(
+                { name: "Roles", value: personData[1] },
+                { name: "Groups", value: personData[2] },
+                { name: "Last Online", value: personData[3] }
+            ); 
+            statusEmbed.setThumbnail(personData[4])   
+        }//if it isn't just one person
         else{
-            statusEmbed.setTitle("Last Online leaderboard");
+    
+            if(title != "none"){
+                statusEmbed.setTitle(title)
+            }
+            else{
+                statusEmbed.setTitle("Last Online leaderboard");
+            }
+            // for(person of personData){
+            do {
+                if(personIndex >= personData.length) break;
+                let person = personData[personIndex]
+                //person 4 is thumbnail, 5 is the new seconds online section
+                let infoString = `Roles: ${person[1]} Groups: ${person[2]} Last-Online: ${person[3]}`
+                statusEmbed.addFields({ name: person[0], value: infoString })
+                personIndex++;  
+            } while ((personIndex + 1) % 25 != 0)
         }
-        for(person of personData){
-            //person 4 is thumbnail, 5 is the new seconds online section
-            let infoString = `Roles: ${person[1]} Groups: ${person[2]} Last-Online: ${person[3]}`
-            statusEmbed.addFields({ name: person[0], value: infoString })
-        }
+        statusEmbed.setColor(colour);
+        embedMessagesArr.push(statusEmbed); 
     }
-
-    statusEmbed.setColor(colour);
-    // if(editedReply){
-    //     interaction.followUp({embeds: [statusEmbed]});
-    // }
-    // else{
-    //     interaction.editReply({ embeds: [statusEmbed] });
-    //     editedReply = true;
-    // }
-    embedMessagesArr.push(statusEmbed);
-    // console.log(embedMessagesArr.length)
 }
 
-function SendEmbedsToDiscord(interaction){
+function SendEmbedsToDiscord(interaction, embedMessagesArr){
     // console.log(embedMessagesArr)
     // console.log("sent")
     if(embedMessagesArr.length >= 1 && embedMessagesArr.length <= 10){
