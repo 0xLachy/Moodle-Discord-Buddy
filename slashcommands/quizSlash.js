@@ -75,10 +75,15 @@ module.exports = {
         
         if(chosenTerm == null) return await interaction.deleteReply();
         
+        // get the chosen quiz and questions, if any of them return null, just close the browser as it won't be used anymore
         const chosenQuiz = await DisplayQuizzes(interaction, await GetQuizzesList(page, chosenTerm.ID));
         if(chosenQuiz.url == null) return await browser.close();
+
         let scrapedQuestions = await GetQuizQuestions(page, chosenQuiz.url)
-        
+        if(scrapedQuestions == null) {
+            await interaction.editReply({ content: `You have no more attempts left at ${chosenQuiz.name}`, embeds: [], components: []})
+            return await browser.close(); 
+        }
         //* This can't be global unfortunately
         const quiz_db = mongoose.createConnection(process.env.MONGO_URI, {
             dbName: 'Quizzes'
@@ -178,8 +183,9 @@ const FetchQuizFromDatabase = async (quiz_db, quizTitle, scrapedQuestions) => {
     // await Kitten.find({ name: /^fluff/ });
     const quizAnswers = Array.from(await MoodleQuiz.find({ name: quizTitle }))[0]?.questions;
     // returns undefined if it isn't al
-    console.log(quizAnswers)
+    // console.log(quizAnswers)
     //if we actually got quiz answers loop through all of the questions and do this
+    console.log(quizAnswers)
     if (quizAnswers) {
         for (const question of scrapedQuestions) {
             // const correctAnswers = await quizAnswers.get(question.questionName);
@@ -223,7 +229,7 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
     //     }
     // })
 
-
+    console.log(correctedQuestions)
     const MoodleQuiz = quiz_db.model('Moodle', moodleQuizSchema, 'Moodle')
     const newQuiz = new MoodleQuiz({
         name: quizTitle,
@@ -252,7 +258,7 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
         //Set then correctness of the answer strings by category of whether false or true, and if it isn't known yet it will be null so it won't be added to the things
         // newQuiz.questions.set(question.questionName, { correct: question.answerData.filter(answer => answer.correct === true).map(answer => answer.label), incorrect: question.answerData.filter(answer => answer.correct === false).map(answer => answer.label) })
     }
-    console.log(newQuiz)
+    // console.log(newQuiz)
     //TODO this is probably not how to do the replacing, because I am using a schema thing, but oh well
     await MoodleQuiz.replaceOne({ name: quizTitle }, { name: newQuiz.name, questions: newQuiz.questions }, { upsert: true })
 
@@ -274,7 +280,7 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
             //TODO add more to the description  that explains it
             .setDescription('This is a summary of the quiz, it will only show the answers you selected, check that all of the questions have at least one answer, sometimes the answer doesn\'t save (discordAPI issues)');
         ;
-    for (const questionIndex in updatedQuestions) { // this doesn't work, also put a tick and a cross thing
+    for (const questionIndex in updatedQuestions) { 
         const question = updatedQuestions[questionIndex]
         //loop through and add [] to string, but add label if it is selected
         let questionAnswersString = ''   
@@ -316,11 +322,11 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
     }
     //as long as it is not 0
     const buttonMoveRow = preSubmission ?  [ CreateMoveRow(3, 'Submit!') ] : [] // CreateMoveRow(3, 'Done')
-    let promises = [ interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) ]
-    if (lastI) promises.push( lastI.update({ files: []}).catch(err => console.log(err)) )
-    await Promise.all(promises)
-    // if(lastI) await lastI.update({ files: []}).catch(err => console.log(err))
-    // await interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) 
+    // let promises = [ interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) ]
+    // if (lastI) promises.push( lastI.update({ files: []}).catch(err => console.log(err)) )
+    // await Promise.all(promises)
+    if(lastI) await lastI.update({ files: []}).catch(err => console.log(err))
+    await interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) 
     
     let channel = await interaction.channel
     //If the channel isn't inside the guild, you need to create a custom cd channel
@@ -430,7 +436,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
             // let promises = [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow]}) ];
             // let promises = quizImgAttachment != null ? [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: [quizImgAttachment]}) ] : [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: []}) ]
             // if(lastI) promises.push(lastI.update({content: ' '}))
-
+            // if(lastI) await lastI.deferUpdate();
             // await Promise.all(promises)
             // if(lastI) await lastI.update({content: ' '})
             // await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow]})
@@ -447,7 +453,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
             // let promises = [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]}) ]
             // // if(lastI) promises.push(lastI.update({content: ' '}))
             //TODO CHECK THIS
-            if(lastI) await lastI.update({content: ' '})
+            if(lastI) await lastI.deferUpdate();
             quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
             // await Promise.all(promises)
             // await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
@@ -476,8 +482,8 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 await collector.stop();
                 // TODO test if it still stops and stuff
                 await msgCollector.stop();
-                await i.deferUpdate();
                 if (scrapedQuestions.length != questionIndex + 1) {
+                    await i.deferUpdate();
                     return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quizName, questionIndex + 1));
                 }
                 else {
@@ -493,18 +499,19 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quizName, questionIndex - 1));
             }
             else if (i.customId == 'Quit') {
-                await i.update({content: 'Quit Successfully', components: [], files: []})
+                await i.update({content: 'Quit Successfully', embeds: [], components: [], files: []})
                 await collector.stop();
                 await msgCollector.stop()
                 return null;
             }
             else if (i.customId == 'Overview') {
                 // await i.update({ content: ' '});
-                await i.deferUpdate(); 
+                // await i.deferUpdate(); 
                 await collector.stop();
                 await msgCollector.stop();
                 await UpdateQuizzesWithInputValues(page, scrapedQuestions)
-                return resolve(await DisplayQuizSummary(interaction, page, quizName, scrapedQuestions, true, i));
+                return resolve(await DisplayQuizSummary(interaction, page, quizName, scrapedQuestions, true, i))
+                // return resolve(await Promise.all([ UpdateQuizzesWithInputValues(page, scrapedQuestions), DisplayQuizSummary(interaction, page, quizName, scrapedQuestions, true, i)]));
             }
             else if (i.customId == 'AutoFill') {
                 if(questionData.questionType == 'text') {
@@ -573,6 +580,12 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
 
 const GetQuizQuestions = async (page, chosenQuizUrl) => {
     await page.goto(chosenQuizUrl);
+    let quizDisabled = await page.evaluate(() => {
+        return document.querySelector('button[type="submit"]').textContent == 'Back to the course'
+    })
+    // if you cant access the quiz, don't bother getting questions
+    if(quizDisabled) return null;
+    
     await Promise.all([
         page.evaluate(() => document.querySelector('button[type="submit"]').click()),
         //on end querySelectorAll[1] because the second one is the actual full sumbit, that first one is like a retry button
@@ -605,16 +618,15 @@ const GetQuizzesList = async (page, termID) => {
         };
 
         let tableRows = document.querySelectorAll('#region-main > div > table > tbody > tr');//#yui_3_17_2_1_1658806562256_56 > table > tbody
-        console.log(tableRows)
         for (trElem of tableRows){
             
             // Gets table data elems from rows, then assigns the name to the other data of row, and add profile pic lastly
             tdElems = trElem.querySelectorAll("td");
             //this means that it was graded 
             //if it was not there or complete only is false (so that means do all of them)
-            if(tdElems[3].textContent == undefined) {
+            if(tdElems[3].textContent == '') {
                 //add the name to the due part of the quizzes
-                quizzes['due'].push({ name: tdElems[1].textContent, url: tdElems[1].querySelector('a').href });
+                quizzes['due'].push({ name: tdElems[1].textContent, displayName: tdElems[1].textContent, url: tdElems[1].querySelector('a').href });
             }
             else {
                 quizzes['done'].push({ name: `${tdElems[1].textContent}`, displayName: `${tdElems[1].textContent} ${tdElems[3].textContent}`, url: tdElems[1].querySelector('a').href });
@@ -639,7 +651,6 @@ const DisplayQuizzes = async (interaction, quizzes) => {
         let selectedOptions = quizzes['due']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz is still due', value: quiz.url }));
         // console.log(selectOptions.concat(['this', 'that']))
         selectedOptions = selectedOptions.concat(quizzes['done']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz has already been finished', value: quiz.url })));
-        
         const row = new ActionRowBuilder()
             .addComponents(
                 new SelectMenuBuilder()
@@ -726,13 +737,6 @@ const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
                 else if(questionDivContent.querySelector('i[title="Incorrect"]')) {
                     updatedQuestion.answerData[0].correct = false
                 }
-
-                // let outcome = questionDivContent.querySelector('div.specificfeedback')
-                // // console.log(questionDivContent.nextSibling)
-                // if(outcome) {
-                //     // console.log(outcome)
-                //     updatedQuestion.answerData[0].reason = outcome?.textContent
-                // }
                 
             }
             else {
@@ -921,12 +925,13 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
             }
             else if (i.customId == 'Back') {
                 // await i.update({ content: ' ' }); // just acknowledge the button click
-                await i.deferUpdate();
+                // await i.deferUpdate();
                 await collector.stop();
                 return resolve(await DisplayQuestionEmbed(interaction, page, updatedQuestions, quizName, updatedQuestions.length - 1));
             }
             else if (i.customId == 'AutoFill'){
-                await i.update({content: ' '});
+                // await i.update({content: ' '});
+                await i.deferUpdate()
                 await collector.stop();
                 return resolve(await AutoFillAnswers(interaction, page, quizName, updatedQuestions, i))
             }

@@ -32,10 +32,8 @@ const loginSchema = new mongoose.Schema({
     Securitykey: Buffer,
     encryptedPassword: String,
 }) 
-//TODO when this script is first loaded, fetch all the logins and add them to the loginGroups
 const Login = login_db.model('Logins', loginSchema, 'Logins')
 
-// TODO call and await this function inside the index.js so that the user cann't use the bot until this has finished
 async function GetLoginsFromDatabase() {
     //empty filter to get all of the logins from the db
     let dbLogins = Array.from(await Login.find({}))
@@ -45,12 +43,7 @@ async function GetLoginsFromDatabase() {
         loginGroups[loginUser.discordId].Securitykey = Buffer.from(process.env[loginUser.name], 'binary')
     }
 }
-// (async() => {
-// //   console.log('1')
-// //   await getHtml()  
-//   await GetLoginsFromDatabase()
-// //   console.log('2')
-// })()
+
 //example urls:
 // const TermURLS = [ 
 //         "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896",
