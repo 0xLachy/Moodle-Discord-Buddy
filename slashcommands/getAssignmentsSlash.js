@@ -43,22 +43,17 @@ const data = new SlashCommandBuilder()
                     .setDescription('The name of student (doesn\'t need to be full name) e.g rita')
                     .setRequired(true)
             )
-            // .addIntegerOption(option =>
-            //     option.setName('term')
-            //         .setDescription('Optionally choose only 1 term')
-            //         .setRequired(false)
-            //         //doesn't work because it expects array?
-            //         .addChoices(
-            //             { name: 'Term 1', value: 0 },
-            //             { name: 'Term 2', value: 1 },
-            //             { name: 'Term 3', value: 2 },
-            //         )
-            //         // .addChoice("Term 1", 0)
-            //         // .addChoice("Term 2", 1)
-            //         // .addChoice("Term 3", 2)
-            // )
+        )
+	.addSubcommand(subcommand =>
+		subcommand
+			.setName('submissions')
+			.setDescription('see who has submitted the assignment!')
+            .addStringOption(option =>
+                option.setName('assignment-names')
+                    .setDescription('The names of the assignments split at ",," , it uses substring so you don\'t have to be too specific')
+                    .setRequired(true)
+            )
         );
-
 module.exports = {
     category: "info",
     permissions: [],
@@ -85,27 +80,36 @@ module.exports = {
         })//).map(term => term.ID)
 
         if(chosenTerms == null) return;
+        switch (await interaction.options.getSubcommand()) {
+            case 'student':
+                let studentName = await UtilFunctions.NicknameToRealName(await interaction.options.getString("studentname"));
+                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, chosenTerms), studentName), interaction, studentName);
+                break;
+            case 'filter':
+                let filterString = await interaction.options.getString("filterstring")
+                
+                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, chosenTerms, false), filterString, true), interaction, "malaga",
+                `Assignments found with filter ${filterString}:`)
+                break;
+            case 'submissions':
+                //an array of names of assignments, splitting at double comma because it might have single comma in name
+                let subNames = await interaction.options.getString("assignment-names").split(',,').map(name => name.trim().toLowerCase())
 
-        if (interaction.options.getSubcommand() === 'student') {
-            let studentName = await UtilFunctions.NicknameToRealName(await interaction.options.getString("studentname"));
-            SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, chosenTerms), studentName), interaction, studentName);
-        }
-        else if (interaction.options.getSubcommand() === 'filter'){
-            let filterString = await interaction.options.getString("filterstring")
-            
-            SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, chosenTerms, false), filterString, true), interaction, "malaga",
-            `Assignments found with filter ${filterString}:`)
-        }
-        else {
-            //can editReply or follow up
-            interaction.editReply(`Didn't code the use of ${interaction.options.getSubcommand()} yet, sorry`)
+                SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, chosenTerms, true, false), 'malaga', false, subNames), interaction, "malaga",
+                `People Who did Assignments:`)
+                
+                break;
+            default:
+                //can editReply or follow up
+                interaction.editReply(`Didn't code the use of ${interaction.options.getSubcommand()} yet, sorry`)
+                break;
         }
         //Once its done, close the browser to stop the browsers stacking up
         await browser.close();
     }
 }
 
-async function GetAllAssignments(page, chosenTerms, pushPeople=true, links=false){
+async function GetAllAssignments(page, chosenTerms, pushPeople=true, links=true){
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
     assignmentObject = {}
     for (termName in chosenTerms){
@@ -129,12 +133,15 @@ async function GetAllAssignments(page, chosenTerms, pushPeople=true, links=false
         //Debuging Purposes
         page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
         
-        assignmentObject[`Term ${termName}`] = await page.evaluate((pushPeople, assignmentObject) => {   
+        assignmentObject[`Term ${termName}`] = await page.evaluate((pushPeople, links) => {   
             let tempAssObj = {};
             for (elem of document.querySelectorAll('h3')){
                 if(elem.querySelector('img[title="Assignment"]')){
+                    //* this one is broken on the moodle webpage, skip it for now
+                    if(elem.querySelector('a').textContent == 'T1W6 Assignment System Modelling Tools') continue;
+                    
                     //gets the title of the header if it is not a quiz and adds the url
-                    titleString = `[${elem.querySelector("a").textContent}](${elem.querySelector("a").getAttribute("href")})`;
+                    titleString = links ? `[${elem.querySelector("a").textContent}](${elem.querySelector("a").getAttribute("href")})` : elem.querySelector("a").textContent;
     
                     var peopleNames = [];
                     var nextElem = elem;
@@ -156,33 +163,33 @@ async function GetAllAssignments(page, chosenTerms, pushPeople=true, links=false
                     //AssignmentObject[titleString] = sibs;                               
                 }
             }
-            
-            // if(pushPeople){
-            //     return AssignmentObject;
-            // }
-            // else{
-            //     return AssignmentArray;
-            // }
             return tempAssObj
-        }, pushPeople);
+        }, pushPeople, links);
     }
     return assignmentObject;
 }
 
-async function GetWantedAssignments(assignments, personName, filtering=false){
+async function GetWantedAssignments(assignments, personName, filtering=false, assignmentNames=[]){
     missingAssignments = {};
     for(term of Object.entries(assignments)){
         let [termName, assignmentsObj] = term;
         //sets { Term3: term3}
         //missingAssignments[termName] = term;
-        missingAssignments[termName] = [];
+        if(assignmentNames.length == 0) missingAssignments[termName] = [];
 
         for(assignmentData of Object.entries(assignmentsObj)){
             let [assignment, people] = assignmentData;
-            //If they can't be found then it pushes, meaning if you put ZZZZZ it will get all the assignments for the term
-            if((!people.some(correctPerson => correctPerson.toLowerCase().includes(personName)) && !filtering) || 
-            (filtering && assignment.toLowerCase().includes(personName.toLowerCase()))){
-                missingAssignments[termName].push(assignment);
+            if(assignmentNames.length > 0) {
+                if(assignmentNames.some(name => assignment.toLowerCase().includes(name))){
+                    missingAssignments[assignment] = people
+                }
+            }
+            else {
+                //If they can't be found then it pushes, meaning if you put ZZZZZ it will get all the assignments for the term
+                if((!people.some(correctPerson => correctPerson.toLowerCase().includes(personName)) && !filtering) || 
+                (filtering && assignment.toLowerCase().includes(personName.toLowerCase()))){
+                    missingAssignments[termName].push(assignment);
+                }
             }
         }
     }
