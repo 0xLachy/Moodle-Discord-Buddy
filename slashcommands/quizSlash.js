@@ -45,8 +45,6 @@ module.exports = {
     ...data.toJSON(),
     run: async (client, interaction) => {
         await interaction.deferReply(/*{ephemeral: true}*/);
-        //DISPLAY ASK FOR DISCORD OR MOODLE QUIZ
-        //AskForQuizType(); //do this last probs
         // make sure they are logged in if they want to do moodle
         if(!UtilFunctions.loginGroups.hasOwnProperty(interaction.user.id)) {
             await interaction.editReply("You must login first to use this feature, You can log in here or in direct messages with this bot")
@@ -56,7 +54,6 @@ module.exports = {
         // const browser = await puppeteer.launch({ headless: false })
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
-        //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 
         //Login to moodle and catch any errors that occur
         await UtilFunctions.LoginToMoodle(page, await interaction.user.id).catch(reason => {
@@ -64,10 +61,12 @@ module.exports = {
             interaction.editReply({content: 'Internet was probably too slow and timed out'});
             browser.close();
         })
-        //Get the term to use as context id (IT is needed unfortunately)
+
+        //Choose which term to find the quiz list
         let chosenTerm = await UtilFunctions.AskForCourse(interaction, page).catch(reason => {
             //If no button was pressed, then just quit
             console.log(reason)
+            // whilst this would be nice, if reason is some other error it will break the reply
             // interaction.editReply({content: reason, embeds: []})
             browser.close()
             return null;
@@ -84,7 +83,7 @@ module.exports = {
             await interaction.editReply({ content: `You have no more attempts left at ${chosenQuiz.name}`, embeds: [], components: []})
             return await browser.close(); 
         }
-        //* This can't be global unfortunately
+        //* This can't be global because the database needs to be already connected, and at like compile time, that doesn't happen
         const quiz_db = mongoose.createConnection(process.env.MONGO_URI, {
             dbName: 'Quizzes'
         });
@@ -94,10 +93,8 @@ module.exports = {
         
         //if they don't say if they want it autofilled, it will be false
         const autoFillEverything = await interaction.options.getBoolean('autofill') || false;
-        //TODO set all the scraped questions to be like the autofill is clicked once and then display overview at the start 
-        // await FetchQuizFromDatabase(chosenQuiz.name)
+        
         const correctedAnswers = autoFillEverything === true ? await AutoFillAnswers(interaction, page, chosenQuiz.name, scrapedQuestions) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
-        // console.log(correctedAnswers)
         //it will add the answers to the database (if it isn't null)
         await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers)
 

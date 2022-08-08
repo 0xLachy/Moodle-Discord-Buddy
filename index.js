@@ -77,7 +77,7 @@ client.on("interactionCreate", (interaction) => {
     if(interaction.type !== InteractionType.ApplicationCommand) return
     //if its not from within a guild 
     // if(!interaction.inGuild()) return interaction.reply("This command can only be used in a server")
-    
+
     const slashcmd = client.slashcommands.get(interaction.commandName)
 
     if(!slashcmd) return interaction.reply("Invalid slash command")
@@ -85,6 +85,15 @@ client.on("interactionCreate", (interaction) => {
     //If the command is guild only and not inside guild
     if(slashcmd.guildOnly && !interaction.inGuild()) return;
 
+    // Logging what commands were used to the console whilst it works, its so unreadable lol
+    let commandArgs = slashcmd.options.some(option => option.type == 1) ? interaction.options.getSubcommand() + ' ' : ''
+    if(interaction.commandName != "login") commandArgs += `=> ${GetCommandArgs(interaction.options.data)}`
+
+    console.log(`${interaction.user.username} used the command **${interaction.commandName}** ${commandArgs}`)
+    // console.log(`${interaction.user.username} used the command **${interaction.commandName}** ${ slashcmd?.options.some(option => option.type == 1) ? interaction.options.getSubcommand()  : interaction.options.data.map(option => `${option.name} : ${option.value}`).join(', ')}` +
+    // `${interaction.commandName != "login" && interaction.options.data[0]?.options != undefined ? ` => ${interaction.options.data[0].options.map(option => `${option.name} : ${option.value}`).join(', ') || '(default)'}` : ""}`)
+    
+    //member.permissions is a guild thing, maybe put something in for dev, like interaction.user.id == dev or something
     if(slashcmd.perms && !interaction.member.permissions.has(slashcmd.perm))
         return interaction.reply("You do not have permission for this command");
 
@@ -103,6 +112,11 @@ process.on("uncaughtExceptionMonitor", async (err) => {
 // process.on("multipleResolves", async (type, promise, reason) => {
 //   console.error("Multiple Resolves:\n", type, promise, reason);
 // });
-console.log(process.env.john_doe20)
 //That .then is not needed, but idk
 client.login(process.env.TOKEN)//.then(client.user.setActivity("Reading Moodle Data", {type: "PLAYING"}))
+
+function GetCommandArgs(options) {
+    let optionsArray = options
+    if(options[0]?.type == 1) optionsArray = options[0].options
+    return optionsArray.map(option => `${option.name} : ${option.value}`).join(', ') || '(default)'
+}

@@ -14,26 +14,7 @@ const data = new SlashCommandBuilder()
 			.setDescription('Use a filter to get assignments instead')
             .addStringOption(option => option.setName('filterstring').setDescription('Substring of name, E.g "VB" to get all vb projects').setRequired(true))
             // .addStringOption(option => option.setName('iaernst').setDescription('Substring of name, Ennearsts'))
-
-            //Have to do this crappy rewording because of discord restrictions on having the same options
-            //And for some reason it still doesn't work
-            .addIntegerOption(option =>
-                option.setName('term-to-filter')
-                    .setDescription('Optionally choose only 1 term filter')
-                    .setRequired(false)
-                    .addChoices(
-                        { name: 'Term 1', value: 0 },
-                        { name: 'Term 2', value: 1 },
-                        { name: 'Term 3', value: 2 },
-                    )
-
-                    // .addChoice("Term 1", 0)
-                    // .addChoice("Term 2", 1)
-                    // .addChoice("Term 3", 2)
-            ))
-
-
-			//.addUserOption(option => option.setName('target').setDescription('The user')))
+        )
 	.addSubcommand(subcommand =>
 		subcommand
 			.setName('student')
