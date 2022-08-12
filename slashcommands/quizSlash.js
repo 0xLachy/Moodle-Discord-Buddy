@@ -4,13 +4,17 @@ const UtilFunctions = require("../util/functions");
 const mongoose = require('mongoose')
 require("dotenv").config()
 
-
+const repeatAmount = 2; 
 let autoSubmit = false;
 let showHints = true;
 
-//TODO add a quit to the quiz select screen
-//TODO fix timeouts on stuff like choose a quiz and displays
+//TODO maybe on displayQuizzes thing have a do all unfinished button
+// that will only work for a term each because you only select one term to get the quizzes from
+// otherwise there would probably be too many quizzes to scroll through
 //TODO maybe implement a user settings thing that gets saved to the database!!!
+//Maybe it can be a settings slash command where it then shows a select menu for which type of settings you want, e.g quiz settings
+// then those can be the default settings and they get passed into the function when it is called, and it would only be for people who are logged in
+// Settings: { RepeatThreshold: 80%, ShowAlreadyCompletedQuizzes: True }
 //Like I could have the repeat threshold be custom, like some may want if it is 80% or others 100% 
 const data = new SlashCommandBuilder()
 	.setName('quiz')
@@ -103,7 +107,6 @@ module.exports = {
             dbName: 'Quizzes'
         });
         // get the chosen quiz and questions, if any of them return null, just close the browser as it won't be used anymore
-        //TODO put in a quit button there
         const chosenQuizzes = await DisplayQuizzes(interaction, await GetQuizzesList(page, chosenTerm.ID));
         if(chosenQuizzes == null || chosenQuizzes.length == 0) return await browser.close();
         
@@ -129,12 +132,11 @@ module.exports = {
 
                 //it will add the answers to the database (if it isn't null)
                 await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers?.questions)
-            } while (repeatCounter < 2 && repeat && Number(correctedAnswers.grade) < 100);
+            } while (repeatCounter < repeatAmount && repeat && Number(correctedAnswers.grade) < 100);
             // const correctedAnswers = autoFillEverything === true ? await AutoFillAnswers(interaction, page, chosenQuiz.name, scrapedQuestions) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
         }
 
-        //finished! now to close everything!
-        //TODO find out whether or not I need to close other stuff
+        //finished! now to close everything! (if browser was already closed it doesn't matter)
         await browser.close();
     }
 }
@@ -147,11 +149,11 @@ const DoQuiz = async (page, interaction, chosenQuiz, dataBaseAnswers, autoFillEv
     }
     
     //* returning what was const correctedAnswers
-    // await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
     return autoFillEverything ? await DisplayQuizSummary(interaction, page, chosenQuiz.name, scrapedQuestions, true): await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
 }
 const AutoFillAnswers = async (interaction, page, quizTitle, scrapedQuestions, lastI) => {
-    for (const question of scrapedQuestions) {
+    // update all the questions, will do this all at once, so wait for that to finish
+    for await (const question of scrapedQuestions) {
         GuessOrFillSpecificQuestion(question);
     }
     // update the the quiz to have the new values
@@ -187,65 +189,21 @@ const FetchQuizFromDatabase = async (quiz_db, quizTitle) => {
     const MoodleQuiz = quiz_db.model('Moodle', moodleQuizSchema, 'Moodle')
     // await Kitten.find({ name: /^fluff/ });
     const quizAnswers = Array.from(await MoodleQuiz.find({ name: quizTitle }))[0]?.questions;
-    // returns undefined if it isn't al
-    //if we actually got quiz answers loop through all of the questions and do this
+    // returns undefined if it isn't found
     return quizAnswers;
-    //TODO implement that into the other function, or seperate that out
-    if (quizAnswers) {
-        for (const question of scrapedQuestions) {
-            // const correctAnswers = await quizAnswers.get(question.questionName);
-            const correctAnswers = await quizAnswers[question.questionName]
-            // that is now an array, the questions.answers is also an array (of objects { label })
-            // question.answerData.filter(answer => correctAnswers.includes(answer.label))
-            if(question.questionType == 'text') {
-                //set it to be an array of correct values, because maybe it doesn't care if it has lowercase and all that crap
-                question.answerData[0].correctStrings = correctAnswers.correct;
-            }
-            for (const answer of question.answerData) {
-                //if the correctAnswers includes the anser it is true, otherwise it is null, because it might also be true but not found yet (stupid checkboxes)
-                answer.correct = correctAnswers.correct.includes(answer.label) || null;
-                // if the answer is in the incorrect set it to false, otherwise set it to null (if it already doesn't have a value ??= sign)
-                answer.correct ??= correctAnswers.incorrect.includes(answer.label) ? false : null
-            }
-
-        }
-    }
-
-    return scrapedQuestions
-    //if it wasn't found that is okay because the values will still be null on the correct and the buttons 
-    //will be blue which is pretty clean because on button click that is simplified more :D
-    //can use find({thing})[0].questions.get(questionPrompt)
-    //but assign the find to a variable because you don't want to make the call every 
-    //question, not needed,
-    //either add correct or incorrect to the individual answers themselves OR ||
-    //set correct answers to be an array with the indexes of the correct answers
 }
 const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => {
-    //TODO fix this later
-    if(correctedQuestions == null) return console.log(quizTitle + ' not saved to the Database!');
     
-    // const moodleQuizSchema = new mongoose.Schema({
-    //     name: String,
-    //     questions: {
-    //         // type: Map,
-    //         // of: { 
-    //         //     prompt: Array
-    //         // }
-    //     }
-    // })
-
-    // console.log(`${correctedQuestions.length} questions are being saved to the database!`)
+    if(correctedQuestions == null) return console.log(quizTitle + ' not saved to the Database because it was null!');
+    
+    console.log(`${correctedQuestions.length} questions of ${quizTitle} are being saved to the database!`)
     const MoodleQuiz = quiz_db.model('Moodle', moodleQuizSchema, 'Moodle')
     const newQuiz = new MoodleQuiz({
         name: quizTitle,
         questions: {}
-        // questions: {
-        //     'TestingThis': ['Answer one', 'Answer 2'],
-        //     'recursion': [ 'Loop', 'Calling']
-        // }
     })
-    //USE SET BECAUSE IT CNA OVERWRITE
-    //TODO fix the text answer correct things because it needs to use the label instead stead of whatever
+    
+    //* answers are an array of strings, because order can be changed around on the course website
     for (const question of correctedQuestions) {
         if(question.questionType == 'text')  {
             // question.answerData[0].label = question.answerData[0].value;
@@ -264,13 +222,7 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
     }
     //* this is probably not how to do the replacing, because I am using a schema thing, but oh well
     await MoodleQuiz.replaceOne({ name: quizTitle }, { name: newQuiz.name, questions: newQuiz.questions }, { upsert: true })
-
-    //answers are an array of strings, because order can be changed around
-    //'what is recursion' (prompt): [ 'calling a function inside itself', 'a looping mechanism' ]
-    
-
 }
-//TODO account for quizess with more than 22, (max embeds count)
 const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions, preSubmission=true, lastI) => {
     //loops through all the questions and adds them as message fields
     //if it has been submitted add the grade to to title
@@ -312,10 +264,9 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
             }))
 
             const gradeString = quizSummaryEmbed.data.fields.find(field => field.name == 'Grade').value
-            // const percentageIndex = gradeString.indexOf('%')
-            // gradePercentAsInt = gradeString.substring(percentageIndex - 2, percentageIndex)
+            //After getting the grade Regex out the percentage from it
             const gradeMatch = gradeString.match(/\d+(\.\d+)?%/)
-            //just pretend that it is 100 because it couldn't get the grade
+            //If it is a match, just get the number, otherwise it couldn't be found don't repeat as there is a problem
             gradePercentAsInt = gradeMatch ? gradeMatch[0].replace('%', '') : 100
 
         }
@@ -323,6 +274,7 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
         // when it is the first embed, only go up to 20, otherwise 25
         let divisableNumber = i == embedCount ? 25 : 20 
 
+        //Loop through sets of 20 or 25 adding to the embed
         do {
             if (questionIndex >= updatedQuestions.length) break;
             const question = updatedQuestions[questionIndex]
@@ -366,16 +318,14 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
             // next time in the while loop it will be a new question
             questionIndex++;
 
-            // if that returns 0 it becomes a falsy which means it hit the cap off embeds
+            // if that returns 0 it becomes a falsy which means it hit the cap of embeds
             // the plus one is because the index starts at 0
         } while ((questionIndex + 1) % divisableNumber)
         quizSummaryEmbeds.push(quizSummaryEmbed)
     }
     //as long as it is not 0
-    const buttonMoveRow = preSubmission ?  [ CreateMoveRow(3, 'Submit!') ] : [] // CreateMoveRow(3, 'Done')
-    // let promises = [ interaction.editReply({ embeds: [quizSummaryEmbed], components: buttonMoveRow, files: []}) ]
-    // if (lastI) promises.push( lastI.update({ files: []}).catch(err => console.log(err)) )
-    // await Promise.all(promises)
+    const buttonMoveRow = preSubmission ?  [ await CreateMoveRow(3, 'Submit!') ] : [] 
+
     if(lastI) await lastI.update({ files: []}).catch(err => console.log(err))
     await interaction.editReply({ content: ' ', embeds: quizSummaryEmbeds, components: buttonMoveRow, files: []}) 
     
@@ -390,19 +340,10 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
     //don't submit if they didn't click the submit, but it auto - dones
     // let correctedAnswers;
     if(preSubmission){
-        //TODO, leave final questions as is because inside the waitfornextorback is a call to this function which runs before this finishes,
-        //whats happening is that when autofill is clicked it calls the display quiz summary again, but this hasn't even finished yet so..
-        // let finalQuestions = await WaitForNextOrBack(collector, interaction, page, updatedQuestions, quizTitle, !preSubmission).catch(() => failed=true);
+        // returning because it is now going to display the summary again inside this
         return await WaitForNextOrBack(collector, interaction, page, updatedQuestions, quizTitle, !preSubmission).catch(() => failed=true);
         // if it failed, they didn't submit and return nothing as they timed out
-        //TODO remove the component buttons when it times out
         if(failed) return null;
-
-        //TODO  I need to return something
-
-        // let correctedAnswers = await GetCorrectAnswersFromResultsPage(page, finalQuestions)
-        //I DON"T UNDERSTAND WHY IT GOES PAST THIS OUTER PRESUBMISSION BLOCK, THEN IT HOPS BACK UP AFTER THE RETURN UPDATED QUESTIONS TO HERE
-        // if(preSubmission) return await DisplayQuizSummary(interaction, page, quizTitle, correctedAnswers, false)
     }
     else {
         //if it has already been submitted the updated questions will be the correct ones
@@ -426,39 +367,22 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
             .setDescription(questionData.questionPrompt || 'Type the answer into this channel');
         ;
         let quizImgAttachment;
+        // do the image if the question has one
         if (questionData.questionImg != undefined) {
             const imgSrc = await page.goto(questionData.questionImg)
             const imgBuffer = await imgSrc.buffer();
             quizImgAttachment = new AttachmentBuilder(imgBuffer).setName(`questionImg.png`).setDescription('Img for the current question')
-            // quizStartEmbed.setImage(`attachment://${quizImgAttachment.name}`);
             quizStartEmbed.setImage(`attachment://questionImg.png`);
-            // quizStartEmbed.attachFiles(quizImgAttachment)
-            // quizStartEmbed.setImage(quizImgAttachment)
-            // const file = new AttachmentBuilder('../assets/discordjs.png');
-            	// .setImage('attachment://discordjs.png');
-            // quizStartEmbed.setImage(questionData.questionImg)
             await page.goBack()
         }
 
-        const buttonMoveRow = CreateMoveRow(questionIndex, 'Next', questionData.questionType == 'text')
-        ;
+        const buttonMoveRow = await CreateMoveRow(questionIndex, 'Next', questionData.questionType == 'text');
         const buttonAnswerRow = new ActionRowBuilder();
 
-        //THE DATA TYPE IS ON THE INDIVIDUAL ANSWER OBJECTS
-        //SO THIS WON"T WORK
-        //BUT IT ALSO MEANS THAT I CAN USE THAT INSIDE TE LOOP
-
-        //use the type to also determine whether buttons will be multi or single when clicked
-        // so the behaviour
-
-        let channel = await interaction.channel
-        //If the channel isn't inside the guild, you need to create a custom cd channel
-        if(!interaction.inGuild()){
-            channel = await interaction.user.createDM(); 
-        }
+        //* If the channel isn't inside the guild, you need to create a custom channel
+        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
 
         if(questionData.questionType == 'radio' || questionData.questionType == 'checkbox'){
-            // forof
             answerTooLong = questionData.answerData.some(answer => answer.label.length > 80)
             for (const answer of questionData.answerData) {
                 //if the button was already selected, then make it blue, otherwise make it grey
@@ -483,34 +407,22 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                     .setStyle(answerButtonStyle)
                 )
             }
-            // let promises = [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow]}) ];
-            // let promises = quizImgAttachment != null ? [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: [quizImgAttachment]}) ] : [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: []}) ]
-            // if(lastI) promises.push(lastI.update({content: ' '}))
-            // if(lastI) await lastI.deferUpdate();
-            // await Promise.all(promises)
-            // if(lastI) await lastI.update({content: ' '})
-            // await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow]})
+
             quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: []}) 
                 
         }
         else if(questionData.questionType == 'text'){
             // when referring to the correct answers use answers[0].value because this will be the text
-            // quizStartEmbed.setDescription('Type The answer into this channel:')
             let answer = questionData.answerData[0].value || 'Not Attemped Yet';
             if (questionData.answerData[0].correctStrings.includes(answer.toLowerCase())) answer += ' ✓'
-            // answer = 'not attempted yet'
+
             quizStartEmbed.addFields({ name: 'Answer', value: answer})
-            // let promises = [ interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]}) ]
-            // // if(lastI) promises.push(lastI.update({content: ' '}))
-            //TODO CHECK THIS
+
             if(lastI) await lastI.deferUpdate();
             quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
-            // await Promise.all(promises)
-            // await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
-            //how to do the text collector
         }
         else {
-            console.error('Invalid Quiz Type ' + questionData.questionType);
+            console.error('Invalid Question Type ' + questionData.questionType);
         }
         
         //TODO maybe it can collect if you type in !save to the channel it will save, or other stuff!
@@ -526,24 +438,21 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
         // create collector to handle when button is clicked using the channel 180 seconds in mill
         const collector = await channel.createMessageComponentCollector({ time: 180 * 1000 });
         let updatedButtons = buttonAnswerRow.components;
+        //todo maybe don't await the defer updates? that way they can update while stuff is happening
         collector.on('collect', async (i) => {
             if (i.customId == 'Next') {
-                // await i.update({ content: ' ' }); // acknowledge it was clicked
                 await collector.stop();
-                // TODO test if it still stops and stuff
                 await msgCollector.stop();
                 if (scrapedQuestions.length != questionIndex + 1) {
                     await i.deferUpdate();
                     return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quizName, questionIndex + 1));
                 }
                 else {
-                    //*TODO pass in the correct database answers??? or I can leave them null if it is without the correct adabase
                     await UpdateQuizzesWithInputValues(page, scrapedQuestions)
                     return resolve(await DisplayQuizSummary(interaction, page, quizName, scrapedQuestions, true, i)); // finish the function and return the new updated questions
                 }
             }
             else if (i.customId == 'Back') {
-                // await i.update({ content: ' ' }); // just acknowledge the button click
                 await collector.stop();
                 await msgCollector.stop();
                 await i.deferUpdate();
@@ -562,7 +471,6 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 await msgCollector.stop();
                 await UpdateQuizzesWithInputValues(page, scrapedQuestions)
                 return resolve(await DisplayQuizSummary(interaction, page, quizName, scrapedQuestions, true, i))
-                // return resolve(await Promise.all([ UpdateQuizzesWithInputValues(page, scrapedQuestions), DisplayQuizSummary(interaction, page, quizName, scrapedQuestions, true, i)]));
             }
             else if (i.customId == 'AutoFill') {
                 if(questionData.questionType == 'text') {
@@ -582,14 +490,11 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                     let checkedAnswer = true;
                     let correctAnswerIds = await questionData.answerData.filter(answer => answer.correct === true)?.map(answer => answer.answerNumber)
                     // chooses all the correct answers, but if none are found than just add a random one, 
-                    //TODO find out why !correctAnswerIds doesn't work, or correctAnswerIds == [] doesn't work
                     if(!correctAnswerIds || correctAnswerIds.length == 0) {
                         correctAnswerIds = questionData.answerData[Math.floor(Math.random() * questionData.answerData.length)].answerNumber ;
                         //that means we don't know if it isn't correct so don't show as green
                         checkedAnswer = undefined;
                     }
-                    // if (i.style == ButtonStyle.Secondary)
-                    // if(correctAnswers)
     
                     await UpdateActionRowButtonsQuiz(i, correctAnswerIds, checkedAnswer, false, questionData.questionType == 'radio', true);
                     // this is the answer buttons, if it is text it wouldn't have this
@@ -604,7 +509,6 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
             }
         });
         collector.on('end', collected => {
-            //maybe tell the person that the quiz has timed out if it hasn't loaded
             if(collected.size == 0) {
                 console.log("Timed Out On Question")
                 return interaction.editReply({content: 'Timed out, answers not saved until you view the summary (overview)!', embeds: [], components: [], files: []})
@@ -634,7 +538,7 @@ const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFill
     let quizDisabled = await page.evaluate(() => {
         return document.querySelector('button[type="submit"]').textContent == 'Back to the course'
     })
-    // if you cant access the quiz, don't bother getting questions
+    // if you cant access the quiz, don't bother getting questions, it will say the quiz is disabled in message
     if(quizDisabled) return null;
     
     await Promise.all([
@@ -647,7 +551,6 @@ const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFill
     await GoBackToStart(page);
     
     // boom that way I have the correct answers, but they need to be passed into next page scrape so that it can answer them as it goes
-    // return Updatecorrectness crap(await gotonextpagescrape(page, [] blah))
     return await GoToNextPageScrape(page, [], false, databaseQuestions, autoFillEverything)
 }
 
@@ -660,8 +563,6 @@ const GetQuizzesList = async (page, termID) => {
     }
 
     //INITIATE SCRAPING
-    //#region-main > div > table
-    //TODO UPDATE STATUS TO QUIZ
     await page.waitForSelector('#region-main > div > table > tbody > tr')
 
     return await page.evaluate(() => {
@@ -701,10 +602,7 @@ const DisplayQuizzes = async (interaction, quizzes) => {
         .setDescription('Choose a Quiz from the select menu, you can redo the quizzes you have already done if you want to.' + 
         ' If you have hints enabled, when you click an answer the button will turn green or red (correct or false), if the bot doesn\'t know it already it will be blue (normal selected) ' + 
         '\nAlso if you encounter an interaction failed response, just click the button again, sometimes discord doesn\'t record interactions properly :angry: ')
-        // .setURL(dashboardUrl)
-        // .addFields({})
 
-        //versions = VersionloginData.data.versions.map((version) => ({ value: version, label: version }))
         let selectedOptions = quizzes['due']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz is still due', value: quiz.url }));
         selectedOptions = selectedOptions.concat(quizzes['done']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz has already been finished', value: quiz.url })));
         const selectRow = new ActionRowBuilder()
@@ -726,24 +624,22 @@ const DisplayQuizzes = async (interaction, quizzes) => {
     
         await interaction.editReply({ content: ' ', embeds: [quizzesEmbed], components: [ selectRow, quitRow ] });  
         
-        let channel = await interaction.channel
+        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM()
     
-        if(!interaction.inGuild()){
-            channel = await interaction.user.createDM(); 
-        }
         const collector = await channel.createMessageComponentCollector({ time: 180 * 1000 });
     
         collector.on('collect', async i => {
             if (i.customId == 'Quit') {
-                interaction.editReply({ content: 'Quit Successfully', components: [] })
+                interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] })
                 resolve(null)
             }
             await i.update({ content: `Going to ${i.values.join(', ')} to get quiz questions and attempt now!`, embeds: [], components: []})
-            
-            // resolve({name: selectedOptions.find(option => option.value === i.values[0]).label, url: i.values[0]})
+           
+            // merge all of the quiz options into one array so that it can find the urls and extra info about the questions chosen
             let quizOptions = [ ...quizzes['due'], ...(quizzes['done']) ]
-            // {name: [ ...quizzes['due'], ...(quizzes['done']) ].find(quizOption => quizOption.url == i.values[0]).name, url: i.values[0]}
-            console.log(`The Quizzes: "${i.values.map(selectedUrl => quizOptions.find(quizOption => quizOption.url == selectedUrl).name).join('", "')}" were chosen`)
+            //Logging which questions the user chose 
+            console.log(`The Quizzes: "${i.values.map(selectedUrl => quizOptions.find(quizOption => quizOption.url == selectedUrl).name).join('", "')}" Were Chosen`)
+            //complete the function by returning the chosen terms with their urls and stuff
             resolve(i.values.map(selectedUrl => {
                 return {
                     name: quizOptions.find(quizOption => quizOption.url == selectedUrl).name,
@@ -756,8 +652,8 @@ const DisplayQuizzes = async (interaction, quizzes) => {
     
         collector.on('end', collected => {
             if(collected.size == 0) {
-                //make it look better
-                interaction.editReply({ content: "Interaction Timed Out", components: []})
+                // If they ran out of time to choose just return nothing
+                interaction.editReply({ content: "Interaction Timed Out (You didn't choose anything for 180 seconds), re-run the quiz command again", embeds: [], components: []})
                 resolve(null)
             }
         });
@@ -766,6 +662,7 @@ const DisplayQuizzes = async (interaction, quizzes) => {
 const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
 
+    //update all the questions on the website using the values from the questions object
     await page.evaluate((updatedQuestionsData) => {
         let questionDivs = Array.from(document.querySelectorAll('form div[id*="question"] div.content > div'));
         for (const questionDivContent of questionDivs) { 
@@ -774,8 +671,6 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
             let textAnswer = questionDivContent.querySelector('span.answer input')
             if(textAnswer){
                 //set the text value to be the text answer that was given
-                // for some reason it is being set to the ethics are question here for some really weird reason
-                // textAnswer.value = updatedQuestionsData[questionDivContentIndex].answerData[0].value
                 textAnswer.value = updatedQuestion.answerData[0].value
             }
             else {
@@ -793,20 +688,17 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
     }, updatedQuestionsData)
 }
 
+//This one is checking whether or not our answers were correct or not
 const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
     //I think they just need page
     return await page.evaluate((updatedQuizResponses) => {
         let questionDivs = document.querySelectorAll('form div[id*="question"] div.content');
-        // let questionDivs = document.querySelectorAll('form div[id*="question"] div.content > div.formulation');
         for (const questionDivContent of questionDivs) {
             updatedQuestion = updatedQuizResponses.find(question => question.questionName == questionDivContent.querySelector('div.qtext').textContent)
             let textAnswer = questionDivContent.querySelector('span.answer input')
             if(textAnswer){
                 //set the text value to be the text answer that was given
-                // for some reason it is being set to the ethics are question here for some really weird reason
-                // textAnswer.value = updatedQuestionsData[questionDivContentIndex].answerData[0].value
-                // textAnswer.value = updatedQuestion.answerData[0].value
                 if(questionDivContent.querySelector('i[title="Correct"]')){
                     updatedQuestion.answerData[0].correct = true
                     if(!updatedQuestion.answerData[0].correctStrings.includes(updatedQuestion.answerData[0].value)) updatedQuestion.answerData[0].correctStrings.push(updatedQuestion.answerData[0].value)
@@ -822,18 +714,14 @@ const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
                     const answerDiv = answerDivs[answerDivIndex];
                     let answerDivClass = answerDiv.getAttribute('class').toLowerCase()
                     
-                    //|| answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"]')?.type == 'radio'
                     updatedQuestion.answerData[answerDivIndex].correct ??= answerDivClass.includes('incorrect') ? false : answerDivClass.includes('correct') ? true : null;
                     if(updatedQuestion.answerData[answerDivIndex].correct != null) {
-                        //note that this is the specific feedback to the answer itself, not as a hole
+                        //note that this is the specific feedback to the answer itself, not as a whole
                         let answerOutcome = answerDiv.querySelector('div.specificfeedback')
                         if(answerOutcome != null){
                             updatedQuestion.answerData[answerDivIndex].reason = answerOutcome?.textContent
                         }
                     }    
-                    //set the checked value of the input to be what the discord bot changed it too
-                    // answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"]').checked = updatedQuestion.answerData[answerDivIndex].value
-                    
                 }
 
             }
@@ -857,33 +745,25 @@ const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
 
 const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, autoFillEverything=false) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
-    // await page.waitForTimeout(10 * 1000)
+    
     return await page.evaluate(async (scrapedQuestions, dbAnswers, autoFillEverything) => {
-        //add all the questions to this
+        //get all the questions on the current page
         const questionDivs = document.querySelectorAll('form div[id*="question"] div.content > div');
-        const hasAnswers = dbAnswers != {}
-        // so that if autofill is enabled it can 
+        // if it has answers is can set them correct, otherwise they will be null
+        const hasAnswers = dbAnswers != {};
+        //loop through each question
         for (const questionDivContent of questionDivs) {
             //get the name, it has a nested p or many but this should work better!
             const questionName = questionDivContent.querySelector('div.qtext').textContent;
             
             const currentdbAnswer = hasAnswers ? dbAnswers[questionName] : undefined
-            //prompt so what type, select one = one, multi and text I guess
-            //use this to determine how to get answer data
-            //'Select one'
 
+            //usually it's like Select One: or Choose Multiple: (that way the user knows what to do)
             const questionPrompt = questionDivContent.querySelector('div.prompt')?.textContent;
 
             //check if it is undefined before using it :/, not all have
             const questionImg = questionDivContent.querySelector('img')?.src;
 
-
-            // if (questionPrompt == 'Select one or more:') {
-            //     //they are checkboxes instead of radios
-            //     // but I think it is fine and it still works the same
-            // }
-            // this is how to do the correct strings, for the text object
-            // question.answerData[0].correctStrings = correctAnswers.correct;
             let textAnswer = questionDivContent.querySelector('span.answer input')
             let answerData = []
             let questionType = '';
@@ -904,19 +784,8 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
                     const label = answerDiv.querySelector('label').childNodes[1]?.textContent || answerDiv.querySelector('label')?.textContent // only get the label and don't include the answer number
                     const clickableButton = answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"] )')
                     // the new answer will be correct if in correct strings, false if in false strings, or null not in any
-                    const newAnswerCorrect = currentdbAnswer?.correct.some(correctString => correctString == label) ? true : currentdbAnswer?.incorrect.some(incorrectString => incorrectString == label) ? false : null
-                    //TODO put autofill everything in here, or if autofill everything reset the db answers
-                    // if(currentdbAnswer && autoFillEverything) {
-                    //     if(currentdbAnswer.correct.some(correctString => correctString == label)){
-                    //         clickableButton.value = true;
-                    //     }
-                    //     else if(currentdbAnswer.incorrect.some(incorrectString => incorrectString == label)){
-                    //         clickableButton.value = false;
-                    //     }
-                    //     //otherwise leave it as it was, unknown value :/, the only problem is 
-                    // }
-
-                    //TODo i need to change the value in here with that clickable button thing
+                    const newAnswerCorrect = currentdbAnswer?.correct.some(correctString => correctString == label) ? true : currentdbAnswer?.incorrect.some(incorrectString => incorrectString == label) ? false : null;
+                    
                     return {
                         //use array instead of answer number but it says A. and stuff with isn't even a number
                         answerNumber: answerDiv.querySelector('span.answernumber')?.textContent || answerNumber.toString(),
@@ -927,12 +796,11 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
                     };
 
                 });
-                //all the buttons should be the same type
+                //all the buttons should be the same type so only need the first to determine what type it is
                 questionType = answerData[0].type;
             }
 
 
-            //delete this later, trying to find out the names of the types
             scrapedQuestions.push({
                 questionName: questionName,
                 questionType: questionType,
@@ -942,7 +810,6 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             });
         }
         if(autoFillEverything) {
-            // scrapedQuestions = scrapedQuestions.map(question => GuessOrFillSpecificQuestion(question))
             for (const questionIndex in scrapedQuestions) {
                 //for some reason editing the question in the for of loop doesn't update it inside the
                 // actual scraped questions, so using the index and assigning it should work
@@ -950,14 +817,11 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
                 question = await GuessOrFillSpecificQuestion(question)
                 scrapedQuestions[questionIndex] = question
             }
-            // page.waitFor(20000)
         }
         return scrapedQuestions;
     }, scrapedQuestions, dbAnswers, autoFillEverything);
 }
 
-
-//It may potentially not load properly the first run through but meh
 const GoBackToStart = async (page) => {
     backButtonWasClicked = await page.evaluate(() => {
         let backButton = document.querySelector('form div.submitbtns > input[name="previous"]');
@@ -977,11 +841,11 @@ const GoBackToStart = async (page) => {
 
 }
 const GoToNextPageScrape = async (page, scrapedQuestions, updateDivs, dbAnswers={}, autoFillEverything=false) => {
-    //FINISH IS ALSO A NEXT BUTTON
+    //*FINISH IS ALSO A NEXT BUTTON
     nextButtonExists = await page.evaluate(() => {
         let nextButton = document.querySelector('form div.submitbtns > input[name="next"]');
         if (nextButton != null) {
-            // nextButton.click();
+            // don't click the next button in here, because we need to scrape first!
             return true;
         }
         else {
@@ -989,31 +853,30 @@ const GoToNextPageScrape = async (page, scrapedQuestions, updateDivs, dbAnswers=
         }
     });
     if(nextButtonExists) {
-        //TODO fix this up, scraped questions is updated here, and if db it will update everything and then edit in update question divs
+        //if we aren't updating the divs, just get the questions, if we aren't updating the divs, the dbAnswers will be passed usually
         if(!updateDivs || dbAnswers) {
-            // if updating correctness just edit the scrapedQuestions, other wise add the new scraped questions onto the thing
+            // if we are autofilling it will set the values of answers inside the question object, but won't directly update the buttons
             scrapedQuestions = scrapedQuestions.concat(await ScrapeQuestionDataFromDivs(page, [], dbAnswers, autoFillEverything))
         }
+        //and so if we are autofilling we want to also update the divs
         if(updateDivs || autoFillEverything){
-            //* DO NOT bother putting dbanswers in here, it was wayy too much confusion and was a huge waste of time
            await UpdateQuestionDivs(page, scrapedQuestions) 
-        //    await page.evaluate(() => document.querySelector('form div.submitbtns > input[name="next"]').click())
         }
+        //wait for the page to load and click the next button at the same time
         await Promise.all([
             page.waitForNavigation(),
             page.evaluate(() => document.querySelector('form div.submitbtns > input[name="next"]').click()),
         ])
-        //it needs to wait for navigation otherwise the click is undefined, but for some reason updateQuestionDivs sucks
-        // return true;
+        //it needs to wait for navigation otherwise the click is undefined
         return await GoToNextPageScrape(page, scrapedQuestions, updateDivs, dbAnswers, autoFillEverything)
     }
     else {
-        //then return them
+        //otherwise just return the scraped questions
         return scrapedQuestions;
     }
 }
 
-function GuessOrFillSpecificQuestion(question) {
+async function GuessOrFillSpecificQuestion(question) {
     if (question.questionType == 'text') {
         if(question.answerData[0].correctStrings.length > 0) {
             question.answerData[0].value =  question.answerData[0].correctStrings[0]
@@ -1064,7 +927,6 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
                 let correctedAnswers = await GetCorrectAnswersFromResultsPage(page, updatedQuestions)
                 // display the quiz summary for the last time with the corrected answers
                 return resolve(await DisplayQuizSummary(interaction, page, quizName, correctedAnswers, false));
-                // return resolve(updatedQuestions)
             }
             else if (i.customId == 'Back') {
                 // await i.update({ content: ' ' }); // just acknowledge the button click
@@ -1084,7 +946,6 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
             }
         });
         collector.on('end', collected => {
-            //maybe tell the person that the quiz has timed out if it hasn't loaded
             if (collected.size == 0) {
                 console.log('the submit view timed out');
                 interaction.editReply({ content: 'Timed out! Answers save when visiting overview screen!', components: [], files: [] });
@@ -1094,7 +955,7 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
     })
 }
 
-function CreateMoveRow(questionIndex, nextButtonLabel='Next') {
+async function CreateMoveRow(questionIndex, nextButtonLabel='Next') {
     let newMoveRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
@@ -1126,6 +987,7 @@ function CreateMoveRow(questionIndex, nextButtonLabel='Next') {
     return newMoveRow;
 }
 
+//Update a button in the rows when it is clicked, had to invent my own solution for discord.js V14 and then post it on stack overflow :)
 async function UpdateActionRowButtonsQuiz(i, inputButtonIds, answerResult, hasAnswer, radioButton=false, autoFilling=false) {
     let newActionRowEmbeds = i.message.components.map(oldActionRow => {
         //create a new action row to add the new data
