@@ -125,7 +125,7 @@ module.exports = {
                 const dataBaseAnswers = await FetchQuizFromDatabase(quiz_db, chosenQuiz.name)
                 
                 correctedAnswers = await DoQuiz(page, followUpMsg || interaction, chosenQuiz, dataBaseAnswers, autoFillEverything)
-                if(correctedAnswers == null) return;
+                if(correctedAnswers == null) return await browser.close();
 
                 //it will add the answers to the database (if it isn't null)
                 await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers?.questions)
@@ -606,8 +606,8 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
         collector.on('end', collected => {
             //maybe tell the person that the quiz has timed out if it hasn't loaded
             if(collected.size == 0) {
-                console.log("No button was pressed")
-                interaction.editReply({content: 'Timed out, answers not saved until you view the summary (overview)!', embeds: [], components: [], files: []})
+                console.log("Timed Out On Question")
+                return interaction.editReply({content: 'Timed out, answers not saved until you view the summary (overview)!', embeds: [], components: [], files: []})
             }
             else if (questionData.questionType != 'text') {
                 //update the question by button values accordingly
@@ -858,7 +858,6 @@ const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
 const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, autoFillEverything=false) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
     // await page.waitForTimeout(10 * 1000)
-
     return await page.evaluate(async (scrapedQuestions, dbAnswers, autoFillEverything) => {
         //add all the questions to this
         const questionDivs = document.querySelectorAll('form div[id*="question"] div.content > div');
@@ -893,9 +892,9 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
                 answerData = [{
                     answerNumber: 0,
                     correct: null,
-                    corectStrings: currentdbAnswer?.correct || [], 
+                    correctStrings: currentdbAnswer?.correct || [], 
                     label: questionDivContent.querySelector('label').textContent,
-                    type: questionDivContent.querySelector('span.answer input').type,
+                    type: 'text',
                     value: questionDivContent.querySelector('span.answer input').value // "erganomic design"
                     //returns 1 for some weird reason but oh well
                 }];
