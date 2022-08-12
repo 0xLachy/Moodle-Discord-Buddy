@@ -11,6 +11,7 @@ const UtilFunctions = require("../util/functions");
 */
 
 //TODO implement code for editing moodle profile
+// so that would mean there would be find and edit subcommands
 //.setRequired(true));
 const data = new SlashCommandBuilder()
 	.setName('moodleprofile')
@@ -34,6 +35,7 @@ module.exports = {
     category: "utility",
     usage: "first /login in DM's with the bot if you want to message someone (or if you are in a different course to the bot owner)", 
     permissions: [],
+    idLinked: false,
     devOnly: false,
 
     ...data.toJSON(),

@@ -26,6 +26,7 @@ const data = new SlashCommandBuilder()
 module.exports = { 
     usage: "help [command]", // The usage without the prefix
     // permissions: [],
+    idLinked: false,
     devOnly: false,
     // description: "Shows a list with all available commands", // The description of the commands
     category: "utility", // The category of the command (same name of the folder where it is)

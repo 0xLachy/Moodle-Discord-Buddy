@@ -98,6 +98,7 @@ module.exports = {
     category: "info",
     usage: "status 'person <personName>' OR 'leaderboard <secs:true/false>' OR 'filter <includes-string> and/or <last-online> and/or <flip:true/false>(flips last online)", 
     permissions: [],
+    idLinked: false,
     devOnly: false,
 
     ...data.toJSON(),
@@ -299,7 +300,7 @@ function CreateEmbedMessage(embedMessagesArr, personData, leaderboard=false, tit
                 personIndex++;  
             } while ((personIndex + 1) % 25 != 0)
         }
-        statusEmbed.setColor(colour);
+        statusEmbed.setColor(UtilFunctions.primaryColour);
         embedMessagesArr.push(statusEmbed); 
     }
 }

@@ -24,6 +24,7 @@ const data = new SlashCommandBuilder()
 module.exports = {
     category: "authorisation",
     permissions: [],
+    idLinked: false,
     devOnly: false,
 
     ...data.toJSON(),

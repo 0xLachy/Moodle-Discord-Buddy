@@ -1,7 +1,7 @@
 // const Discord = require("discord.js");
 const { Client, GatewayIntentBits, Partials, Collection, InteractionType } = require('discord.js');
 const slashcommands = require("./handlers/slashcommands");
-const { GetLoginsFromDatabase } = require("./util/functions")
+const { GetLoginsFromDatabase, loginGroups } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
 
@@ -85,13 +85,17 @@ client.on("interactionCreate", (interaction) => {
     //If the command is guild only and not inside guild
     if(slashcmd.guildOnly && !interaction.inGuild()) return;
 
-    // Logging what commands were used to the console whilst it works, its so unreadable lol
+    // make sure they are logged in if they want to do moodle
+    if(slashcmd.idLinked && !loginGroups.hasOwnProperty(interaction.user.id)) {
+        return interaction.reply(`You must be logged in to use **${interaction.commandName}**. You can log in here or in direct messages with this bot`)
+    }
+
+    // Logging what commands are used, if it has subcommand, add that
     let commandArgs = slashcmd.options.some(option => option.type == 1) ? interaction.options.getSubcommand() + ' ' : ''
+    // then add any args passed if it isn't the login command
     if(interaction.commandName != "login") commandArgs += `=> ${GetCommandArgs(interaction.options.data)}`
 
     console.log(`${interaction.user.username} used the command **${interaction.commandName}** ${commandArgs}`)
-    // console.log(`${interaction.user.username} used the command **${interaction.commandName}** ${ slashcmd?.options.some(option => option.type == 1) ? interaction.options.getSubcommand()  : interaction.options.data.map(option => `${option.name} : ${option.value}`).join(', ')}` +
-    // `${interaction.commandName != "login" && interaction.options.data[0]?.options != undefined ? ` => ${interaction.options.data[0].options.map(option => `${option.name} : ${option.value}`).join(', ') || '(default)'}` : ""}`)
     
     //member.permissions is a guild thing, maybe put something in for dev, like interaction.user.id == dev or something
     if(slashcmd.perms && !interaction.member.permissions.has(slashcmd.perm))

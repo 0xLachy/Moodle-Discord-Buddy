@@ -63,6 +63,7 @@ const data = new SlashCommandBuilder()
 module.exports = {
     category: "utility",
     permissions: [],
+    idLinked: true,
     devOnly: false,
     ...data.toJSON(),
     run: async (client, interaction) => {
@@ -84,12 +85,7 @@ module.exports = {
         //normal, cause 3 seconds isn't fast enough
         // await loginToMoodleReq(50); 
         await interaction.deferReply();
-        //Make sure the user is logged in
-        if(!UtilFunctions.loginGroups.hasOwnProperty(interaction.user.id)) {
-            await interaction.editReply("You must login first to use this feature, You can log in here or in direct messages with this bot")
-            //break out of this function early because they need to be logged in and they aren't
-            return;
-        }
+
         // const browser = await puppeteer.launch({ headless: false }) //slowMo:100
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
@@ -102,6 +98,7 @@ module.exports = {
             browser.close();
         })
         if(failedToLogin) return;
+        
         let recipientID = await UtilFunctions.NameToID(interaction, page, interaction.options.getString('name-or-id'))
         if (recipientID == null) { 
             await interaction.editReply('Recipient ID could not be found')
