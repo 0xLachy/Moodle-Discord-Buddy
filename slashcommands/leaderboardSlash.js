@@ -1,25 +1,13 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 const UtilFunctions = require("../util/functions");
-const { merge } = require('superagent');
 
 //TODO implement code for the role options and also todo, when those roles are added make sure not in dm
 //.setRequired(true));
 const data = new SlashCommandBuilder()
 	.setName('leaderboard')
 	.setDescription('Get leaderboard for the lismore course')
-    //.setDMPermission(false)
-    //.setDefaultPermission()
-    // .addIntegerOption(option =>
-    //     option.setName('term')
-    //         .setDescription('Optionally choose only 1 term')
-    //         .addChoices(
-    //             { name: 'Term 1', value: 0 },
-    //             { name: 'Term 2', value: 1 },
-    //             { name: 'Term 3', value: 2 },
-    //         )
-    // )
     .addBooleanOption(option =>
         option
             .setName("merge")
@@ -40,6 +28,23 @@ const data = new SlashCommandBuilder()
     )
     .addStringOption(option => option.setName('rig').setDescription('rig the score for a person e.g Harrison Baird = 12'));
 
+
+
+//The Roles for the leaderboard, an array so it can use index for status, like king is first and so on
+// the roles will be added in order up until index of the last place roles, 
+// you can add custom perms with perms: <their perms>
+const leaderBoardRoles = [
+    { name: 'SDD KING', color: "#F83E0C"/*, perms: [PermissionsBitField.Flags.PrioritySpeaker] */},  
+    { name: 'SDD ELDER', color: "#D9540B"}, 
+    { name: 'SDD KNIGHT', color: "#F07900"}, 
+    { name: 'SDD SOLDIER', color: "#D98C0B"},
+    { name: 'SDD SLACKER', color: "#4A412A"},
+]
+
+// taken from the end, in this case only sdd slacker will be the last place role
+const lastPlaceRolesCount = 1;
+
+//TODO when doing add roles, check that interaction.InGuild()
 module.exports = {
     category: "info",
     permissions: [],
@@ -87,7 +92,7 @@ module.exports = {
 
 async function FasterLeaderboard(page, chosenTerms, rigPerson=null, mergeResults=true){
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
-    leaderboardResults = {};
+    let leaderboardResults = {};
 
     for (termName of Object.keys(chosenTerms)){
         let termData = chosenTerms[termName]
@@ -231,5 +236,90 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
             embedMsg.addFields( { name: fieldName, value: msgString } )
         }
 
+    }
+}
+
+
+// ROLE STUFF =================>
+
+
+// returns true if created a new role otherwise returns false
+//every won't work, need a .some that works even after passing the test
+const CreateRole = async (interaction, newRole) => {
+    const { name, color, permissions } = newRole;
+    // const role = client.guilds.cache.find(r => r.name == "Test Role to give");
+
+    // await interaction.member.roles.add(role);
+    // if the role doesn't exist then add it!
+    if (!interaction.guild.roles.cache.find(role => role.name == newRole.name)) {
+        interaction.guild.roles.create({
+            name,
+            color,
+            permissions: permissions || [],
+            reason: 'Created to show rankings from the /leaderboard command'
+        }).catch(console.error); 
+    }
+
+}
+
+
+
+async function RemoveRoles(interaction) {
+    interaction.guild.roles.cache.each(role => {
+        //if the leaderboard roles contains the role, then get all the members and remove it
+        if(leaderBoardRoles.some(lbRole => lbRole.name == role.name)) {
+            interaction.guild.members.fetch().then(members => members.each(member => member.roles.remove(role)));
+        }
+    });
+}
+
+
+const GiveRolesFromLeaderboard = async (interaction, leaderboard) => {
+    // so the leaderboard is an arry of objects with { 'locianus': 42 }
+    const scoreGroups = {} 
+    for (const personObj of leaderboard) {
+        //get the persons score and their name 
+        const [ person, score ] = Object.entries(personObj)
+        // add them to the score group
+        scoreGroups[score] = (scoreGroups[score] || []).push(person)
+    }
+
+    const scoreGroupKeysInOrder = Object.keys(scoreGroups).sort((a, b) => b - a)
+
+    const personGroups = []
+    for (const scoreGroupKey of scoreGroupKeysInOrder) {
+        personGroups.push(scoreGroups[scoreGroupKey])
+    }
+
+    //TODO check that personGroups is actually in the write order and all that previous code worked
+    await RemoveRoles(interaction)
+    // create an embed message with all the roles created or something like that
+    if(leaderBoardRoles.filter(lbRole => await CreateRole(interaction, lbRole)).length > 0) { console.log('role(s) were created') }
+    
+    for (const pgIndex in personGroups) {
+       const personGroup = personGroups[pgIndex];
+
+        if(pgIndex == 0 && personGroup.length == 1) {
+            //they get the first role, which can only be give to a single person
+            //giveRole(personname, roleIndex)
+            // if the name isn't found they don't get the role, also add the result of this to an embed
+        } 
+        // if they are last place minus last place roles count, or more, give them one of the last place roles
+        else if(pgIndex >= (personGroups.length - 1) - lastPlaceRolesCount) {
+            // go reverse to give them their role
+        }
+    }
+}
+
+const GiveRole = async (interaction, personName, roleIndex) => {
+
+    personName = UtilFunctions.NicknameToRealName(personName);
+    const discordAcc = await interaction.guild.members.fetch().then(members => members.find(member => {
+        return member.nickname == personName || member.nickname == personName.split(" ")[0]
+    }))
+
+    if(discordAcc) {
+        const roleToGive = await interaction.guild.roles.cache.find(role => role.name == leaderBoardRoles[roleIndex])
+        await discordAcc.roles.add(roleToGive)
     }
 }

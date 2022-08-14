@@ -190,16 +190,18 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
         return new Promise((resolve, reject) => resolve('Successfully logged in as ' + discordUserId));
     }
 }
-const LogoutOfMoodle = async (discordUserId) => {
-    //TODO use Login.deleteOne() // deletes the first one that matches
-    Login.deleteOne({ discordId: discordUserId}, err => {
-        if(err) {
-            //todo tell the person there was an error
-            console.log(error)
-        }
-        else {
-            console.log(`${discordUserId} successfully logged out`)
-        }
+const LogoutOfMoodle = async (interaction) => {
+    const discordUserId = interaction.user.id;
+    // if they aren't even logged in yet, tell them so
+    if(loginGroups[discordUserId] == undefined) {
+        return await interaction.editReply('Couldn\'t log you out because you weren\'t logged in in the first place!')
+    }
+    Login.deleteOne({ discordId: discordUserId}).then(() => {
+        interaction.editReply('You Succesfully logged out!')
+        console.log(`${discordUserId} successfully logged out`)
+    }).catch((err) => {
+        interaction.editReply('Error Logging out of the database!')
+        console.log(err)
     })
     await DeleteSecuritykey(loginGroups[discordUserId].name, loginGroups[discordUserId].Securitykey)
     delete loginGroups[discordUserId]
@@ -397,6 +399,7 @@ const GetUserUrlByName = async (page, inputName) => {
     }, await NicknameToRealName(inputName))
 }
 
+//TODO if that person is logged in return their real name
 const NicknameToRealName = async (inputName) => {
     inputName = inputName.toLowerCase(); 
     for(nicknamePair of Object.entries(nicknames)){
@@ -530,45 +533,16 @@ async function SaveSecurityKey(moodleName, Securitykey) {
             }
         });
     }
-    // DeleteSecuritykey(moodleName, Securitykey)
-    // console.log(process.env)
-    // console.log(process)
-    // console.log(Securitykey)
-    // console.log(Buffer.from(process.env[moodleName], 'binary'))
-    // console.log(Buffer.from(Securitykey.toString()))
     //*this is the security key!!!!
     //Buffer.from(process.env[MoodleName], 'binary')
 
 }
 
+// deleting the security key from the .env file
 async function DeleteSecuritykey(moodleName, Securitykey) {
-    // const fileStream = fs.createReadStream('.env');
-    // console.log(fileStream.toString())
-    // const fileSTring = fileStream.toString()
-    // console.log('asetn')
-    console.log("CLAEEDN")
     const data = fs.readFileSync('.env', 'utf-8');
-    // const ip = "STRING_TO_REMOVE";
-    // const regString = `/${moodleName}[=].+?(?=\n)/`
-    // var find = '/foo/(' + regexp_quote( name ) + ')/bar';
-    console.log(`${moodleName}="${Securitykey.toString('binary')}"`)
     const newValue = data.replace(`\n${moodleName}="${Securitykey.toString('binary')}"`, '');
-    // console.log(newValue)
     fs.writeFileSync('.env', newValue, 'utf-8');
-    // const rl = readline.createInterface({
-    // input: fileStream,
-    // crlfDelay: Infinity
-    // });
-
-    // // Note: crlfDelay recognize all instances of CR LF
-    // // ('\r\n') in file as a single line break.
-
-    // for await (const line of rl) {
-    // // each line will be here as domain
-    // // create a write stream and append it to the file
-    // // line by line using { flag: a }
-
-    // }
 }
 module.exports = {
     getFiles,

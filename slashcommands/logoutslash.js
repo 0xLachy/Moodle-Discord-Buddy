@@ -14,10 +14,9 @@ module.exports = {
 
     ...data.toJSON(),
     run: async (client, interaction) => {
-
+        //defering because it might take some time to log you out, also I should return something like a name or a error saying you weren't logged in
         await interaction.deferReply();
-        UtilFunctions.LogoutOfMoodle(interaction.user.id)
-        interaction.editReply("If you were logged in, you have been logged out")
+        await UtilFunctions.LogoutOfMoodle(interaction)
     }
 }
 

@@ -137,7 +137,6 @@ module.exports = {
 }
 
 const SendComfirmationMessage = (interaction, page, recipientName, recipientImg) => {
-    console.log(" I am just before returning a promise")
     return new Promise(async (resolve, reject) => {
 		const confirmationEmbed = new EmbedBuilder()
 			.setColor(UtilFunctions.primaryColour)
@@ -159,7 +158,6 @@ const SendComfirmationMessage = (interaction, page, recipientName, recipientImg)
                 .setStyle(ButtonStyle.Success)
             )
         ;
-        console.log("created component")
         // const collector = await interaction.channel.createMessageComponentCollector({ time: 3000 });
         let channel = await interaction.channel
         //If the channel isn't inside the guild, you need to create a custom cd channel
@@ -263,7 +261,7 @@ const ReadMessages = async (interaction, page, recipientName, recipientImg) => {
         return new EmbedBuilder()
             .setColor(UtilFunctions.primaryColour)
             .setTitle(title)
-            .setURL(page.url)
+            .setURL(page.url())
             .setThumbnail(recipientImg)
             .setDescription('If you don\'t want people seeing this, you can read messages through DMS with this discord bot.');
     }

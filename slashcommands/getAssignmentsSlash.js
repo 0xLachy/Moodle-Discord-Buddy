@@ -200,7 +200,7 @@ function SendEmbedMessage(missingAssignments, interaction, personName, title="no
     embedMsg.setColor(colour);
 
     try{
-        interaction.editReply({ embeds: [embedMsg] });
+        interaction.editReply({ embeds: [embedMsg], components: [] });
 
     }
     catch(DiscordAPIError){
