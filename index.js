@@ -56,13 +56,13 @@ client.on("ready", async () => {
     mongoose.connect(process.env.MONGO_URI, {
         keepAlive: true
     })
-    console.log(`Loading ${client.slashcommands.size} slash commands`)
-    const guild = client.guilds.cache.get(guildId)
-    if (!guild){
-        return console.error("Target Guild not found")
-    }
-
     await GetLoginsFromDatabase();
+
+    console.log(`Loading ${client.slashcommands.size} slash commands`)
+    // const guild = client.guilds.cache.get(guildId)
+    // if (!guild){
+    //     return console.error("Target Guild not found")
+    // }
 
     await client.application.commands.set([...client.slashcommands.values()])
     // await client.application.commands.set([])

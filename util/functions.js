@@ -67,6 +67,12 @@ const nicknames = {
     "jebidiah": "jeb"
 } 
 
+//todo database nicknames format
+// const dbNicknames = {
+//     'lachlan': ['lachy', 'locianus', 'lociānus'],
+//     'harrison': ['harry', 'harrisonus', 'poohead']
+// }
+
 //USE LOGIN GROUPS TO GET ID
 const getFiles = (path, ending) => {
     return fs.readdirSync(path).filter(f=> f.endsWith(ending))
@@ -399,18 +405,22 @@ const GetUserUrlByName = async (page, inputName) => {
     }, await NicknameToRealName(inputName))
 }
 
-//TODO if that person is logged in return their real name
-const NicknameToRealName = async (inputName) => {
+//todo, when a person logs in, in their config, add their current name to their nicknames
+const NicknameToRealName = async (inputName, flipped=false) => {
     inputName = inputName.toLowerCase(); 
-    for(nicknamePair of Object.entries(nicknames)){
-        let [ nickname, trueName ] = nicknamePair;
-        if(inputName == nickname) { 
-            inputName = trueName;
-            break;
+    if(flipped) {
+        //returns **all** the nicknames, because there is only one trueName
+        //todo, later convert this so all nicknames are stored as an array or something
+        const personsNicknames = Object.entries(nicknames).filter(([nickname, trueName]) => inputName == trueName || inputName.split(' ')[0] == trueName).map(([nickname, trueName]) => nickname)
+        if(personsNicknames.length == 0) {
+            personsNicknames.push(inputName)
         }
+        return personsNicknames;
     }
-    //returns original name if the for loop didn't work
-    return inputName;
+    else {
+        //return the truename, otherwise return the inputName (which will be lowercase now)
+        return inputName = nicknames[inputName] ?? inputName;
+    }
 }
 
 async function UpdateActionRowButtons(i) {

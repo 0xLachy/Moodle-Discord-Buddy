@@ -32,17 +32,19 @@ const data = new SlashCommandBuilder()
 
 //The Roles for the leaderboard, an array so it can use index for status, like king is first and so on
 // the roles will be added in order up until index of the last place roles, 
-// you can add custom perms with perms: <their perms>
+//* you can add custom perms with perms: <their perms>
+//* if the role was already created in the server, the colors here won't matter
 const leaderBoardRoles = [
     { name: 'SDD KING', color: "#F83E0C"/*, perms: [PermissionsBitField.Flags.PrioritySpeaker] */},  
     { name: 'SDD ELDER', color: "#D9540B"}, 
     { name: 'SDD KNIGHT', color: "#F07900"}, 
     { name: 'SDD SOLDIER', color: "#D98C0B"},
     { name: 'SDD SLACKER', color: "#4A412A"},
+    { name: 'SDD SNOOZER', color: "#464441"}
 ]
 
 // taken from the end, in this case only sdd slacker will be the last place role
-const lastPlaceRolesCount = 1;
+const lastPlaceRolesCount = 2;
 
 //TODO when doing add roles, check that interaction.InGuild()
 module.exports = {
@@ -83,10 +85,27 @@ module.exports = {
         let leaderboardTitle = riggedTerm ? "Leaderboard For Selected Terms (totally not rigged :sweat_smile:)" : "Leaderboard For Selected Terms"; // could use += and add the total not rigged part but but yeah
         
         //The leaderboard is being sent in from fasterleaderboard return. then just add the other stuff
-        SendEmbedMessage(await FasterLeaderboard(page, chosenTerms, riggedTerm, mergeResults), interaction, mergeResults, leaderboardTitle)
+        const finalLeaderboard = await FasterLeaderboard(page, chosenTerms, riggedTerm, mergeResults);
+        SendEmbedMessage(finalLeaderboard, interaction, mergeResults, leaderboardTitle)
+        
+        const addRoles = await interaction.options.getBoolean('add-roles')
+        //if we aren't adding roles (because adding roles calls remove roles)
+        if(await interaction.options.getBoolean('remove-roles') && !addRoles) {
+            await RemoveRoles(interaction)
+            await interaction.followUp('Removed roles from people (it takes some time for discord api to remove them)')
+        }
+
+        if(addRoles && !riggedTerm) { 
+            if(!mergeResults) {
+                await interaction.followUp('The Leaderboard needs to be merged to add roles!')
+            }
+            else {
+                await GiveRolesFromLeaderboard(interaction, finalLeaderboard) 
+            }
+        }
         // }
         //Once its done, close the browser to stop the browsers stacking up
-        browser.close();
+        await browser.close();
     }
 }
 
@@ -175,7 +194,6 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
     }
     else { // otherwise loop through the terms, and set field name to be the term name
         for (const termResultName of Object.keys(leaderboardResults)) {
-            // console.log(termResultName);
             AddToLeaderboardResultToEmbed(leaderboardResults[termResultName], termResultName);
         }
     }
@@ -258,8 +276,9 @@ const CreateRole = async (interaction, newRole) => {
             permissions: permissions || [],
             reason: 'Created to show rankings from the /leaderboard command'
         }).catch(console.error); 
+        return true;
     }
-
+    return false;
 }
 
 
@@ -275,13 +294,18 @@ async function RemoveRoles(interaction) {
 
 
 const GiveRolesFromLeaderboard = async (interaction, leaderboard) => {
-    // so the leaderboard is an arry of objects with { 'locianus': 42 }
+    // so the leaderboard is an arry of objects with { 'locianus': 42, '}
     const scoreGroups = {} 
-    for (const personObj of leaderboard) {
-        //get the persons score and their name 
-        const [ person, score ] = Object.entries(personObj)
-        // add them to the score group
-        scoreGroups[score] = (scoreGroups[score] || []).push(person)
+    for (const person in leaderboard) {
+        const score = leaderboard[person]
+        // add them to the score group, this syntax doesn't work :/
+        // scoreGroups[score] = (scoreGroups[score] || []).push(person)
+        if(!scoreGroups[score]) {
+            scoreGroups[score] = []
+        }
+
+        scoreGroups[score].push(person)
+        // scoreGroups[score] = Array.isArray(scoreGroups[score]) ? scoreGroups.push('')
     }
 
     const scoreGroupKeysInOrder = Object.keys(scoreGroups).sort((a, b) => b - a)
@@ -290,36 +314,95 @@ const GiveRolesFromLeaderboard = async (interaction, leaderboard) => {
     for (const scoreGroupKey of scoreGroupKeysInOrder) {
         personGroups.push(scoreGroups[scoreGroupKey])
     }
-
-    //TODO check that personGroups is actually in the write order and all that previous code worked
-    await RemoveRoles(interaction)
-    // create an embed message with all the roles created or something like that
-    if(leaderBoardRoles.filter(lbRole => await CreateRole(interaction, lbRole)).length > 0) { console.log('role(s) were created') }
     
-    for (const pgIndex in personGroups) {
-       const personGroup = personGroups[pgIndex];
+    // removing roles from the people, (not deleting them though)
+    await RemoveRoles(interaction)
 
+    //create the role if the role doesn't exist yet in the discord server
+    const createdRoleNames = []
+    for (const lbRole of leaderBoardRoles) {
+        if(await CreateRole(interaction, lbRole)) {
+            createdRoleNames.push(`name: \`${lbRole.name}\` color: \`${lbRole.color}\``)
+        }
+    }
+    
+    if(createdRoleNames.length > 0) {
+        interaction.followUp(`The Following Roles Were Created: \n${createdRoleNames.join('\n')}`)
+    }
+
+    const RolesGivenInfo = {}
+    const beginningOfLastPlace = personGroups.length - lastPlaceRolesCount;
+    const positiveRoleAmount = (leaderBoardRoles.length - 1 ) - lastPlaceRolesCount; // - 1 because of zero indexing
+
+    //If you are reading this, you're a king!
+    let king = false;
+
+    //todo rewrite this, so there can be multiple kings, like what is done for last place 
+    for (let pgIndex = 0; pgIndex < personGroups.length; pgIndex++) {
+        const personGroup = personGroups[pgIndex];
+        const roleIndex = king ? pgIndex : pgIndex + 1
         if(pgIndex == 0 && personGroup.length == 1) {
             //they get the first role, which can only be give to a single person
-            //giveRole(personname, roleIndex)
-            // if the name isn't found they don't get the role, also add the result of this to an embed
+            await GiveRoleAndAddToInfo(personGroup, 0)
+            king = true;
         } 
+        else if(roleIndex <= positiveRoleAmount){
+            await GiveRoleAndAddToInfo(personGroup, roleIndex)
+        }
         // if they are last place minus last place roles count, or more, give them one of the last place roles
-        else if(pgIndex >= (personGroups.length - 1) - lastPlaceRolesCount) {
-            // go reverse to give them their role
+        else if(roleIndex >= beginningOfLastPlace) {
+            // Using the Reverse Index to give them their roll
+            await GiveRoleAndAddToInfo(personGroup, (leaderBoardRoles.length - 1) - ((personGroups.length - 1) - roleIndex))
+            //leaderBoardRoles.length - 1 is the very last index, take away the current index thing
+        }
+    }
+    // create the embed to send
+    const roleSummaryEmbed = new EmbedBuilder()
+        .setColor(UtilFunctions.primaryColour)
+        .setTitle('Roles Given:')
+        .setDescription('Takes the names from the leaderboard and tries to find the equivalent discord accounts to give the roles to.')
+        .addFields(Object.entries(RolesGivenInfo).map(([name, roleData]) => {
+            return {
+                name,
+                // basically returns Given => `Astaroth, Dagan, Mammon, Azazel` Unfound => `Maloch`
+                value: Object.entries(roleData).map(([success, people]) => `${success} => \`${people.join(', ')}\``).join(', ')
+            }
+        }))
+    return await interaction.followUp({embeds: [roleSummaryEmbed]})
+
+    async function GiveRoleAndAddToInfo(personGroup, roleIndex) {
+        const currentRoleInfo = (RolesGivenInfo[leaderBoardRoles[roleIndex].name] = {})
+        for (const personName of personGroup) {
+            // convert their name to their nickname
+            const nicknames = await UtilFunctions.NicknameToRealName(personName, true);
+            const discordName = await GiveRole(interaction, nicknames, roleIndex);
+            if(discordName) {
+                if(!currentRoleInfo['Given']) currentRoleInfo['Given'] = [];
+                currentRoleInfo['Given'].push(`${discordName}${!nicknames.includes(discordName.toLowerCase()) ? ` (${nicknames.join(', ')})` : ''}`)
+            }
+            else {
+                if(!currentRoleInfo['Unfound']) currentRoleInfo['Unfound'] = [];
+                // if they have a different nickname, add that to the string
+                currentRoleInfo['Unfound'].push(`${personName}${!nicknames.includes(personName.toLowerCase()) ? ` (${nicknames.join(', ')})` : ''}`)
+            }
         }
     }
 }
 
-const GiveRole = async (interaction, personName, roleIndex) => {
-
-    personName = UtilFunctions.NicknameToRealName(personName);
+const GiveRole = async (interaction, potentialNames, roleIndex) => {
+    let LCMemberName = null;
     const discordAcc = await interaction.guild.members.fetch().then(members => members.find(member => {
-        return member.nickname == personName || member.nickname == personName.split(" ")[0]
+        // if their name is inside the nicknames, or their first name
+        LCMemberName = member?.nickname?.toLowerCase() || member?.username?.toLowerCase() || null;
+        // don't know why but this does return the discord account
+        return LCMemberName ? potentialNames.includes(LCMemberName) || potentialNames.some(pName => pName.split(' ')[0] == LCMemberName) : null;
     }))
-
     if(discordAcc) {
-        const roleToGive = await interaction.guild.roles.cache.find(role => role.name == leaderBoardRoles[roleIndex])
-        await discordAcc.roles.add(roleToGive)
+        const roleToGive = await interaction.guild.roles.cache.find(role => role.name == leaderBoardRoles[roleIndex].name)
+        //not awaiting because it takes some time to give the actual role and it can be done in the background
+        discordAcc.roles.add(roleToGive)
+        return LCMemberName;
     }
+    //if it didn't return true already
+    return null;
 }

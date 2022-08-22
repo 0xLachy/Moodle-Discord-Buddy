@@ -361,11 +361,14 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
         const questionData = scrapedQuestions[questionIndex]
         let quizStartEmbed = new EmbedBuilder()
             .setColor(UtilFunctions.primaryColour)
-            .setTitle(questionData.questionName)
+            .setTitle(questionData.questionName.length <= 256 ? questionData.questionName : `Question ${questionIndex}`)
             // .setURL(page.url())
             // .setThumbnail(recipientImg)
             .setDescription(questionData.questionPrompt || 'Type the answer into this channel');
         ;
+        if(questionData.questionName.length > 256) {
+            quizStartEmbed.addFields({ name: 'Quiz Title', value: questionData.questionName})
+        }
         let quizImgAttachment;
         // do the image if the question has one
         if (questionData.questionImg != undefined) {
