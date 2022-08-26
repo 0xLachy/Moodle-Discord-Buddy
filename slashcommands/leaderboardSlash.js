@@ -90,12 +90,12 @@ module.exports = {
         
         const addRoles = await interaction.options.getBoolean('add-roles')
         //if we aren't adding roles (because adding roles calls remove roles)
-        if(await interaction.options.getBoolean('remove-roles') && !addRoles) {
+        if(await interaction.options.getBoolean('remove-roles') && !addRoles && interaction.inGuild()) {
             await RemoveRoles(interaction)
             await interaction.followUp('Removed roles from people (it takes some time for discord api to remove them)')
         }
 
-        if(addRoles && !riggedTerm) { 
+        if(addRoles && !riggedTerm && interaction.inGuild()) { 
             if(!mergeResults) {
                 await interaction.followUp('The Leaderboard needs to be merged to add roles!')
             }

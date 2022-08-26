@@ -634,7 +634,7 @@ const DisplayQuizzes = async (interaction, quizzes) => {
         collector.on('collect', async i => {
             if (i.customId == 'Quit') {
                 interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] })
-                resolve(null)
+                return resolve(null)
             }
             await i.update({ content: `Going to ${i.values.join(', ')} to get quiz questions and attempt now!`, embeds: [], components: []})
            

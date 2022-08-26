@@ -1,6 +1,7 @@
 // const Discord = require("discord.js");
 const { Client, GatewayIntentBits, Partials, Collection, InteractionType } = require('discord.js');
 const slashcommands = require("./handlers/slashcommands");
+const { FixConfigFiles } = require("./slashcommands/configSlash")
 const { GetLoginsFromDatabase, loginGroups } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
@@ -56,8 +57,12 @@ client.on("ready", async () => {
     mongoose.connect(process.env.MONGO_URI, {
         keepAlive: true
     })
+    console.log('Logging Into The Database:')
     await GetLoginsFromDatabase();
 
+    //fix config files if you made changes to the prefab for the database
+    await FixConfigFiles();
+    
     console.log(`Loading ${client.slashcommands.size} slash commands`)
     // const guild = client.guilds.cache.get(guildId)
     // if (!guild){
