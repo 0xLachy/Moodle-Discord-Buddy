@@ -1,18 +1,16 @@
-const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel} = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const UtilFunctions = require("../util/functions");
 const mongoose = require('mongoose');
-const { config } = require('dotenv');
 
 const maxNicknames = 5;
-//*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices are not added to the database
+//*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices & function are not added to the database
+//* function changes the normal input
 //choices shuold be in discord select menu format
 // otherwise they will be used as buttons on the menu itself and it is limited to probably like max 5 idk
-//*TODO { SELECTED } cycle through all the booleans at once, like display them all, click next and it shows select menu instead 
 //TODO when you click the reset button it brings up a select menu and you chooose all the things that you want to reset,
 
 
 //TODO if the settings are modified, the schema won't work to fetch the old configs, so work out a way to update old configs
-//? like maybe add in an option to the slash command itself called **fix-configs** that uses a schema with settings info as just a {}?
 // like it will ask about name, nicknames, and the other settings topics. also have a button that says 'all' and another that says 'cancel'
 const settingsInfo = {
     general: {
@@ -42,6 +40,7 @@ const settingsInfo = {
         SendAmount: { type: Number, min: 1, max: 100, default: 1, info: 'The default amount of times to send that message to someone'},
         ShowSent: { type: Boolean, default: false, info: 'When reading messages, show the ones you sent by default'},
         ShowReceived: { type: Boolean, default: true, info: 'When reading messages, show the ones others sent to you by default'},
+        Ephemeral: { type: Boolean, default: false, info: 'Only shows the result to you, deletes embed when you close discord, best way is probably this false and dm the bot'}
     },
     courses: {
         title: 'Courses Settings',
@@ -51,9 +50,8 @@ const settingsInfo = {
     config: {
         title: 'Configuration Settings',
         info: 'Settings for the settings!',
-        MessageCollection: { type: Boolean, default: true, info: 'When editing the config, send in next or quit instead of needing to hit the buttons!'},
         MultiBoolean: { type: Boolean, default: true, info: 'When editing config, display multiple booleans at once or just the current value selected.'},
-        DeleteSettingMessages: { type: Boolean, default: true, info: '(Only deletes inside guild) When you send in messages to edit config, delete them once they are passed (only deletes until you type quit or hit the quit button)'},
+        DeleteSettingMessages: { type: Boolean, default: true, info: '(Only deletes inside guild) When you send in messages to edit config, delete them once they are passed'},
     },
 }
 
@@ -85,28 +83,14 @@ const config_db = mongoose.createConnection(process.env.MONGO_URI, {
 
 const Config = config_db.model('Configs', configSchema, 'Configs')
 
-
 //When you modify the config settings up the top run this to make sure the user config settings line up
 //*If you want to change the type, delete the var, run script, add var back with wanted type and run again
 // there is now way to save prefab types to database so I couldn't check for that :/
 // the typeof fix only returned either 'function' or 'object' for everything
 const FixConfigFiles = async () => {
-    // console.log(Object.fromEntries(Object.entries(configSettings).map(([configType, configTypeVals]) => {
-    //     return [configType, Object.fromEntries(Object.entries(configTypeVals).map(([cfgName, cfgValue]) => [cfgName, mongoose.Schema.Types.Mixed]))]
-    // })))
     const configPrefebSchema = new mongoose.Schema({name: { type: String, default: 'Prefab' }, settings: {} });
-    // const configPrefebSchema = new mongoose.Schema({name: { type: String, default: 'Prefab' }, settings: Object.fromEntries(Object.entries(configSettings).map(([configType, configTypeVals]) => {
-    //     return [configType, Object.fromEntries(Object.entries(configTypeVals).map(([cfgName, cfgValue]) => [cfgName, Object]))]
-    // }))})
-
     const ConfigPrefab = config_db.model('Configs', configPrefebSchema, 'Configs')
     let configPrefab = await ConfigPrefab.find({ name: 'Prefab'})
-
-    //'function' for everything... FOR F*CKS SAKE
-    // configPrefab = new ConfigPrefab({ settings: Object.fromEntries(Object.entries(configSettings).map(([configType, configTypeVals]) => {
-    //     return [configType, Object.fromEntries(Object.entries(configTypeVals).map(([cfgName, cfgValue]) => { const {type, ...cfgValues} = cfgValue; return [cfgName, {type: typeof type, ...cfgValues}]}))]
-    // }))})
-    // return console.log(configPrefab)t
 
     if(configPrefab.length > 0) {
         configPrefab = configPrefab[0]
@@ -244,7 +228,6 @@ module.exports = {
         // pop to remove last elements, then unshift to put the name in the start
         // let userConfig = await GetConfigFromDatabase(interaction.user.id)
         // if null create new config
-        //TODO fix the nicknames thing, I think though it only adds the nicknames if it is nwe
         let userConfig = await CreateOrUpdateConfig({ name: null, discordId: interaction.user.id, nicknames: [ interaction?.member?.nickname, interaction.user.username ].filter(name => name != null).map(name => name.toLowerCase())})
         // console.log(userConfig)
 
@@ -264,6 +247,10 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
     return new Promise(async (resolve, reject) => {
         const currentSettings = userConfig.settings[settingName]
         const currentSettingsInfo = settingsInfo[settingName]
+        const settingsEntries = Object.entries(currentSettings)
+        const selectedIsBool = typeof settingsEntries[settingIndex][1] == 'boolean'
+        //For multiBool thing
+        const startInd = settingIndex == 0 ? 0 : settingsEntries.length - 1 == settingIndex ? settingIndex - 2 : settingIndex - 1;
 
         const currentSettingEmbed = new EmbedBuilder()
         .setColor(UtilFunctions.primaryColour)
@@ -272,7 +259,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
             Object.entries(currentSettings).map(([name, value], index) => { 
                 const info = Object.values(currentSettingsInfo).filter(value => typeof value == 'object')[index].info;
                 // display all the setting items, show selected on the one selected and display info and then on new line what they have in the config there
-                return { name: `${name.split(/(?=[A-Z])/).join(' ')}${settingIndex == index ? ' [ SELECTED ]' : ''}`, value: `${info ? info + '\n' : ''}**value: ${value}**` } 
+                return { name: `${name.split(/(?=[A-Z])/).join(' ')}${settingIndex == index ? ' [ SELECTED ]' : userConfig.settings.config.MultiBoolean && selectedIsBool && typeof value == 'boolean' && index >= startInd && index < startInd + 3 ? ' { SELECTED }' : ''}`, value: `${info ? info + '\n' : ''}**value: ${value}**` } 
             })
         );
         if(currentSettingsInfo.info) {
@@ -286,16 +273,34 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
         //filter out the title and the info because they are strings and not part of it
         const choiceInfo = Object.values(currentSettingsInfo).filter(setting => typeof setting == 'object')[settingIndex];
         const [ choiceName, choiceValue ] = Object.entries(currentSettings)[settingIndex];
-        const moveRow = await CreateMoveRow(settingIndex == 0, settingIndex == Object.keys(currentSettings).length - 1)
+        const moveRow = await CreateMoveRow(settingIndex == 0, settingIndex == settingsEntries.length - 1)
         const inputActionRow = new ActionRowBuilder();
         if(choiceInfo.type === Boolean) {
            //create 1 button and have green for selected and red for false? 
-                inputActionRow.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('Boolean')
-                        .setLabel(choiceName) // the title of the thing
-                        .setStyle(choiceValue ? ButtonStyle.Success : ButtonStyle.Danger) // red back 
-                );
+        if(userConfig.settings.config.MultiBoolean) {
+            // so basically after start index allows 3 buttons then that's it!
+            inputActionRow.addComponents(
+                //* max is 5 buttons in one row I think, but 3 looks better
+                ...settingsEntries.reduce((buttons, [name, value], currentIndex) => {
+                    //if it's within the prev and end indexes
+                    if(typeof value == 'boolean' && currentIndex >= startInd && currentIndex < startInd + 3) {
+                        buttons.push( new ButtonBuilder()
+                        .setCustomId(`Boolean${name}`)
+                        .setLabel(name)
+                        .setStyle(value ? ButtonStyle.Primary : ButtonStyle.Secondary))
+                    }
+                    return buttons
+                }, [])
+            )
+        }
+           else {
+               inputActionRow.addComponents(
+                   new ButtonBuilder()
+                       .setCustomId(`Boolean${choiceName}`)
+                       .setLabel(choiceName) // the title of the thing
+                       .setStyle(choiceValue ? ButtonStyle.Primary : ButtonStyle.Secondary)
+               );
+           }
         }
         else if(choiceInfo.type === Number) {
             if(choiceInfo.choices) {
@@ -362,8 +367,8 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                 // I need to redo the values now that it has changed, may aswell just reload everything as it's easier :P
                 return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex, i))
             }
-            else if(i.customId == 'Boolean') {
-                currentSettings[Object.keys(currentSettings)[settingIndex]] = !currentSettings[Object.keys(currentSettings)[settingIndex]];
+            else if(i.customId.includes('Boolean')) {
+                currentSettings[i.customId.replace('Boolean', '')] = !currentSettings[i.customId.replace('Boolean', '')];
                 return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex, i))
             }
             else if(i.customId.includes('Number')) {
@@ -392,7 +397,6 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
             }
         });
 
-        // works for every one
         msgCollector.on('collect', async m => {
             const inputCommand = m.content.toLowerCase();
             if(inputCommand == 'quit') {
@@ -404,7 +408,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                 userConfig.save();
                 const reply = await interaction.followUp({content: 'Saved!', fetchReply: true})
                 reply.delete(3000)
-                if(interaction.inGuild()) { m.delete() };
+                if(interaction.inGuild() && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
             }
             else if(inputCommand == 'next' && settingIndex != Object.keys(currentSettings).length - 1) {
                 StopCollecting()
@@ -449,7 +453,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                 channelResponse = true;
                 collector.stop();
                 msgCollector.stop();
-                if(interaction.inGuild()) { m.delete() };
+                if(interaction.inGuild() && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
             }
         });
     })
@@ -463,7 +467,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
             .setTitle('Settings')
             .setDescription('This is an overview of the the settings, send your nickname to this channel bellow, click the button to change your real name instead. ' +
                 'There are only 3 nicknames allowed, and there can\'t be duplicates, when you add a new nickname it is inserted at the start and removes the old third one\n' +
-                'Note -- if you edit config settings, save and rerun the command for changes to take effect')
+                'The reset button will open up a menu where you can choose the settings you would like to reset to default')
             .addFields(
                 { name: 'Name On Lismore', value: `${userConfig.name}` },
                 { name: 'Nicknames', value: `[${userConfig.nicknames.join(', ')}]` }
@@ -477,21 +481,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
                     .addOptions(Object.keys(userConfig.settings).map(label => { return { label, value: label }; }))
             );
 
-        const buttonRow = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('Quit')
-                    .setLabel('Quit')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId('Name')
-                    .setLabel(editingName ? 'Editing Lismore name' : 'Editing Nicknames')
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId('Save')
-                    .setLabel('Save')
-                    .setStyle(ButtonStyle.Success),
-            )
+        const buttonRow = CreateButtonRow()
 
         await interaction.editReply({ content: ' ', embeds: [settingsOverviewEmbed], components: [selectRow, buttonRow] });
         const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
@@ -506,13 +496,19 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
         collector.on('collect', async (i) => {
             if (i.customId == 'Quit') {
                 StopCollecting();
-                await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] });
+                const quitRow = CreateButtonRow(true)
+                await interaction.editReply({ components: [quitRow] });
                 return resolve(userConfig, justSaved);
             }
             else if (i.customId == 'Name') {
                 StopCollecting();
                 i.deferUpdate();
                 return resolve(await CreateSettingsOverview(interaction, userConfig, !editingName))
+            }
+            else if (i.customId == 'Reset') {
+                StopCollecting();
+                i.deferUpdate();
+                return resolve(await ResetSettingsOverview(interaction, userConfig))
             }
             else if (i.customId == 'Save') {
                 i.deferUpdate();
@@ -562,13 +558,214 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
             }
         });
 
+        function CreateButtonRow(disabled=false) {
+            return new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('Quit')
+                        .setLabel('Quit')
+                        .setDisabled(disabled)
+                        .setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder()
+                        .setCustomId('Reset')
+                        .setLabel('Reset')
+                        .setDisabled(disabled)
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId('Name')
+                        .setLabel(editingName ? 'Editing Lismore name' : 'Editing Nicknames')
+                        .setDisabled(disabled)
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('Save')
+                        .setLabel('Save')
+                        .setDisabled(disabled)
+                        .setStyle(ButtonStyle.Success)
+                );
+        }
+
         function StopCollecting(m) {
             channelResponse = true;
             collector.stop();
             msgCollector.stop();
-            if(interaction.inGuild() && m) { m.delete() };
+            if(interaction.inGuild() && m && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
         }
     });
+}
+
+const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic, userConfig) => {
+    return new Promise(async (resolve, reject) => {
+        let resetAllSettings = false;
+        if(!userConfig) {
+            userConfig = oldUserConfig;
+        }
+        let justSaved = false;
+        const reSettingsEmbed = new EmbedBuilder()
+            .setColor(UtilFunctions.primaryColour)
+            .setTitle('Reset Settings Overview')
+            .setDescription('Choose which settings you want to reset')
+            .addFields(
+                { name: 'Name On Lismore', value: `${userConfig.name}` },
+                { name: 'Nicknames', value: `[${userConfig.nicknames.join(', ')}]` }
+            );
+        const selectRow = new ActionRowBuilder();
+        if(resettingTopic) {
+            reSettingsEmbed.addFields({ name: `Current`, value: resettingTopic})
+
+            selectRow.addComponents(
+                new SelectMenuBuilder()
+                .setCustomId('Select')
+                .setPlaceholder('Nothing selected')
+                .setMaxValues(resettingTopic ? Object.keys(userConfig.settings[resettingTopic]).length : 1)
+                .addOptions(
+                    Object.entries(userConfig.settings[resettingTopic]).map(([label, lblValue]) => {
+                        return { label, description: `Current Value: ${lblValue instanceof Array ? lblValue.join('') || '[]' : lblValue}`, value: label}
+                }))
+            );
+        }
+        else {
+            selectRow.addComponents(
+                new SelectMenuBuilder()
+                    .setCustomId('Select')
+                    .setPlaceholder('Nothing selected')
+                    .addOptions(
+                        {
+							label: 'Name',
+							description: `reset your name (${userConfig.name})`,
+							value: 'name',
+						},
+                        {
+							label: 'Nicknames',
+							description: `reset your nicknames`,
+							value: 'nicknames',
+						},
+                    )
+                    .addOptions(Object.keys(userConfig.settings).map(label => { return { label, value: label, description: 'goes into sub-menu' }; }))
+            );
+        }
+
+        const buttonRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('Cancel')
+                    .setLabel('Cancel')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('Done')
+                    .setLabel('Done')
+                    .setStyle(ButtonStyle.Success),
+            );
+        
+        if(!resettingTopic) {
+            buttonRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId('All')
+                    .setLabel('All')
+                    .setStyle(ButtonStyle.Danger),
+            )
+        }
+        await interaction.editReply({ content: ' ', embeds: [reSettingsEmbed], components: [selectRow, buttonRow] });
+        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
+        let channelResponse = false;
+        //make sure that it is the right person using the buttons and select menus
+        const filter = i => i.user.id === interaction.user.id;
+        const msgFilter = m => m.author.id === interaction.user.id
+
+        const collector = await channel.createMessageComponentCollector({ filter, time: 180 * 1000 });
+        const msgCollector = await channel.createMessageCollector({ filter: msgFilter, time: 180 * 1000 });
+
+        collector.on('collect', async (i) => {
+            if(i.customId == 'Cancel') {
+                StopCollecting();
+                i.deferUpdate()
+                return resolve(await CreateSettingsOverview(interaction, oldUserConfig))
+            }
+            else if(i.customId == 'Done') {
+                StopCollecting();
+                i.deferUpdate()
+                return resolve(await CreateSettingsOverview(interaction, userConfig))
+            }
+            else if(i.customId == 'All') {
+                if(resetAllSettings) {
+                    const reply = await interaction.followUp({content: 'You Already Reset Settings!', fetchReply: true})
+                    return reply.delete(7500)
+                }
+                resetAllSettings = true;
+
+                StopCollecting();
+                i.deferUpdate()
+                
+                for (const settingTopic of Object.keys(userConfig.settings)) {
+                    for (const itemToReset of Object.keys(userConfig.settings[settingTopic])) {
+                        //use settingsInfo to find out the default values and reset them to that
+                        userConfig.settings[settingTopic][itemToReset] = settingsInfo[settingTopic][itemToReset].default 
+                    }
+                }
+                const reply = await interaction.followUp({content: 'Reset All Settings!', fetchReply: true})
+                await reply.delete(3000)
+                return resolve(await CreateSettingsOverview(interaction, userConfig))
+            }
+            else if(i.customId == 'Select') {
+                StopCollecting();
+                i.deferUpdate();
+                if(resettingTopic) {
+                    for (const itemToReset of i.values) {
+                        //use settingsInfo to find out the default values and reset them to that
+                       userConfig.settings[resettingTopic][itemToReset] = settingsInfo[resettingTopic][itemToReset].default 
+                    }
+                }
+                else if(i.values[0] == 'name'){
+                    userConfig['name'] = null;
+                }
+                else if(i.values[0] == 'nicknames'){
+                    userConfig['nicknames'] = [];
+                }
+                else {
+                    //we have a setting topic now
+                    return resolve(await ResetSettingsOverview(interaction, oldUserConfig, i.values[0], userConfig));
+                }
+                return resolve(await ResetSettingsOverview(interaction, oldUserConfig, resettingTopic, userConfig))
+            }
+            else{
+                //it means it was one of the select menu items prolly
+                i.deferUpdate();
+                console.log(`The id of the button clicked (${i.customId}) was not coded for (ln 660)`)
+            }
+        })
+
+        msgCollector.on('collect', async m => {
+            const inputCommand = m.content.replace(/[^\w\s]/gi, '').toLowerCase();
+            if(inputCommand == 'quit') {
+                StopCollecting(m);
+                await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] });
+                return resolve(userConfig);
+            }
+            else if(inputCommand == 'cancel') {
+                StopCollecting(m);
+                return resolve(await CreateSettingsOverview(interaction, oldUserConfig))
+            }
+            else if(inputCommand == 'save') {
+                if(justSaved === false) { userConfig.save() }
+                justSaved = true;
+                const reply = await interaction.followUp({content: 'Saved!', fetchReply: true})
+                await reply.delete(3000)
+            }
+        });
+        collector.on('end', collected => {
+            if (collected?.size == 0 && !channelResponse) {
+                // If they ran out of time to choose just return nothing
+                interaction.editReply({ content: "Interaction Timed Out (You didn't choose anything for 180 seconds), re-run the command again", embeds: [], components: [] });
+                return resolve(userConfig);
+            }
+        });
+
+        function StopCollecting(m) {
+            channelResponse = true;
+            collector.stop();
+            msgCollector.stop();
+            if(interaction.inGuild() && m && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
+        }
+    });  
 }
 
 const CreateMoveRow = async (disableBack=false, disableNext=false) => {
