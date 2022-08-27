@@ -4,18 +4,10 @@ const UtilFunctions = require("../util/functions");
 const mongoose = require('mongoose')
 require("dotenv").config()
 
-const repeatAmount = 2; 
 let autoSubmit = false;
 let showHints = true;
 
 //TODO maybe on displayQuizzes thing have a do all unfinished button
-// that will only work for a term each because you only select one term to get the quizzes from
-// otherwise there would probably be too many quizzes to scroll through
-//TODO maybe implement a user settings thing that gets saved to the database!!!
-//Maybe it can be a settings slash command where it then shows a select menu for which type of settings you want, e.g quiz settings
-// then those can be the default settings and they get passed into the function when it is called, and it would only be for people who are logged in
-// Settings: { RepeatThreshold: 80%, ShowAlreadyCompletedQuizzes: True }
-//Like I could have the repeat threshold be custom, like some may want if it is 80% or others 100% 
 const data = new SlashCommandBuilder()
 	.setName('quiz')
 	.setDescription('Slash command to handle moodle users, to get their profile data')
@@ -31,11 +23,17 @@ const data = new SlashCommandBuilder()
             .setDescription("Swap overview button to become a submit button instead, submits straight away on autofill")
             .setRequired(false)
     )
-    .addBooleanOption(option =>
+    .addIntegerOption(option =>
         option
-            .setName('repeat')
-            .setDescription("repeat the quiz after getting the correct answers (only repeats if not 100%, once)")
+            .setName('repeat-amount')
+            .setDescription('repeats until above the threshold (in config default 90%)')
             .setRequired(false)
+            .addChoices(
+				{ name: '1', value: 1 },
+				{ name: '2', value: 2 },
+				{ name: '3', value: 3 },
+                { name: '5', value: 5 },
+			)
     )
     .addBooleanOption(option =>
         option
@@ -64,13 +62,13 @@ module.exports = {
     devOnly: false,
 
     ...data.toJSON(),
-    run: async (client, interaction) => {
+    run: async (client, interaction, config) => {
         await interaction.deferReply(/*{ephemeral: true}*/);
-
         // const browser = await puppeteer.launch({ headless: false })
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
         
+        const quizConfig = config?.settings['quiz']
         //Add the autofill function to the page at the start of the script, 
         await page.exposeFunction("GuessOrFillSpecificQuestion", GuessOrFillSpecificQuestion);
 
@@ -96,18 +94,20 @@ module.exports = {
         //if they don't say if they want it autofilled, it will be false
         const autoFillEverything = await interaction.options.getBoolean('autofill') ?? false;
          
-        autoSubmit = await interaction.options.getBoolean('auto-submit') ?? false;
+        autoSubmit = await interaction.options.getBoolean('auto-submit') ?? quizConfig?.AutoSubmit ?? false;
         
-        showHints = await interaction.options.getBoolean('hints') ?? true;
+        showHints = await interaction.options.getBoolean('hints') ?? quizConfig?.ShowHints ?? true;
 
-        const repeat = await interaction.options.getBoolean('repeat') ?? false;
+        const repeatThreshold = quizConfig?.repeatThreshold ?? 90
+
+        let repeatAmount = await interaction.options.getInteger('repeat-amount') ?? quizConfig?.repeatAmount ?? false;
         
         //* This can't be global because the database needs to be already connected, and at like compile time, that doesn't happen
         const quiz_db = mongoose.createConnection(process.env.MONGO_URI, {
             dbName: 'Quizzes'
         });
         // get the chosen quiz and questions, if any of them return null, just close the browser as it won't be used anymore
-        const chosenQuizzes = await DisplayQuizzes(interaction, await GetQuizzesList(page, chosenTerm.ID));
+        const chosenQuizzes = await DisplayQuizzes(interaction, await GetQuizzesList(page, chosenTerm.ID), quizConfig?.ShowAlreadyCompletedQuizzes);
         if(chosenQuizzes == null || chosenQuizzes.length == 0) return await browser.close();
         
         for (const chosenQuizIndex in chosenQuizzes) {
@@ -120,10 +120,9 @@ module.exports = {
             }
             
             //for now it is if it didn't get 100%, but it could be a 80, also this can be a doWhile loop :/
-            let repeatCounter = 0
             let correctedAnswers = null;
             do {
-                repeatCounter++;
+                repeatAmount--;
                 //if the quiz isn't in the database it just returns the same scrapedQuestions :/
                 const dataBaseAnswers = await FetchQuizFromDatabase(quiz_db, chosenQuiz.name)
                 
@@ -132,7 +131,8 @@ module.exports = {
 
                 //it will add the answers to the database (if it isn't null)
                 await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers?.questions)
-            } while (repeatCounter < repeatAmount && repeat && Number(correctedAnswers.grade) < 100);
+                // using truthy, once repeat amount reaches 0 it fails could use != 0 instead
+            } while (repeatAmount && Number(correctedAnswers.grade) < repeatThreshold);
             // const correctedAnswers = autoFillEverything === true ? await AutoFillAnswers(interaction, page, chosenQuiz.name, scrapedQuestions) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
         }
 
@@ -597,7 +597,7 @@ const GetQuizzesList = async (page, termID) => {
     })
 }
 
-const DisplayQuizzes = async (interaction, quizzes) => {
+const DisplayQuizzes = async (interaction, quizzes, showDone=true) => {
     return new Promise(async (resolve, reject) => {
         const quizzesEmbed = new EmbedBuilder()
         .setColor(UtilFunctions.primaryColour)
@@ -607,7 +607,7 @@ const DisplayQuizzes = async (interaction, quizzes) => {
         '\nAlso if you encounter an interaction failed response, just click the button again, sometimes discord doesn\'t record interactions properly :angry: ')
 
         let selectedOptions = quizzes['due']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz is still due', value: quiz.url }));
-        selectedOptions = selectedOptions.concat(quizzes['done']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz has already been finished', value: quiz.url })));
+        if(showDone) selectedOptions = selectedOptions.concat(quizzes['done']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz has already been finished', value: quiz.url })));
         const selectRow = new ActionRowBuilder()
             .addComponents(
                 new SelectMenuBuilder()
@@ -632,11 +632,14 @@ const DisplayQuizzes = async (interaction, quizzes) => {
         const collector = await channel.createMessageComponentCollector({ time: 180 * 1000 });
     
         collector.on('collect', async i => {
+            await collector.stop()
             if (i.customId == 'Quit') {
-                interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] })
+                await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] })
+                collector.stop();
                 return resolve(null)
             }
-            await i.update({ content: `Going to ${i.values.join(', ')} to get quiz questions and attempt now!`, embeds: [], components: []})
+            //! Interaction has already been acknowlegded with just update, trying deferUpdate
+            await i.deferUpdate({ content: `Going to ${i.values.join(', ')} to get quiz questions and attempt now!`, embeds: [], components: []})
            
             // merge all of the quiz options into one array so that it can find the urls and extra info about the questions chosen
             let quizOptions = [ ...quizzes['due'], ...(quizzes['done']) ]
@@ -650,7 +653,6 @@ const DisplayQuizzes = async (interaction, quizzes) => {
                 }
             }
             ))
-            await collector.stop()
         });
     
         collector.on('end', collected => {

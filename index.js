@@ -1,7 +1,7 @@
 // const Discord = require("discord.js");
 const { Client, GatewayIntentBits, Partials, Collection, InteractionType } = require('discord.js');
 const slashcommands = require("./handlers/slashcommands");
-const { FixConfigFiles } = require("./slashcommands/configSlash")
+const { FixConfigFiles, GetConfigById } = require("./slashcommands/configSlash")
 const { GetLoginsFromDatabase, loginGroups } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
@@ -47,49 +47,44 @@ client.loadCommands(bot, false)
 client.loadSlashCommands(bot, false)
 
 
-module.exports = bot
-
+mongoose.connect(process.env.MONGO_URI, {
+    keepAlive: true
+})
 //Change this to your discord server
-//The reason for this is that it takes like an hour for the client application commands to publish, or you need to regenerate the URL
+// think this guild stuff is deprecated now, but it could be handy if you want commands only in the guild
 const guildId = "950154084441288724"
 
 client.on("ready", async () => {
-    mongoose.connect(process.env.MONGO_URI, {
-        keepAlive: true
-    })
     console.log('Logging Into The Database:')
     await GetLoginsFromDatabase();
-
+    
     //fix config files if you made changes to the prefab for the database
     await FixConfigFiles();
     
     console.log(`Loading ${client.slashcommands.size} slash commands`)
     // const guild = client.guilds.cache.get(guildId)
     // if (!guild){
-    //     return console.error("Target Guild not found")
-    // }
+        //     return console.error("Target Guild not found")
+        // }
+        await client.application.commands.set([...client.slashcommands.values()])
+        // await client.application.commands.set([])
+        // await guild.commands.set([...client.slashcommands.values()])
+        //console.log(client.application.commands.s)
+        console.log(`Successfully loaded in ${client.slashcommands.size} slash commands`)
+    })
 
-    await client.application.commands.set([...client.slashcommands.values()])
-    // await client.application.commands.set([])
-    // await guild.commands.set([...client.slashcommands.values()])
-    //console.log(client.application.commands.s)
-    console.log(`Successfully loaded in ${client.slashcommands.size} slash commands`)
-})
-
-client.on("interactionCreate", (interaction) => {
-    //if its not a command //-interaction.isCommand();
-//+interaction.type === InteractionType.ApplicationCommand;
-    if(interaction.type !== InteractionType.ApplicationCommand) return
+    client.on("interactionCreate", (interaction) => {
+        //if its not a command //-interaction.isCommand();
+        //+interaction.type === InteractionType.ApplicationCommand;
+        if(interaction.type !== InteractionType.ApplicationCommand) return
     //if its not from within a guild 
     // if(!interaction.inGuild()) return interaction.reply("This command can only be used in a server")
-
     const slashcmd = client.slashcommands.get(interaction.commandName)
-
     if(!slashcmd) return interaction.reply("Invalid slash command")
-
+    
     //If the command is guild only and not inside guild
     if(slashcmd.guildOnly && !interaction.inGuild()) return;
-
+    
     // make sure they are logged in if they want to do moodle
     if(slashcmd.idLinked && !loginGroups.hasOwnProperty(interaction.user.id)) {
         return interaction.reply(`You must be logged in to use **${interaction.commandName}**. You can log in here or in direct messages with this bot`)
@@ -99,29 +94,28 @@ client.on("interactionCreate", (interaction) => {
     let commandArgs = slashcmd.options.some(option => option.type == 1) ? interaction.options.getSubcommand() + ' ' : ''
     // then add any args passed if it isn't the login command
     if(interaction.commandName != "login") commandArgs += `=> ${GetCommandArgs(interaction.options.data)}`
-
+    
     console.log(`${interaction.user.username} used the command **${interaction.commandName}** ${commandArgs}`)
     
     //member.permissions is a guild thing, maybe put something in for dev, like interaction.user.id == dev or something
     if(slashcmd.perms && !interaction.member.permissions.has(slashcmd.perm))
-        return interaction.reply("You do not have permission for this command");
-
-    slashcmd.run(client, interaction)
+    return interaction.reply("You do not have permission for this command");
+    slashcmd.run(client, interaction, GetConfigById(interaction.user.id))
 })
 //discord error handling things that might help
 process.on("unhandledRejection", async (err) => {
   console.error("Unhandled Promise Rejection:\n", err);
 });
 process.on("uncaughtException", async (err) => {
-  console.error("Uncaught Promise Exception:\n", err);
+    console.error("Uncaught Promise Exception:\n", err);
 });
 process.on("uncaughtExceptionMonitor", async (err) => {
   console.error("Uncaught Promise Exception (Monitor):\n", err);
 });
 // process.on("multipleResolves", async (type, promise, reason) => {
-//   console.error("Multiple Resolves:\n", type, promise, reason);
-// });
-//That .then is not needed, but idk
+    //   console.error("Multiple Resolves:\n", type, promise, reason);
+    // });
+    //That .then is not needed, but idk
 client.login(process.env.TOKEN)//.then(client.user.setActivity("Reading Moodle Data", {type: "PLAYING"}))
 
 function GetCommandArgs(options) {
@@ -129,3 +123,6 @@ function GetCommandArgs(options) {
     if(options[0]?.type == 1) optionsArray = options[0].options
     return optionsArray.map(option => `${option.name} : ${option.value}`).join(', ') || '(default)'
 }
+
+
+module.exports = bot;

@@ -2,16 +2,11 @@ const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, 
 const UtilFunctions = require("../util/functions");
 const mongoose = require('mongoose');
 
+//TODO save it to the config in index.js
 const maxNicknames = 5;
+let cachedConfigs = [];
 //*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices & function are not added to the database
 //* function changes the normal input
-//choices shuold be in discord select menu format
-// otherwise they will be used as buttons on the menu itself and it is limited to probably like max 5 idk
-//TODO when you click the reset button it brings up a select menu and you chooose all the things that you want to reset,
-
-
-//TODO if the settings are modified, the schema won't work to fetch the old configs, so work out a way to update old configs
-// like it will ask about name, nicknames, and the other settings topics. also have a button that says 'all' and another that says 'cancel'
 const settingsInfo = {
     general: {
         title: 'General Settings',
@@ -32,7 +27,9 @@ const settingsInfo = {
             { label: '100%', description: 'All of the questions need to be correct', value: 100 },
         ], info: 'When a test finishes, what grade does it have to be to not repeat (if repeat is enabled)' },
         RepeatAmount: { type: Number, min: 1, max: 5, default: 1, choices: [ 1, 2, 3, 4, 5 ], info: 'Amount of times to repeat the quiz (Only if you failed the quiz / got under the repeat threshold and you use Repeat=True)'},
-        ShowAlreadyCompletedQuizzes: { type: Boolean, default: true, info: 'When viewing the quizzes list decide whether to view complete ones already' }
+        ShowAlreadyCompletedQuizzes: { type: Boolean, default: true, info: 'When viewing the quizzes list decide whether to view complete ones already' },
+        ShowHints: { type: Boolean, default: true, info: 'If you want the buttons to light up red or green and stuff' },
+        AutoSubmit: { type: Boolean, default: false, info: 'Bypass the overview screen (makes it so you submit faster essentially), not really reccomended unless you are lazy :/'},
     },
     messages: {
         title: 'Message Settings',
@@ -72,9 +69,9 @@ const configSettings = Object.entries(settingsInfo).reduce((settings, [settingTy
 const configSchema = new mongoose.Schema({
     name: String, // their lismore name
     discordId: String, // their discord id to fetch their config
+    vip: { type: Boolean, default: false },
     nicknames: { type: [String], lowercase: true, trim: true },
-    settings: configSettings
-
+    settings: configSettings,
 })
 
 const config_db = mongoose.createConnection(process.env.MONGO_URI, {
@@ -91,6 +88,8 @@ const FixConfigFiles = async () => {
     const configPrefebSchema = new mongoose.Schema({name: { type: String, default: 'Prefab' }, settings: {} });
     const ConfigPrefab = config_db.model('Configs', configPrefebSchema, 'Configs')
     let configPrefab = await ConfigPrefab.find({ name: 'Prefab'})
+    
+    const allConfigs = await config_db.model('Configs', configSchema, 'Configs').find({ name: { $not: { $eq: 'Prefab'} } })
 
     if(configPrefab.length > 0) {
         configPrefab = configPrefab[0]
@@ -109,13 +108,11 @@ const FixConfigFiles = async () => {
             }
         })
         if(settingsTheSame) {
-            return console.log('Config Settings Are The Same :P ')
+            console.log('Config Settings Are The Same :P ')
         }
         else {
 
-            const allConfigs = await config_db.model('Configs', configSchema, 'Configs').find({})
             for (const config of allConfigs) {
-                if(config.name == 'Prefab') continue;
                 //If it isn't inside one of the info types, it should either be deleted or added.
                 cfgSettings = config.settings
 
@@ -157,6 +154,8 @@ const FixConfigFiles = async () => {
         configPrefab.save();
     }
 
+    cachedConfigs = allConfigs;
+
     //typeof is sh*t, instance of, .constructor, can't find anything online
     function CompareTypes(type) {
         if(type === Number){
@@ -176,6 +175,24 @@ const FixConfigFiles = async () => {
         }
     }
     
+}
+
+const UpdateConfigs = async (newConfig) => {
+    let oldConfigFound = false;
+    cachedConfigs = cachedConfigs.map(config => {
+        if(config.discordId == newConfig.discordId) {
+            oldConfigFound = true;
+            return newConfig
+        }
+        else return config
+    });
+    if(!oldConfigFound){
+        cachedConfigs.push(newConfig)
+    }
+}
+
+const GetConfigById = (discordId) => {
+    return cachedConfigs.find(config => config.discordId == discordId)
 }
 
 const CreateOrUpdateConfig = async (options) => {
@@ -218,12 +235,12 @@ module.exports = {
     idLinked: true,
     devOnly: false,
     FixConfigFiles,
+    GetConfigById,
 
     ...data.toJSON(),
     run: async (client, interaction) => {
         //deferring cause yk
         await interaction.deferReply();
-
         // if config doesn't exist, create new config also the user.username should go straight to nicknames by default
         // pop to remove last elements, then unshift to put the name in the start
         // let userConfig = await GetConfigFromDatabase(interaction.user.id)
@@ -240,6 +257,7 @@ module.exports = {
             userConfig.save();
             // await CreateOrUpdateConfig(updatedConfig)
         }
+        UpdateConfigs(userConfig);
     }
 }
 
@@ -259,7 +277,8 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
             Object.entries(currentSettings).map(([name, value], index) => { 
                 const info = Object.values(currentSettingsInfo).filter(value => typeof value == 'object')[index].info;
                 // display all the setting items, show selected on the one selected and display info and then on new line what they have in the config there
-                return { name: `${name.split(/(?=[A-Z])/).join(' ')}${settingIndex == index ? ' [ SELECTED ]' : userConfig.settings.config.MultiBoolean && selectedIsBool && typeof value == 'boolean' && index >= startInd && index < startInd + 3 ? ' { SELECTED }' : ''}`, value: `${info ? info + '\n' : ''}**value: ${value}**` } 
+                return { name: `${name.split(/(?=[A-Z])/).join(' ')}${settingIndex == index ? ' [ SELECTED ]' : userConfig.settings.config.MultiBoolean && selectedIsBool && typeof value == 'boolean' && index >= startInd && index < startInd + 3 ? ' { SELECTED }' : ''}`,
+                 value: `${info ? info + '\n' : ''}${min ? `min: ${min} ` : ''}${max ? `max: ${max} ` : ''}$**value: ${value}**` } 
             })
         );
         if(currentSettingsInfo.info) {
@@ -383,7 +402,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                 return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex - 1, i))
             }
             else if(i.customId == 'Overview') {
-                i.deferUpdate();
+                await i.deferUpdate();
                 return resolve(await CreateSettingsOverview(interaction, userConfig))
             }
             
@@ -502,16 +521,16 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
             }
             else if (i.customId == 'Name') {
                 StopCollecting();
-                i.deferUpdate();
+                await i.deferUpdate();
                 return resolve(await CreateSettingsOverview(interaction, userConfig, !editingName))
             }
             else if (i.customId == 'Reset') {
                 StopCollecting();
-                i.deferUpdate();
+                await i.deferUpdate();
                 return resolve(await ResetSettingsOverview(interaction, userConfig))
             }
             else if (i.customId == 'Save') {
-                i.deferUpdate();
+                await i.deferUpdate();
                 if(justSaved === false) { userConfig.save() }
                 justSaved = true;
                 const reply = await interaction.followUp({content: 'Saved!', fetchReply: true})
@@ -525,7 +544,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
         })
 
         msgCollector.on('collect', async m => {
-            const inputCommand = m.content.replace(/[^\w\s]/gi, '').toLowerCase();
+            const inputCommand = m.content.replace(/[^\w\s]/gi, '').trim().toLowerCase();
             if(inputCommand == 'quit') {
                 StopCollecting(m);
                 await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] });
@@ -539,12 +558,24 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
             }
             else if(inputCommand.length > 0) {
                 if(editingName) {
-                    userConfig.name = inputCommand
+                    if(cachedConfigs.some(config => config.name == inputCommand)) {
+                        //do the delete message thing that tells them that someone already has the name
+                    }
+                    else {
+                        userConfig.name = inputCommand
+                    }
                 }
                 else {
-                    //TODO check that other people don't have the nickname either...
-                    if(userConfig.nicknames.length >= maxNicknames) { userConfig.nicknames.pop()}
-                    userConfig.nicknames.unshift(inputCommand)    
+                    const nickNameOwnerConfig = cachedConfigs.find(config => config.nicknames.includes(inputCommand))
+                    if(nickNameOwnerConfig) {
+                        //TODO if their name is null, you can steal their nickname or if you are vip (userConfig.vip == true ) then mine biatch!
+                        const reply = await interaction.followUp({content: `${nickNameOwnerConfig.discordId} has the nickname already!`, fetchReply: true})
+                        return reply.delete(3000)
+                    }
+                    else {
+                        if(userConfig.nicknames.length >= maxNicknames) { userConfig.nicknames.pop()}
+                        userConfig.nicknames.unshift(inputCommand)    
+                    }
                 }
                 StopCollecting(m)
                 resolve(await CreateSettingsOverview(interaction, userConfig, editingName))
@@ -677,12 +708,12 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
         collector.on('collect', async (i) => {
             if(i.customId == 'Cancel') {
                 StopCollecting();
-                i.deferUpdate()
+                await i.deferUpdate()
                 return resolve(await CreateSettingsOverview(interaction, oldUserConfig))
             }
             else if(i.customId == 'Done') {
                 StopCollecting();
-                i.deferUpdate()
+                await i.deferUpdate()
                 return resolve(await CreateSettingsOverview(interaction, userConfig))
             }
             else if(i.customId == 'All') {
@@ -693,7 +724,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
                 resetAllSettings = true;
 
                 StopCollecting();
-                i.deferUpdate()
+                await i.deferUpdate()
                 
                 for (const settingTopic of Object.keys(userConfig.settings)) {
                     for (const itemToReset of Object.keys(userConfig.settings[settingTopic])) {
@@ -707,7 +738,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
             }
             else if(i.customId == 'Select') {
                 StopCollecting();
-                i.deferUpdate();
+                await i.deferUpdate();
                 if(resettingTopic) {
                     for (const itemToReset of i.values) {
                         //use settingsInfo to find out the default values and reset them to that
@@ -728,7 +759,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
             }
             else{
                 //it means it was one of the select menu items prolly
-                i.deferUpdate();
+                await i.deferUpdate();
                 console.log(`The id of the button clicked (${i.customId}) was not coded for (ln 660)`)
             }
         })
