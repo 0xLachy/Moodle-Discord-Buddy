@@ -168,23 +168,10 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
             const currentUser = loginGroups[discordUserId]
             await SaveSecurityKey(currentUser.name, currentUser.Securitykey)
             const newLogin = new Login({
-                //TODO fix this up
                 name: currentUser.name,
                 discordId: discordUserId,
                 initVector: currentUser.initVector,
                 encryptedPassword: currentUser.encryptedPassword
-                    // name: String,
-                    // discordId: String,
-                    // initVector: Buffer,
-                    // Securitykey: Buffer,
-                    // encryptedPassword: String,
-            //either add them in one by one, or pass them all in and delete the security key one
-                // currentUser.name,
-                // discordId: discordUserId,
-                // currentUser.Initvector,
-                // currentUser.encryptedPassword
-                // ...currentUser
-                // ...loginGroups[discordUserId]
             })
             //don't save the security key to the database
             // delete newLogin.Securitykey
@@ -209,7 +196,7 @@ const LogoutOfMoodle = async (interaction) => {
         interaction.editReply('Error Logging out of the database!')
         console.log(err)
     })
-    await DeleteSecuritykey(loginGroups[discordUserId].name, loginGroups[discordUserId].Securitykey)
+    await DeleteSecuritykey(loginGroups[discordUserId].name)
     delete loginGroups[discordUserId]
 }
 
@@ -549,9 +536,9 @@ async function SaveSecurityKey(moodleName, Securitykey) {
 }
 
 // deleting the security key from the .env file
-async function DeleteSecuritykey(moodleName, Securitykey) {
+async function DeleteSecuritykey(moodleName) {
     const data = fs.readFileSync('.env', 'utf-8');
-    const newValue = data.replace(`\n${moodleName}="${Securitykey.toString('binary')}"`, '');
+    const newValue = data.replace(new RegExp(`(${moodleName}=")(.+?)(")`, 's'), '');
     fs.writeFileSync('.env', newValue, 'utf-8');
 }
 module.exports = {

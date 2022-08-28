@@ -17,7 +17,7 @@ const data = new SlashCommandBuilder()
         )
 	.addSubcommand(subcommand =>
 		subcommand
-			.setName('student')
+			.setName('missing')
 			.setDescription('Get a students missing assignments')
             .addStringOption(option =>
                 option.setName('studentname')
@@ -42,7 +42,7 @@ module.exports = {
     devOnly: false,
 
     ...data.toJSON(),
-    run: async (client, interaction) => {
+    run: async (client, interaction, config) => {
 
         await interaction.deferReply();
 
@@ -50,7 +50,7 @@ module.exports = {
         const page = await browser.newPage();
         
         //log into the browser
-        await UtilFunctions.LoginToMoodle(page, interaction.user.id)
+        await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : interaction.user.id)
 
         const chosenTerms = await UtilFunctions.AskForCourse(interaction, page, true).catch(reason => {
             //If no button was pressed, then just quit

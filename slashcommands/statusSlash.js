@@ -102,7 +102,7 @@ module.exports = {
     devOnly: false,
 
     ...data.toJSON(),
-    run: async (client, interaction) => {
+    run: async (client, interaction, config) => {
         const embedMessagesArr = [];
         await interaction.deferReply();
         // `${mainStaticUrl}/user/index.php?page=0&perpage=5000&contextid=${contextId}&id=${termId}&newcourse`
@@ -116,7 +116,7 @@ module.exports = {
         // await UtilFunctions.LoginToMoodle(page, interaction.user.id, UtilFunctions.GetTermURLS("participants")[0]).catch(error => console.log(error))
 
         try {
-            await UtilFunctions.LoginToMoodle(page, interaction.user.id)
+            await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : interaction.user.id)
         } catch (error) {
             return await interaction.editReply("The Wifi is Too Slow and timed out on Navigation")
         }

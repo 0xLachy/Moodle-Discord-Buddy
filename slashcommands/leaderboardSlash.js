@@ -54,7 +54,7 @@ module.exports = {
     devOnly: false,
 
     ...data.toJSON(),
-    run: async (client, interaction) => {
+    run: async (client, interaction, config) => {
 
         await interaction.deferReply();
 
@@ -64,8 +64,14 @@ module.exports = {
         
         //log into the browser
         try {
-            await UtilFunctions.LoginToMoodle(page, interaction.user.id)
+            if(config?.settings.general.LimitLogins){
+                await UtilFunctions.LoginToMoodle(page)
+            }
+            else {
+                await UtilFunctions.LoginToMoodle(page, interaction.user.id)
+            }
         } catch (error) {
+            console.log(error)
             return await interaction.editReply("The Wifi is Too Slow and timed out on Navigation, here is the error") // TODO put in error name and title
         }
 

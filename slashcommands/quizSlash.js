@@ -73,7 +73,7 @@ module.exports = {
         await page.exposeFunction("GuessOrFillSpecificQuestion", GuessOrFillSpecificQuestion);
 
         //Login to moodle and catch any errors that occur
-        await UtilFunctions.LoginToMoodle(page, await interaction.user.id).catch(reason => {
+        await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : await interaction.user.id).catch(reason => {
             console.log(reason);
             interaction.editReply({content: 'Internet was probably too slow and timed out'});
             browser.close();
@@ -127,8 +127,12 @@ module.exports = {
                 const dataBaseAnswers = await FetchQuizFromDatabase(quiz_db, chosenQuiz.name)
                 
                 correctedAnswers = await DoQuiz(page, followUpMsg || interaction, chosenQuiz, dataBaseAnswers, autoFillEverything)
-                if(correctedAnswers == null) return await browser.close();
-
+                if(Array.isArray(correctedAnswers) || correctedAnswers == null) {
+                    if(config?.settings.general.AutoSave) {
+                        await UpdateQuizzesWithInputValues(page, correctedAnswers[0])
+                    }
+                    return await browser.close();
+                }
                 //it will add the answers to the database (if it isn't null)
                 await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers?.questions)
                 // using truthy, once repeat amount reaches 0 it fails could use != 0 instead
@@ -326,7 +330,8 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
     //as long as it is not 0
     const buttonMoveRow = preSubmission ?  [ await CreateMoveRow(3, 'Submit!') ] : [] 
 
-    if(lastI) await lastI.update({ files: []}).catch(err => console.log(err))
+    //sometimes it times out, don't unknown interaction error
+    if(lastI) await lastI.deferUpdate({ files: []}).catch(err => {/*console.log(err)*/})
     await interaction.editReply({ content: ' ', embeds: quizSummaryEmbeds, components: buttonMoveRow, files: []}) 
     
     let channel = await interaction.channel
@@ -462,10 +467,10 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quizName, questionIndex - 1));
             }
             else if (i.customId == 'Quit') {
-                await i.update({content: 'Quit Successfully', embeds: [], components: [], files: []})
                 await collector.stop();
                 await msgCollector.stop()
-                return null;
+                await interaction.editReply({content: 'Quit Successfully', embeds: [], components: [], files: []})
+                return resolve([scrapedQuestions]);
             }
             else if (i.customId == 'Overview') {
                 // await i.update({ content: ' '});
@@ -634,11 +639,11 @@ const DisplayQuizzes = async (interaction, quizzes, showDone=true) => {
         collector.on('collect', async i => {
             await collector.stop()
             if (i.customId == 'Quit') {
-                await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] })
                 collector.stop();
+                await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] })
                 return resolve(null)
             }
-            //! Interaction has already been acknowlegded with just update, trying deferUpdate
+            //* Interaction has already been acknowlegded with just update, trying deferUpdate
             await i.deferUpdate({ content: `Going to ${i.values.join(', ')} to get quiz questions and attempt now!`, embeds: [], components: []})
            
             // merge all of the quiz options into one array so that it can find the urls and extra info about the questions chosen
@@ -946,15 +951,15 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
                 return resolve(await AutoFillAnswers(interaction, page, quizName, updatedQuestions, i))
             }
             else if (i.customId == 'Quit') {
-                await i.update({content: 'Quit Successfully, answers are saved when overview is looked at.', components: [], embeds: []})
-                return reject('Quit')
+                await interaction.editReply({content: 'Quit Successfully, answers are saved when overview is looked at. (or if you have autosave)', components: [], embeds: []})
+                return resolve([updatedQuestions])
             }
         });
         collector.on('end', collected => {
             if (collected.size == 0) {
                 console.log('the submit view timed out');
                 interaction.editReply({ content: 'Timed out! Answers save when visiting overview screen!', components: [], files: [] });
-                reject('They didn\'t finish anything')
+                return resolve([updatedQuestions])
             }
         });
     })

@@ -2,11 +2,8 @@ const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, 
 const UtilFunctions = require("../util/functions");
 const mongoose = require('mongoose');
 
-//TODO save it to the config in index.js
-const maxNicknames = 5;
 let cachedConfigs = [];
-//*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices & function are not added to the database
-//* function changes the normal input
+//*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices are not added to the database
 const settingsInfo = {
     general: {
         title: 'General Settings',
@@ -26,7 +23,7 @@ const settingsInfo = {
             { label: '95%', value: 95 },
             { label: '100%', description: 'All of the questions need to be correct', value: 100 },
         ], info: 'When a test finishes, what grade does it have to be to not repeat (if repeat is enabled)' },
-        RepeatAmount: { type: Number, min: 1, max: 5, default: 1, choices: [ 1, 2, 3, 4, 5 ], info: 'Amount of times to repeat the quiz (Only if you failed the quiz / got under the repeat threshold and you use Repeat=True)'},
+        RepeatAmount: { type: Number, min: 1, max: 5, default: 1, choices: [ 1, 2, 3, 4, 5 ], info: 'Amount of times to repeat the quiz (Only if you failed the quiz / got under the repeat threshold)'},
         ShowAlreadyCompletedQuizzes: { type: Boolean, default: true, info: 'When viewing the quizzes list decide whether to view complete ones already' },
         ShowHints: { type: Boolean, default: true, info: 'If you want the buttons to light up red or green and stuff' },
         AutoSubmit: { type: Boolean, default: false, info: 'Bypass the overview screen (makes it so you submit faster essentially), not really reccomended unless you are lazy :/'},
@@ -38,11 +35,6 @@ const settingsInfo = {
         ShowSent: { type: Boolean, default: false, info: 'When reading messages, show the ones you sent by default'},
         ShowReceived: { type: Boolean, default: true, info: 'When reading messages, show the ones others sent to you by default'},
         Ephemeral: { type: Boolean, default: false, info: 'Only shows the result to you, deletes embed when you close discord, best way is probably this false and dm the bot'}
-    },
-    courses: {
-        title: 'Courses Settings',
-        DefaultCourseUrls: { type: [String], lowercase: true, trim: true, info: 'Which courses to be selected by default when you do a command that requires multiple courses'},
-        DefaultMainCourseUrl: { type: String, default: null, lowercase: true, trim: true, info: 'The course you want to be selected by default for single course commands like status'}
     },
     config: {
         title: 'Configuration Settings',
@@ -70,7 +62,9 @@ const configSchema = new mongoose.Schema({
     name: String, // their lismore name
     discordId: String, // their discord id to fetch their config
     vip: { type: Boolean, default: false },
+    tokens: { type: Number, default: 200, min: 0},
     nicknames: { type: [String], lowercase: true, trim: true },
+    maxNicknames: { type: Number, default: 3, min: 1, max: 10},
     settings: configSettings,
 })
 
@@ -80,9 +74,9 @@ const config_db = mongoose.createConnection(process.env.MONGO_URI, {
 
 const Config = config_db.model('Configs', configSchema, 'Configs')
 
-//When you modify the config settings up the top run this to make sure the user config settings line up
 //*If you want to change the type, delete the var, run script, add var back with wanted type and run again
 // there is now way to save prefab types to database so I couldn't check for that :/
+// TODO edit, I just found out you can save code to the database... too late now...
 // the typeof fix only returned either 'function' or 'object' for everything
 const FixConfigFiles = async () => {
     const configPrefebSchema = new mongoose.Schema({name: { type: String, default: 'Prefab' }, settings: {} });
@@ -177,20 +171,6 @@ const FixConfigFiles = async () => {
     
 }
 
-const UpdateConfigs = async (newConfig) => {
-    let oldConfigFound = false;
-    cachedConfigs = cachedConfigs.map(config => {
-        if(config.discordId == newConfig.discordId) {
-            oldConfigFound = true;
-            return newConfig
-        }
-        else return config
-    });
-    if(!oldConfigFound){
-        cachedConfigs.push(newConfig)
-    }
-}
-
 const GetConfigById = (discordId) => {
     return cachedConfigs.find(config => config.discordId == discordId)
 }
@@ -206,23 +186,17 @@ const CreateOrUpdateConfig = async (options) => {
                 }
             }
         }
+        if(wantedOptions?.name) {
+            userConfig[0].name = wantedOptions.name;
+            await userConfig[0].save();
+        }
         return userConfig[0]
     }
     else {
-        return new Config({ ...wantedOptions })
+        const newConfig = new Config({ ...wantedOptions })
+        await UpdateConfigs(newConfig)
+        return newConfig
     }
-    // await Config.findOneAndUpdate({ discordId: `${wantedOptions.discordId}` }, {...wantedOptions}, {upsert: true})
-}
-//TODO delete config function, can be an option in the slash command, like reset=true
-
-const DeleteConfig = async (interaction, discordId) => {
-    Config.deleteOne({ discordId }).then(() => {
-        interaction.editReply('Deleted Your Config File!')
-        console.log(`${discordUserId} deleted their config file!`)
-    }).catch((err) => {
-        interaction.editReply('Error Deleting Config File!')
-        console.log(err)
-    })
 }
 
 const data = new SlashCommandBuilder()
@@ -232,33 +206,50 @@ const data = new SlashCommandBuilder()
 module.exports = {
     category: "config",
     permissions: [],
-    idLinked: true,
+    idLinked: false,
     devOnly: false,
     FixConfigFiles,
     GetConfigById,
+    CreateOrUpdateConfig,
 
     ...data.toJSON(),
     run: async (client, interaction) => {
-        //deferring cause yk
         await interaction.deferReply();
-        // if config doesn't exist, create new config also the user.username should go straight to nicknames by default
-        // pop to remove last elements, then unshift to put the name in the start
-        // let userConfig = await GetConfigFromDatabase(interaction.user.id)
-        // if null create new config
         let userConfig = await CreateOrUpdateConfig({ name: null, discordId: interaction.user.id, nicknames: [ interaction?.member?.nickname, interaction.user.username ].filter(name => name != null).map(name => name.toLowerCase())})
-        // console.log(userConfig)
 
-        //calling it and assigning the variable means that you can't go back to the overview which is not what I want
-        const returnedSettings = await CreateSettingsOverview(interaction, userConfig)
-        const choseToSave = returnedSettings.length == 2
-        userConfig = choseToSave ? returnedSettings[0] : returnedSettings;
-        if(choseToSave && userConfig.general.AutoSave) {
-            //save to database
+        userConfig = await CreateSettingsOverview(interaction, userConfig)
+
+        if(userConfig.settings.general.AutoSave) {
+            //save to database, this is all you have to do :)
             userConfig.save();
-            // await CreateOrUpdateConfig(updatedConfig)
         }
+        // update the configs in the cache
         UpdateConfigs(userConfig);
     }
+}
+
+const UpdateConfigs = async (newConfig) => {
+    let oldConfigFound = false;
+    cachedConfigs = cachedConfigs.map(config => {
+        if(config.discordId == newConfig.discordId) {
+            oldConfigFound = true;
+            return newConfig
+        }
+        else return config
+    });
+    if(!oldConfigFound){
+        cachedConfigs.push(newConfig)
+    }
+}
+
+const DeleteConfig = async (interaction, discordId) => {
+    Config.deleteOne({ discordId }).then(() => {
+        interaction.editReply('Deleted Your Config File!')
+        console.log(`${discordUserId} deleted their config file!`)
+    }).catch((err) => {
+        interaction.editReply('Error Deleting Config File!')
+        console.log(err)
+    })
 }
 
 const DisplayChosenSetting = async (interaction, userConfig, settingName, settingIndex=0, lastI) => {
@@ -275,10 +266,10 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
         .setTitle(`${currentSettingsInfo.title || settingName}`)
         .addFields(
             Object.entries(currentSettings).map(([name, value], index) => { 
-                const info = Object.values(currentSettingsInfo).filter(value => typeof value == 'object')[index].info;
+                const info = Object.values(currentSettingsInfo).filter(value => typeof value == 'object')[index];
                 // display all the setting items, show selected on the one selected and display info and then on new line what they have in the config there
                 return { name: `${name.split(/(?=[A-Z])/).join(' ')}${settingIndex == index ? ' [ SELECTED ]' : userConfig.settings.config.MultiBoolean && selectedIsBool && typeof value == 'boolean' && index >= startInd && index < startInd + 3 ? ' { SELECTED }' : ''}`,
-                 value: `${info ? info + '\n' : ''}${min ? `min: ${min} ` : ''}${max ? `max: ${max} ` : ''}$**value: ${value}**` } 
+                 value: `${info.info ? info.info + '\n' : ''}${info.min ? `min: ${info.min} ` : ''}${info.max ? `max: ${info.max} \n` : ''}**value: ${value}**` } 
             })
         );
         if(currentSettingsInfo.info) {
@@ -296,30 +287,30 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
         const inputActionRow = new ActionRowBuilder();
         if(choiceInfo.type === Boolean) {
            //create 1 button and have green for selected and red for false? 
-        if(userConfig.settings.config.MultiBoolean) {
-            // so basically after start index allows 3 buttons then that's it!
-            inputActionRow.addComponents(
-                //* max is 5 buttons in one row I think, but 3 looks better
-                ...settingsEntries.reduce((buttons, [name, value], currentIndex) => {
-                    //if it's within the prev and end indexes
-                    if(typeof value == 'boolean' && currentIndex >= startInd && currentIndex < startInd + 3) {
-                        buttons.push( new ButtonBuilder()
-                        .setCustomId(`Boolean${name}`)
-                        .setLabel(name)
-                        .setStyle(value ? ButtonStyle.Primary : ButtonStyle.Secondary))
-                    }
-                    return buttons
-                }, [])
-            )
-        }
-           else {
-               inputActionRow.addComponents(
-                   new ButtonBuilder()
-                       .setCustomId(`Boolean${choiceName}`)
-                       .setLabel(choiceName) // the title of the thing
-                       .setStyle(choiceValue ? ButtonStyle.Primary : ButtonStyle.Secondary)
-               );
-           }
+            if(userConfig.settings.config.MultiBoolean) {
+                // so basically after start index allows 3 buttons then that's it!
+                inputActionRow.addComponents(
+                    //* max is 5 buttons in one row I think, but 3 looks better
+                    ...settingsEntries.reduce((buttons, [name, value], currentIndex) => {
+                        //if it's within the prev and end indexes
+                        if(typeof value == 'boolean' && currentIndex >= startInd && currentIndex < startInd + 3) {
+                            buttons.push( new ButtonBuilder()
+                            .setCustomId(`Boolean${name}`)
+                            .setLabel(name)
+                            .setStyle(value ? ButtonStyle.Primary : ButtonStyle.Secondary))
+                        }
+                        return buttons
+                    }, [])
+                )
+            }
+            else {
+                inputActionRow.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`Boolean${choiceName}`)
+                        .setLabel(choiceName) // the title of the thing
+                        .setStyle(choiceValue ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                );
+            }
         }
         else if(choiceInfo.type === Number) {
             if(choiceInfo.choices) {
@@ -344,11 +335,11 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                     );
                 }
                 else {
-                    currentSettingEmbed.addFields({name: 'Input Value', value: `Type the value bellow to change ${choiceName}`})
+                    currentSettingEmbed.addFields({name: 'Input Value', value: `Type the value below to change ${choiceName}`})
                 }
             }
             else {
-                currentSettingEmbed.addFields({name: 'Input Value', value: `Type the value bellow to change ${choiceName}`})
+                currentSettingEmbed.addFields({name: 'Input Value', value: `Type the value below to change ${choiceName}`})
             }
         }
         //? maybe have choices for string array as an option too! if it doesn't fit don't add the string :D
@@ -425,8 +416,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
             }
             else if(inputCommand == 'save') {
                 userConfig.save();
-                const reply = await interaction.followUp({content: 'Saved!', fetchReply: true})
-                reply.delete(3000)
+                await TemporaryResponse(interaction, 'Saved!')
                 if(interaction.inGuild() && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
             }
             else if(inputCommand == 'next' && settingIndex != Object.keys(currentSettings).length - 1) {
@@ -445,16 +435,13 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                 //doesn't work, need to check if choice info.max and min
                 if(choiceInfo.type == Number) {
                     if(isNaN(inputCommand)){
-                        const reply = await interaction.followUp({content: 'Not A number', fetchReply: true})
-                        reply.delete(3000)
+                        await TemporaryResponse(interaction, 'Not A number')
                     }
                     else if(choiceInfo.min && inputCommand < choiceInfo.min) {
-                        const reply = await interaction.followUp({content: 'Input not within the min', fetchReply: true})
-                        reply.delete(3000)
+                        await TemporaryResponse(interaction, 'Input not within the min')
                     }
                     else if(choiceInfo.max && inputCommand > choiceInfo.max) {
-                        const reply = await interaction.followUp({content: 'Input above max', fetchReply: true})
-                        reply.delete(3000)
+                        await TemporaryResponse(interaction, 'Input above max')
                     }
                     else {
                         currentSettings[Object.keys(currentSettings)[settingIndex]] = inputCommand;
@@ -484,12 +471,15 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
         const settingsOverviewEmbed = new EmbedBuilder()
             .setColor(UtilFunctions.primaryColour)
             .setTitle('Settings')
+            .setThumbnail(interaction.user.displayAvatarURL())
             .setDescription('This is an overview of the the settings, send your nickname to this channel bellow, click the button to change your real name instead. ' +
-                'There are only 3 nicknames allowed, and there can\'t be duplicates, when you add a new nickname it is inserted at the start and removes the old third one\n' +
+                `You have ${userConfig.maxNicknames} nicknames allowed, and there can\'t be duplicates, when you add a new nickname it is inserted at the start and removes the old third one\n` +
                 'The reset button will open up a menu where you can choose the settings you would like to reset to default')
             .addFields(
+                { name: 'Vip Status', value: `${userConfig.vip}`, inline: true},
+                { name: 'Moodle Money', value: `${userConfig.tokens}`, inline: true},
                 { name: 'Name On Lismore', value: `${userConfig.name}` },
-                { name: 'Nicknames', value: `[${userConfig.nicknames.join(', ')}]` }
+                { name: 'Nicknames', value: `[${userConfig.nicknames.join(', ')}]` },
             );
 
         const selectRow = new ActionRowBuilder()
@@ -517,7 +507,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
                 StopCollecting();
                 const quitRow = CreateButtonRow(true)
                 await interaction.editReply({ components: [quitRow] });
-                return resolve(userConfig, justSaved);
+                return resolve(userConfig);
             }
             else if (i.customId == 'Name') {
                 StopCollecting();
@@ -533,8 +523,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
                 await i.deferUpdate();
                 if(justSaved === false) { userConfig.save() }
                 justSaved = true;
-                const reply = await interaction.followUp({content: 'Saved!', fetchReply: true})
-                reply.delete(3000)
+                await TemporaryResponse(interaction, 'Saved!')
             }
             else {
                 StopCollecting();
@@ -553,32 +542,65 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
             else if(inputCommand == 'save') {
                 if(justSaved === false) { userConfig.save() }
                 justSaved = true;
-                const reply = await interaction.followUp({content: 'Saved!', fetchReply: true})
-                reply.delete(3000)
+                await TemporaryResponse(interaction, 'Saved!')
             }
             else if(inputCommand.length > 0) {
                 if(editingName) {
-                    if(cachedConfigs.some(config => config.name == inputCommand)) {
-                        //do the delete message thing that tells them that someone already has the name
+                    if(userConfig.name == inputCommand) {
+                        await TemporaryResponse(interaction, 'You already have that name!')
                     }
                     else {
-                        userConfig.name = inputCommand
+                        const nameOwnerConfig = cachedConfigs.find(config => config.name == inputCommand)
+                        if(nameOwnerConfig) {
+                            await TemporaryResponse(interaction, `<@${nameOwnerConfig.discordId}> already has the name: ${inputCommand}`, 2000)
+                        }
+                        else {
+                            userConfig.name = inputCommand
+                        }
                     }
                 }
                 else {
-                    const nickNameOwnerConfig = cachedConfigs.find(config => config.nicknames.includes(inputCommand))
-                    if(nickNameOwnerConfig) {
-                        //TODO if their name is null, you can steal their nickname or if you are vip (userConfig.vip == true ) then mine biatch!
-                        const reply = await interaction.followUp({content: `${nickNameOwnerConfig.discordId} has the nickname already!`, fetchReply: true})
-                        return reply.delete(3000)
+                    if(userConfig.nicknames.includes(inputCommand)) {
+                        await TemporaryResponse(interaction, 'You already have that name!')
                     }
                     else {
-                        if(userConfig.nicknames.length >= maxNicknames) { userConfig.nicknames.pop()}
-                        userConfig.nicknames.unshift(inputCommand)    
+                        const nickNameOwnerConfig = cachedConfigs.find(config => config.nicknames.includes(inputCommand))
+                        if(nickNameOwnerConfig) {
+                            if(nickNameOwnerConfig.name == null) {
+                                //? we are saving even if the person doesn't have autosave on, might want to find a workaround :P
+                                await ReplaceNicknames(nickNameOwnerConfig, `<@${nickNameOwnerConfig.discordId}>'s name is null, you stole the nickname!`);
+                            }
+                            else if(userConfig.vip) {
+                                if(nickNameOwnerConfig.vip) {
+                                    await TemporaryResponse(interaction, `${nickNameOwnerConfig.name}(<@${nickNameOwnerConfig.discordId}>) has the nickname already! You both have vip so you can't steal it from them!`)
+                                }
+                                else {
+                                    await ReplaceNicknames(nickNameOwnerConfig, `${nickNameOwnerConfig.name}(<@${nickNameOwnerConfig.discordId}>) already had the name, but you are vip and they aren't so you stole it from them!`);
+                                }
+                            }
+                            else {
+                                await TemporaryResponse(interaction, `${nickNameOwnerConfig.name}(<@${nickNameOwnerConfig.discordId}>) has the nickname already! You can't steal it unfortunately`);
+                            }
+                        }
+                        else {
+                            if(userConfig.nicknames.length >= userConfig.maxNicknames) { userConfig.nicknames.pop()}
+                            userConfig.nicknames.unshift(inputCommand)    
+                        }
                     }
+                    
                 }
                 StopCollecting(m)
                 resolve(await CreateSettingsOverview(interaction, userConfig, editingName))
+            }
+
+            
+            async function ReplaceNicknames(nickNameOwnerConfig, message) {
+                nickNameOwnerConfig.nicknames = nickNameOwnerConfig.nicknames.filter(name => name != inputCommand);
+                await nickNameOwnerConfig.save();
+                if (userConfig.nicknames.length >= maxNicknames) { userConfig.nicknames.pop(); }
+                userConfig.nicknames.unshift(inputCommand);
+                await userConfig.save();
+                await TemporaryResponse(interaction, message)
             }
         });
         collector.on('end', collected => {
@@ -718,8 +740,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
             }
             else if(i.customId == 'All') {
                 if(resetAllSettings) {
-                    const reply = await interaction.followUp({content: 'You Already Reset Settings!', fetchReply: true})
-                    return reply.delete(7500)
+                    await TemporaryResponse(interaction, 'You already reset settings!');
                 }
                 resetAllSettings = true;
 
@@ -732,8 +753,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
                         userConfig.settings[settingTopic][itemToReset] = settingsInfo[settingTopic][itemToReset].default 
                     }
                 }
-                const reply = await interaction.followUp({content: 'Reset All Settings!', fetchReply: true})
-                await reply.delete(3000)
+                await TemporaryResponse(interaction, 'Reset All Settings!')
                 return resolve(await CreateSettingsOverview(interaction, userConfig))
             }
             else if(i.customId == 'Select') {
@@ -778,8 +798,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
             else if(inputCommand == 'save') {
                 if(justSaved === false) { userConfig.save() }
                 justSaved = true;
-                const reply = await interaction.followUp({content: 'Saved!', fetchReply: true})
-                await reply.delete(3000)
+                await TemporaryResponse(interaction, 'Saved!')
             }
         });
         collector.on('end', collected => {
@@ -797,6 +816,11 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
             if(interaction.inGuild() && m && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
         }
     });  
+}
+
+const TemporaryResponse = async (interaction, message, time=1000) => {
+    const reply = await interaction.followUp({content: message, fetchReply: true})
+    setTimeout(() => reply.delete(), time);
 }
 
 const CreateMoveRow = async (disableBack=false, disableNext=false) => {

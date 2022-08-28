@@ -39,7 +39,7 @@ module.exports = {
     devOnly: false,
 
     ...data.toJSON(),
-    run: async (client, interaction) => {
+    run: async (client, interaction, config) => {
         await interaction.deferReply(/*{ephemeral: true}*/);
 
         // const browser = await puppeteer.launch({ headless: false })
@@ -48,7 +48,7 @@ module.exports = {
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 
         //Login to moodle and catch any errors that occur
-        await UtilFunctions.LoginToMoodle(page, await interaction.user.id).catch(reason => {
+        await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : await interaction.user.id).catch(reason => {
             console.log(reason);
             interaction.editReply({content: reason});
             browser.close();
