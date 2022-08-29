@@ -1,7 +1,8 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const UtilFunctions = require("../util/functions");
 const mongoose = require('mongoose');
-
+//TODO add the stats viewer screen where you can see your stats
+//And I guess badges too, but I think that should be a seperate command
 let cachedConfigs = [];
 //*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices are not added to the database
 const settingsInfo = {
@@ -9,7 +10,12 @@ const settingsInfo = {
         title: 'General Settings',
         info: 'The main settings to change, it\'s a bit barren, please give sugestions to the bot creator!',
         LimitLogins: { type: Boolean, default: false, info: 'Use the bot owner to log in where possible, like for leaderboards and stuff'},
-        AutoSave: { type: Boolean, default: false, info: 'Save when you quit or when you time out so you don\'t lose progress'},
+        AutoSave: { type: Boolean, default: true, info: 'Save when you quit or when you time out so you don\'t lose progress'},
+    },
+    shop: {
+        title: 'Shop Settings',
+        info: 'Settings for when you run the /shop command',
+        DonationAmount: { type: Number, min: 1, max: 100, default: 25, info: 'Default Donation Amount, (you can\'t donate more than you have)'},
     },
     quiz: {
         title: 'The settings for the quiz slash command',
@@ -23,7 +29,7 @@ const settingsInfo = {
             { label: '95%', value: 95 },
             { label: '100%', description: 'All of the questions need to be correct', value: 100 },
         ], info: 'When a test finishes, what grade does it have to be to not repeat (if repeat is enabled)' },
-        RepeatAmount: { type: Number, min: 1, max: 5, default: 1, choices: [ 1, 2, 3, 4, 5 ], info: 'Amount of times to repeat the quiz (Only if you failed the quiz / got under the repeat threshold)'},
+        RepeatAmount: { type: Number, min: 1, max: 5, default: 2, choices: [ 1, 2, 3, 4, 5 ], info: 'Amount of times to repeat the quiz (Only if you failed the quiz / got under the repeat threshold)'},
         ShowAlreadyCompletedQuizzes: { type: Boolean, default: true, info: 'When viewing the quizzes list decide whether to view complete ones already' },
         ShowHints: { type: Boolean, default: true, info: 'If you want the buttons to light up red or green and stuff' },
         AutoSubmit: { type: Boolean, default: false, info: 'Bypass the overview screen (makes it so you submit faster essentially), not really reccomended unless you are lazy :/'},
@@ -43,7 +49,15 @@ const settingsInfo = {
         DeleteSettingMessages: { type: Boolean, default: true, info: '(Only deletes inside guild) When you send in messages to edit config, delete them once they are passed'},
     },
 }
-
+const statsInfo = {
+    //* have to have 0 (or any number) as a default otherwise database Nan errors
+    CreationDate: { type: Date, default: Date.now, info: 'When the config file was created'},
+    TokensDonated: { type: Number, default: 0, info: 'How many tokens you have given to other people'},
+    AssignmentsShared: { type: Number, default: 0, info: '(count of) Assignments you gave to other people' },
+    AssignmentsBorrowed: { type: Number, default: 0, info: '(count of) Assignments you borrowed from other people' },
+    QuizzesCompleted: { type: Number, default: 0, info: 'How many quizzes you have done through the bot' },
+    TotalCommandsRun: { type: Number, default: 0, info: 'How many times you have run a slash command with lismore buddy' },
+}
 // removing the title and info values because they aren't needed in the database
 const configSettings = Object.entries(settingsInfo).reduce((settings, [settingType, settingData]) => {
     settings[settingType] = Object.entries(settingData).reduce((newSettingData, [settingKey, settingValue]) => {
@@ -56,15 +70,22 @@ const configSettings = Object.entries(settingsInfo).reduce((settings, [settingTy
     return settings;
 }, {})
 
+const configStats = Object.entries(statsInfo).reduce((stats, [statName, statObj]) => {
+    const { info, title, ...wantedValues } = statObj;
+    stats[statName] = wantedValues
+    return stats; 
+}, {})
 //discordID string or int, I think it is given by discord api as string
 // make the schema that is used to send and recieve data
 const configSchema = new mongoose.Schema({
-    name: String, // their lismore name
+    name: { type: String, default: null, lowercase: true, trim: true }, // their lismore name
     discordId: String, // their discord id to fetch their config
     vip: { type: Boolean, default: false },
     tokens: { type: Number, default: 200, min: 0},
     nicknames: { type: [String], lowercase: true, trim: true },
     maxNicknames: { type: Number, default: 3, min: 1, max: 10},
+    badges: {type: [Number]}, // Indexes of the badges that they own in the order they got them? //TODO need badge command to create badge, fix badge, give badge and delete
+    stats: configStats,
     settings: configSettings,
 })
 
@@ -174,6 +195,10 @@ const FixConfigFiles = async () => {
 const GetConfigById = (discordId) => {
     return cachedConfigs.find(config => config.discordId == discordId)
 }
+//probably better to make a get, private set, but this works :P
+const GetConfigs = () => {
+    return cachedConfigs;
+}
 
 const CreateOrUpdateConfig = async (options) => {
     const { _id, ...wantedOptions} = options;
@@ -210,14 +235,13 @@ module.exports = {
     devOnly: false,
     FixConfigFiles,
     GetConfigById,
+    GetConfigs,
     CreateOrUpdateConfig,
 
     ...data.toJSON(),
-    run: async (client, interaction) => {
+    run: async (client, interaction, config) => {
         await interaction.deferReply();
-        let userConfig = await CreateOrUpdateConfig({ name: null, discordId: interaction.user.id, nicknames: [ interaction?.member?.nickname, interaction.user.username ].filter(name => name != null).map(name => name.toLowerCase())})
-
-        userConfig = await CreateSettingsOverview(interaction, userConfig)
+        userConfig = await CreateSettingsOverview(interaction, config)
 
         if(userConfig.settings.general.AutoSave) {
             //save to database, this is all you have to do :)
@@ -329,7 +353,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                             return new ButtonBuilder()
                                 .setCustomId(`Number${choice}`)
                                 .setLabel(`${choice}`)
-                                .setStyle(choice == choiceValue ? ButtonStyle.Success : ButtonStyle.Primary)
+                                .setStyle(choice == choiceValue ? ButtonStyle.Primary : ButtonStyle.Secondary)
                             ;
                         })
                     );
@@ -476,7 +500,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
                 `You have ${userConfig.maxNicknames} nicknames allowed, and there can\'t be duplicates, when you add a new nickname it is inserted at the start and removes the old third one\n` +
                 'The reset button will open up a menu where you can choose the settings you would like to reset to default')
             .addFields(
-                { name: 'Vip Status', value: `${userConfig.vip}`, inline: true},
+                { name: 'Vip Status', value: `${userConfig.vip ? 'true :partying_face:' : 'false'}`, inline: true},
                 { name: 'Moodle Money', value: `${userConfig.tokens}`, inline: true},
                 { name: 'Name On Lismore', value: `${userConfig.name}` },
                 { name: 'Nicknames', value: `[${userConfig.nicknames.join(', ')}]` },
@@ -714,7 +738,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
                 new ButtonBuilder()
                     .setCustomId('All')
                     .setLabel('All')
-                    .setStyle(ButtonStyle.Danger),
+                    .setStyle(ButtonStyle.Primary),
             )
         }
         await interaction.editReply({ content: ' ', embeds: [reSettingsEmbed], components: [selectRow, buttonRow] });

@@ -1,7 +1,7 @@
 // const Discord = require("discord.js");
 const { Client, GatewayIntentBits, Partials, Collection, InteractionType } = require('discord.js');
 const slashcommands = require("./handlers/slashcommands");
-const { FixConfigFiles, GetConfigById } = require("./slashcommands/configSlash")
+const { FixConfigFiles, GetConfigById, CreateOrUpdateConfig } = require("./slashcommands/configSlash")
 const { GetLoginsFromDatabase, loginGroups } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
@@ -73,34 +73,45 @@ client.on("ready", async () => {
         console.log(`Successfully loaded in ${client.slashcommands.size} slash commands`)
     })
 
-    client.on("interactionCreate", (interaction) => {
+    client.on("interactionCreate", async (interaction) => {
         //if its not a command //-interaction.isCommand();
         //+interaction.type === InteractionType.ApplicationCommand;
         if(interaction.type !== InteractionType.ApplicationCommand) return
     //if its not from within a guild 
     // if(!interaction.inGuild()) return interaction.reply("This command can only be used in a server")
-    const slashcmd = client.slashcommands.get(interaction.commandName)
-    if(!slashcmd) return interaction.reply("Invalid slash command")
+    const slashcmd = await client.slashcommands.get(interaction.commandName)
+    if(!slashcmd) return await interaction.reply("Invalid slash command")
     
     //If the command is guild only and not inside guild
     if(slashcmd.guildOnly && !interaction.inGuild()) return;
     
     // make sure they are logged in if they want to do moodle
     if(slashcmd.idLinked && !loginGroups.hasOwnProperty(interaction.user.id)) {
-        return interaction.reply(`You must be logged in to use **${interaction.commandName}**. You can log in here or in direct messages with this bot`)
+        return await interaction.reply(`You must be logged in to use **${interaction.commandName}**. You can log in here or in direct messages with this bot`)
     }
 
     // Logging what commands are used, if it has subcommand, add that
-    let commandArgs = slashcmd.options.some(option => option.type == 1) ? interaction.options.getSubcommand() + ' ' : ''
+    let commandArgs = slashcmd.options.some(option => option.type == 1) ? await interaction.options.getSubcommand() + ' ' : ''
     // then add any args passed if it isn't the login command
-    if(interaction.commandName != "login") commandArgs += `=> ${GetCommandArgs(interaction.options.data)}`
+    if(interaction.commandName != "login") commandArgs += `=> ${await GetCommandArgs(interaction.options.data)}`
     
     console.log(`${interaction.user.username} used the command **${interaction.commandName}** ${commandArgs}`)
     
     //member.permissions is a guild thing, maybe put something in for dev, like interaction.user.id == dev or something
-    if(slashcmd.perms && !interaction.member.permissions.has(slashcmd.perm))
-    return interaction.reply("You do not have permission for this command");
-    slashcmd.run(client, interaction, GetConfigById(interaction.user.id))
+    if(slashcmd.perms && !await interaction.member.permissions.has(slashcmd.perm))
+    return await interaction.reply("You do not have permission for this command");
+
+    let config = await GetConfigById(interaction.user.id);
+    //* if the user doesn't have config, create one
+    if(!config) {
+        config = await CreateOrUpdateConfig({discordId: interaction.user.id, nicknames: [ interaction?.member?.nickname, interaction.user.username ].filter(name => name != undefined).map(name => name.toLowerCase())})
+    }
+    //increment commands run
+    config.stats.TotalCommandsRun++;
+    // then save to the database... every time, might be a bit expensive but better than fetching every time
+    await config.save();
+    //not awaiting cause other commands can run at the same time I guess idk...
+    slashcmd.run(client, interaction, config)
 })
 //discord error handling things that might help
 process.on("unhandledRejection", async (err) => {

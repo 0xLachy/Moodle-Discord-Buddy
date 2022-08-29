@@ -66,7 +66,7 @@ module.exports = {
     idLinked: true,
     devOnly: false,
     ...data.toJSON(),
-    run: async (client, interaction) => {
+    run: async (client, interaction, config) => {
         //https://moodle.oeclism.catholic.edu.au/lib/ajax/service.php?sesskey=YZhK6oSvAI&info=core_message_send_messages_to_conversation
 //        [
 //     {
@@ -84,13 +84,13 @@ module.exports = {
 // ]
         //normal, cause 3 seconds isn't fast enough
         // await loginToMoodleReq(50); 
-        await interaction.deferReply();
-
+        await interaction.deferReply({ephemeral: config?.settings.messages.Ephemeral ?? false});
         // const browser = await puppeteer.launch({ headless: false }) //slowMo:100
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
         //log into the browser todo find a better way to do this
         let failedToLogin = false
+        //don't do the owner login here because it's messaging people
         await UtilFunctions.LoginToMoodle(page, await interaction.user.id).catch(reason => {
             console.log(reason);
             interaction.editReply({content: 'Failed to login to moodle'});
@@ -120,7 +120,7 @@ module.exports = {
         let recipientImg = await page.evaluate(() => document.querySelector('div[data-region="header-content"] img').src)
 
         if (interaction.options.getSubcommand() === 'read') {
-            await ReadMessages(interaction, page, recipientName, recipientImg)
+            await ReadMessages(interaction, page, config, recipientName, recipientImg)
         }
         else if (interaction.options.getSubcommand() === 'send') {
             let cancelSending = await SendComfirmationMessage(interaction, page, recipientName, recipientImg)
@@ -128,7 +128,7 @@ module.exports = {
                 await interaction.deleteReply(); // just don't send it
             }
             else{
-                await SendMessageToUser(interaction, page, recipientName, recipientImg)
+                await SendMessageToUser(interaction, page, config, recipientName, recipientImg)
             }
         }
 
@@ -200,11 +200,10 @@ const WaitForUserNameOrError = (page) => {
     })
 }
 
-const ReadMessages = async (interaction, page, recipientName, recipientImg) => {
-    let showReceived = await interaction.options.getBoolean('received')  // default values for these
-    if (showReceived == undefined) showReceived = true;
+const ReadMessages = async (interaction, page, config, recipientName, recipientImg) => {
+    let showReceived = await interaction.options.getBoolean('received') ?? config?.settings.messages.ShowReceived ?? true
 
-    let showSent = await interaction.options.getBoolean('sent') || false; // default value if null
+    let showSent = await interaction.options.getBoolean('sent') ?? config?.settings.messages.ShowSent ?? false; // default value if null
     
     await page.waitForSelector('div.message', {timeout: 5000}).catch((error) => {/*console.log(error)*/})
     const messages = await page.evaluate((showReceived, showSent, recipientName) => {
@@ -267,9 +266,9 @@ const ReadMessages = async (interaction, page, recipientName, recipientImg) => {
     }
 }
 
-const SendMessageToUser = async (interaction, page, recipientName, recipientImg) => {
+const SendMessageToUser = async (interaction, page, config, recipientName, recipientImg) => {
     messageText = await interaction.options.getString('message');
-    sendAmount = await interaction.options.getInteger('times') || 1;
+    sendAmount = await interaction.options.getInteger('times') ?? config?.settings.messages.SendAmount ?? 1;
     // if send amount is greater than 100 then it is just gonna be 100 
     if(sendAmount > 100) sendAmount = 100; //shorthand looked too confusing
 
