@@ -5,7 +5,8 @@ const { FixConfigFiles, GetConfigById, CreateOrUpdateConfig } = require("./slash
 const { GetLoginsFromDatabase, loginGroups } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
-
+//TODO daily quiz for moodle money, badge for daily moodle quizzes done (1, 25, 52, 365)
+//*vip can get a second daily quiz, they can't use autofill for the quizzes!
 //+ const client = new Client({ intents: [GatewayIntentBits.Guilds], partials: [Partials.Channel] });
 const client = new Client({
     intents: [
@@ -112,6 +113,7 @@ client.on("ready", async () => {
     await config.save();
     //not awaiting cause other commands can run at the same time I guess idk...
     slashcmd.run(client, interaction, config)
+    //TODO after runing the slash command, .then, check for badges using their stats, like 50 slash commands ran or $100 donated
 })
 //discord error handling things that might help
 process.on("unhandledRejection", async (err) => {

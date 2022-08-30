@@ -503,7 +503,45 @@ function encrypt(loginDetails){
     // console.log("Encrypted message: " + encryptedData);
     return { name: loginDetails.username, initVector, Securitykey, encryptedPassword }
 }
+const SendConfirmationMessage = async (interaction, message, time=30000) => {
+    return new Promise(async (resolve, reject) => {
+        //create an embed instead
+        const confirmationEmbed = new EmbedBuilder()
+        .setColor(UtilFunctions.primaryColour)
+        .setTitle('Confirmation')
+        .setDescription(message)
 
+        const confirmationRow = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('no')
+                .setLabel('no')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('yes')
+                .setLabel('yes')
+                .setStyle(ButtonStyle.Success),
+        );
+        const reply = await interaction.followUp({content: ' ', embeds:[confirmationEmbed], components:[confirmationRow], fetchReply: true})
+        
+        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
+
+        const filter = i => i.user.id === interaction.user.id;
+        const collector = await channel.createMessageComponentCollector({ filter, time });
+
+        collector.on('collect', async (i) => {
+            if(i.customId == 'yes') {
+                reply.delete()
+                return resolve(true)
+            }
+            else if(i.customId == 'no') {
+                reply.delete()
+                return resolve(false)
+            }
+        })
+
+    })
+}
 // function decrypt(username, encryptedPassword, Securitykey, initVector){
 function decrypt(loginObj){
     // the decipher function
@@ -516,7 +554,6 @@ function decrypt(loginObj){
     return { "username": loginObj.name, "password": decryptedData }
 }
 
-//TODO need a delete security key func
 async function SaveSecurityKey(moodleName, Securitykey) {
     //*dir needs that extra slash thing before file name
     // fs.writeFile(__dirname + "/SecurityKey.env")
@@ -553,6 +590,7 @@ module.exports = {
     ConvertTime,
     UpdateActionRowButtons,
     GetLoginsFromDatabase,
+    SendConfirmationMessage,
     loginGroups,
     classAmount,
     courseIDs,

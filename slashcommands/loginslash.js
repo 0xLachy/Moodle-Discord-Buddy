@@ -1,4 +1,3 @@
-// const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
@@ -63,7 +62,7 @@ module.exports = {
             
             // await channel.send({ embeds: [loginEmbed] })
             await interaction.editReply({embeds:[loginEmbed]});
-            
+           
             await CreateOrUpdateConfig({name: loggedInName.toLowerCase(), discordId: interaction.user.id})
             await browser.close();
 

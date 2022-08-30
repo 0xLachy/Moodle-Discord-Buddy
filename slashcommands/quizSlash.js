@@ -64,8 +64,8 @@ module.exports = {
     ...data.toJSON(),
     run: async (client, interaction, config) => {
         await interaction.deferReply(/*{ephemeral: true}*/);
-        // const browser = await puppeteer.launch({ headless: false })
-        const browser = await puppeteer.launch();
+        const browser = await puppeteer.launch({ headless: false })
+        // const browser = await puppeteer.launch();
         const page = await browser.newPage();
         
         const quizConfig = config?.settings['quiz']
@@ -75,7 +75,7 @@ module.exports = {
         //Login to moodle and catch any errors that occur
         await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : await interaction.user.id).catch(reason => {
             console.log(reason);
-            interaction.editReply({content: 'Internet was probably too slow and timed out'});
+            interaction.editReply({content: 'Internet was probably too slow and timed out, or something went wrong with your login'});
             browser.close();
         })
 
@@ -100,7 +100,7 @@ module.exports = {
 
         const repeatThreshold = quizConfig?.repeatThreshold ?? 90
 
-        let repeatAmount = await interaction.options.getInteger('repeat-amount') ?? quizConfig?.repeatAmount ?? false;
+        let repeatAmount = await interaction.options.getInteger('repeat-amount') ?? quizConfig?.repeatAmount ?? 1;
         
         //* This can't be global because the database needs to be already connected, and at like compile time, that doesn't happen
         const quiz_db = mongoose.createConnection(process.env.MONGO_URI, {
@@ -109,7 +109,7 @@ module.exports = {
         // get the chosen quiz and questions, if any of them return null, just close the browser as it won't be used anymore
         const chosenQuizzes = await DisplayQuizzes(interaction, await GetQuizzesList(page, chosenTerm.ID), quizConfig?.ShowAlreadyCompletedQuizzes);
         if(chosenQuizzes == null || chosenQuizzes.length == 0) return await browser.close();
-        
+
         for (const chosenQuizIndex in chosenQuizzes) {
             //TODO use a for of or something
             const chosenQuiz = chosenQuizzes[chosenQuizIndex]
@@ -135,11 +135,13 @@ module.exports = {
                 }
                 //it will add the answers to the database (if it isn't null)
                 await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers?.questions)
+                //they did a quiz, so add to the counter!
+                config.stats.QuizzesCompleted++;
                 // using truthy, once repeat amount reaches 0 it fails could use != 0 instead
             } while (repeatAmount && Number(correctedAnswers.grade) < repeatThreshold);
             // const correctedAnswers = autoFillEverything === true ? await AutoFillAnswers(interaction, page, chosenQuiz.name, scrapedQuestions) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
         }
-
+        await config.save()
         //finished! now to close everything! (if browser was already closed it doesn't matter)
         await browser.close();
     }
@@ -915,6 +917,10 @@ async function GuessOrFillSpecificQuestion(question) {
             else {
                 //Sets a random one to be selected (true), if it isn't an incorrect answer, loop through heaps
                 let currentAnswer;
+                if(question.answerData.every(answer => answer.correct === false)) {
+                   console.log('error with answerData, every anser is incorrect somehow?') 
+                   question.answerData.map(answer => { answer.correct = null; return answer ; })
+                }
                 do {
                     currentAnswer = question.answerData[Math.floor(Math.random() * question.answerData.length)]; //= true;
                     if (currentAnswer.correct !== false)

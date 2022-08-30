@@ -53,10 +53,14 @@ const statsInfo = {
     //* have to have 0 (or any number) as a default otherwise database Nan errors
     CreationDate: { type: Date, default: Date.now, info: 'When the config file was created'},
     TokensDonated: { type: Number, default: 0, info: 'How many tokens you have given to other people'},
+    TokensRecieved: { type: Number, default: 0, info: 'How many tokens you have recieved (from anything apart from starting amount)'},
+    //? not sure about this purchase thing
+    // Purchases: { type: [], info: 'Stuff you have bought with Moodle Money'}, // store as { vip: 1, nicknames: 1}
     AssignmentsShared: { type: Number, default: 0, info: '(count of) Assignments you gave to other people' },
     AssignmentsBorrowed: { type: Number, default: 0, info: '(count of) Assignments you borrowed from other people' },
     QuizzesCompleted: { type: Number, default: 0, info: 'How many quizzes you have done through the bot' },
-    TotalCommandsRun: { type: Number, default: 0, info: 'How many times you have run a slash command with lismore buddy' },
+    TotalCommandsRun: { type: Number, default: 0, info: 'How many times you have run a slash command with moodle buddy' },
+    DailyQuizzesComplete: { type: Number, default: 0, info: 'How many daily quizzes you have done'},
 }
 // removing the title and info values because they aren't needed in the database
 const configSettings = Object.entries(settingsInfo).reduce((settings, [settingType, settingData]) => {
@@ -77,8 +81,11 @@ const configStats = Object.entries(statsInfo).reduce((stats, [statName, statObj]
 }, {})
 //discordID string or int, I think it is given by discord api as string
 // make the schema that is used to send and recieve data
+const topLevelDefaults = {
+
+}
 const configSchema = new mongoose.Schema({
-    name: { type: String, default: null, lowercase: true, trim: true }, // their lismore name
+    name: { type: String, default: null, lowercase: true, trim: true }, // their moodle name
     discordId: String, // their discord id to fetch their config
     vip: { type: Boolean, default: false },
     tokens: { type: Number, default: 200, min: 0},
@@ -154,6 +161,12 @@ const FixConfigFiles = async () => {
                     }
                     return correctedSettings
                 }, {})
+
+                // Todo move this to seperate checker thing for stats 
+                config.stats = Object.entries(configStats).reduce((fixedStats, [statName, statTypeData]) => {
+                    fixedStats[statName] = config.stats[statName] ?? statTypeData;
+                    return fixedStats;
+                },{})
                 //lastly save the config to the database now the old files were removed and new files added
                 await config.save();
             }
@@ -172,6 +185,7 @@ const FixConfigFiles = async () => {
     cachedConfigs = allConfigs;
 
     //typeof is sh*t, instance of, .constructor, can't find anything online
+    //yeah so you can use code in mongodb, crap... too late now
     function CompareTypes(type) {
         if(type === Number){
             return 'number'
@@ -200,9 +214,16 @@ const GetConfigs = () => {
     return cachedConfigs;
 }
 
+const GetDefaults = () => {
+   const { tokens, maxNicknames } = configSchema.obj;
+   return { tokens, maxNicknames }
+}
+
 const CreateOrUpdateConfig = async (options) => {
     const { _id, ...wantedOptions} = options;
-    let userConfig = await Config.find({discordId: wantedOptions.discordId})
+    //* if the name is passed, in it means they were logged in before, we want to change their discordId
+    //! check that when they login with different discord account, it does wanted behaviour
+    let userConfig = wantedOptions?.name ? await Config.find({name: wantedOptions.name}) : await Config.find({discordId: wantedOptions.discordId})
     if(userConfig.length > 0) {
         if (userConfig.length > 1) {
             for (const duplicateConfigIndex in userConfig) {
@@ -213,6 +234,9 @@ const CreateOrUpdateConfig = async (options) => {
         }
         if(wantedOptions?.name) {
             userConfig[0].name = wantedOptions.name;
+            if(wantedOptions?.discordId) {
+                userConfig.discordId = wantedOptions.discordId;
+            }
             await userConfig[0].save();
         }
         return userConfig[0]
@@ -237,6 +261,7 @@ module.exports = {
     GetConfigById,
     GetConfigs,
     CreateOrUpdateConfig,
+    GetDefaults,
 
     ...data.toJSON(),
     run: async (client, interaction, config) => {
@@ -502,7 +527,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
             .addFields(
                 { name: 'Vip Status', value: `${userConfig.vip ? 'true :partying_face:' : 'false'}`, inline: true},
                 { name: 'Moodle Money', value: `${userConfig.tokens}`, inline: true},
-                { name: 'Name On Lismore', value: `${userConfig.name}` },
+                { name: 'Name On Moodle', value: `${userConfig.name}` },
                 { name: 'Nicknames', value: `[${userConfig.nicknames.join(', ')}]` },
             );
 
@@ -650,7 +675,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
                         .setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder()
                         .setCustomId('Name')
-                        .setLabel(editingName ? 'Editing Lismore name' : 'Editing Nicknames')
+                        .setLabel(editingName ? 'Editing moodle name' : 'Editing Nicknames')
                         .setDisabled(disabled)
                         .setStyle(ButtonStyle.Primary),
                     new ButtonBuilder()
@@ -682,7 +707,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
             .setTitle('Reset Settings Overview')
             .setDescription('Choose which settings you want to reset')
             .addFields(
-                { name: 'Name On Lismore', value: `${userConfig.name}` },
+                { name: 'Name On Moodle', value: `${userConfig.name}` },
                 { name: 'Nicknames', value: `[${userConfig.nicknames.join(', ')}]` }
             );
         const selectRow = new ActionRowBuilder();
