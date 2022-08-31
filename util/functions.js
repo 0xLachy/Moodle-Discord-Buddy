@@ -2,12 +2,12 @@ const fs = require("fs");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle  } = require('discord.js');
 const { resolve } = require("path");
 const crypto = require("crypto");
-const mongoose = require('mongoose')
+const { ConvertName } = require('../slashcommands/configSlash');
+const mongoose = require('mongoose');
 require("dotenv").config()
 
 //VARIABLES
 const currentTerm = 2;
-const classAmount = 26;
 const contextId = 124194;
 
 //colour stuff
@@ -17,7 +17,6 @@ const errorColour = 0xFF0000;
 //course stuff
 const mainStaticUrl = "https://moodle.oeclism.catholic.edu.au";
 const dashboardUrl = `${mainStaticUrl}/my/index.php`
-const courseIDs = ["896", "897", "898"]
 
 //login stuff
 const algorithm = "aes-256-cbc"; 
@@ -44,71 +43,10 @@ async function GetLoginsFromDatabase() {
     }
 }
 
-//example urls:
-// const TermURLS = [ 
-//         "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=896",
-//         "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=897",
-//         "https://moodle.oeclism.catholic.edu.au/course/recent.php?id=898"
-// ]; 
-//const participantURL = `https://moodle.oeclism.catholic.edu.au/user/index.php?contextid=123980&id=896&perpage=${classAmount}`;
-
-
-//best band ever! 😍
-//make sure that they are all lowercase
-const nicknames = {
-    "lachy": "lachlan",
-    "lociānus": "lachlan",
-    "locianus": "lachlan",
-    "harrisonus": "harrison",
-    "harry": "harrison",
-    "poohead": "harrison",
-    "teacher": "michael",
-    "sddmaster": "harrison",
-    "jebidiah": "jeb"
-} 
-
-//todo database nicknames format
-// const dbNicknames = {
-//     'lachlan': ['lachy', 'locianus', 'lociānus'],
-//     'harrison': ['harry', 'harrisonus', 'poohead']
-// }
-
 //USE LOGIN GROUPS TO GET ID
 const getFiles = (path, ending) => {
     return fs.readdirSync(path).filter(f=> f.endsWith(ending))
 }
-
-//Default is leaderboard cause its used the most
-const GetTermURLS = (sectionOfWebsite="leaderboard", termId=courseIDs[currentTerm - 1]) => { 
-    generatedUrls = []
-    switch (sectionOfWebsite) {
-        case "leaderboard":
-            for (id of courseIDs){
-                generatedUrls.push(`${mainStaticUrl}/course/recent.php?id=${id}`)
-            }
-            break;
-        case "participants":
-            // for (id of courseIDs){
-            //     generatedUrls.push(`${mainStaticUrl}user/index.php?contextid=${contextId}&id=${id}&perpage=${classAmount}`)
-            // }
-            //Minus 1 because 0 indexing (you cant have term zero lol)
-            // id = courseIDs[currentTerm - 1]
-            //generatedUrls.push(`${mainStaticUrl}user/index.php?contextid=${contextId}&id=${termId}&perpage=5000`)
-            generatedUrls.push(`${mainStaticUrl}/user/index.php?page=0&perpage=5000&contextid=${contextId}&id=${termId}&newcourse`)
-            break;
-        default:
-            break;
-    }
-    return generatedUrls;
-    
-    //generate URLs
-    // function generateURLS(endingBit){
-    //     return ${mainStaticUrl}
-    //         fullURLS.push(`${mainStaticUrl}${endingBit}${id}`)
-        
-    // }
-}
-
 
 const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl, loginDetails=undefined) => {
     // if (TermURL == 'Null') {
@@ -361,7 +299,7 @@ const NameToID = async (interaction, page, nameToConvert, chosenTerm) => {
 
             interaction.editReply({ content: `Going to the url ${chosenTerm.URL} to find ${nameToConvert}`, embeds: []})
             // use zero because it returns an array for no reason
-            await page.goto(await GetTermURLS("participants", chosenTerm.ID)[0])
+            await page.goto(`${mainStaticUrl}/user/index.php?page=0&perpage=5000&contextid=${contextId}&id=${chosenTerm.ID}&newcourse`)
             let userUrl = await GetUserUrlByName(page, nameToConvert)
             if(userUrl == null) {
                 // If no username found, I should say that and then quit
@@ -389,25 +327,7 @@ const GetUserUrlByName = async (page, inputName) => {
             }
         }
         return null;
-    }, await NicknameToRealName(inputName))
-}
-
-//todo, when a person logs in, in their config, add their current name to their nicknames
-const NicknameToRealName = async (inputName, flipped=false) => {
-    inputName = inputName.toLowerCase(); 
-    if(flipped) {
-        //returns **all** the nicknames, because there is only one trueName
-        //todo, later convert this so all nicknames are stored as an array or something
-        const personsNicknames = Object.entries(nicknames).filter(([nickname, trueName]) => inputName == trueName || inputName.split(' ')[0] == trueName).map(([nickname, trueName]) => nickname)
-        if(personsNicknames.length == 0) {
-            personsNicknames.push(inputName)
-        }
-        return personsNicknames;
-    }
-    else {
-        //return the truename, otherwise return the inputName (which will be lowercase now)
-        return inputName = nicknames[inputName] ?? inputName;
-    }
+    }, await ConvertName(inputName)) 
 }
 
 async function UpdateActionRowButtons(i) {
@@ -580,21 +500,15 @@ async function DeleteSecuritykey(moodleName) {
 }
 module.exports = {
     getFiles,
-    GetTermURLS,
     LoginToMoodle,
     LogoutOfMoodle,
     GetCourseUrls,
     AskForCourse,
     NameToID,
-    NicknameToRealName,
     ConvertTime,
     UpdateActionRowButtons,
     GetLoginsFromDatabase,
     SendConfirmationMessage,
     loginGroups,
-    classAmount,
-    courseIDs,
-    primaryColour,
     mainStaticUrl,
-    errorColour
 }

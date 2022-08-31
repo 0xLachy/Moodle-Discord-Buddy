@@ -1,7 +1,6 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { EmbedBuilder } = require('discord.js');
-const LismFunctions = require("../util/functions");
-
+const { primaryColour, errorColour } = require("../util/colors");
 
 //Code to get all the command names:
 
@@ -42,7 +41,7 @@ module.exports = {
             //Create a new embed message to reply to the sender
             let embed = new EmbedBuilder()
             .setTitle(`List of available slash commands (${client.slashcommands.size})`)
-            .setColor(LismFunctions.primaryColour)
+            .setColor(primaryColour)
             // .setFooter('The options count is the amount of sub commands and choices in each command per category')
 
             //Get all the slash commands and put them into categories
@@ -82,7 +81,7 @@ module.exports = {
                 let embed = new EmbedBuilder()
                 .setTitle(`Error!`)
                 .setDescription(`**ERROR:** The command "**${inputCommand}**" doesnt exist!\nRun /help for a list of available commands!`)
-                .setColor(LismFunctions.errorColour)
+                .setColor(errorColour)
 
                 return interaction.editReply({embeds: [embed]})
 
@@ -102,7 +101,7 @@ module.exports = {
             //.addField(`Usage`, `${prefix}${cmd.usage}`)
             //.addField(`Accessible by`, cmd.accessible) change that to permissions thing
             // .addField(`Aliases`, `${cmd.aliases ? cmd.aliases.join(", ") : "None"}`) // If the command has aliases, write them all separated by commas, if it doesnt have any, write "None".
-            .setColor(LismFunctions.primaryColour)
+            .setColor(primaryColour)
             //.setFooter(`In the usage field, arguments between round brackets are required, and arguments between square brackets are optional.`)
             
             if(cmd.usage != undefined  && cmd.usage != null){

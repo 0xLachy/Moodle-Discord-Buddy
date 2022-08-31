@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder } = require('discord.js');
 const puppeteer = require('puppeteer');
 const UtilFunctions = require("../util/functions");
+const { primaryColour } = require("../util/colors");
 const mongoose = require('mongoose')
 require("dotenv").config()
 
@@ -250,7 +251,7 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
         // could also add the grade to the title? but that is already in the description elements
         // `${(await page.evaluate(() => document.querySelectorAll('table.quizreviewsummary tr')[4].innerText)).replace('\t', ' ')}`
         let quizSummaryEmbed = new EmbedBuilder()
-                .setColor(UtilFunctions.primaryColour)
+                .setColor(primaryColour)
                 .setTitle(EmbedTitle)
                 // .setURL(page.url())
                 // .setThumbnail(recipientImg)
@@ -367,7 +368,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
         // await interaction.editReply({components: []})
         const questionData = scrapedQuestions[questionIndex]
         let quizStartEmbed = new EmbedBuilder()
-            .setColor(UtilFunctions.primaryColour)
+            .setColor(primaryColour)
             .setTitle(questionData.questionName.length <= 256 ? questionData.questionName : `Question ${questionIndex}`)
             // .setURL(page.url())
             // .setThumbnail(recipientImg)
@@ -607,7 +608,7 @@ const GetQuizzesList = async (page, termID) => {
 const DisplayQuizzes = async (interaction, quizzes, showDone=true) => {
     return new Promise(async (resolve, reject) => {
         const quizzesEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle('Available Quizzes')
         .setDescription('Choose a Quiz from the select menu, you can redo the quizzes you have already done if you want to.' + 
         ' If you have hints enabled, when you click an answer the button will turn green or red (correct or false), if the bot doesn\'t know it already it will be blue (normal selected) ' + 

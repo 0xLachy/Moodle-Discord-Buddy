@@ -1,7 +1,8 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
-const { EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+const { primaryColour } = require("../util/colors");
+const { ConvertName } = require('./configSlash')
 
 //TODO implement code for the role options and also todo, when those roles are added make sure not in dm
 //.setRequired(true));
@@ -184,7 +185,7 @@ async function FasterLeaderboard(page, chosenTerms, rigPerson=null, mergeResults
     return leaderboardResults;
 }
 
-function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, title, colour=UtilFunctions.primaryColour) {
+function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, title, colour=primaryColour) {
     // Create the Message Embed to send to the channel
     let embedMsg = new EmbedBuilder();
     title ? embedMsg.setTitle(title) : embedMsg.setTitle(`Leaderboard Results:`);
@@ -364,7 +365,7 @@ const GiveRolesFromLeaderboard = async (interaction, leaderboard) => {
     }
     // create the embed to send
     const roleSummaryEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle('Roles Given:')
         .setDescription('Takes the names from the leaderboard and tries to find the equivalent discord accounts to give the roles to.')
         .addFields(Object.entries(RolesGivenInfo).map(([name, roleData]) => {
@@ -380,34 +381,32 @@ const GiveRolesFromLeaderboard = async (interaction, leaderboard) => {
         const currentRoleInfo = (RolesGivenInfo[leaderBoardRoles[roleIndex].name] = {})
         for (const personName of personGroup) {
             // convert their name to their nickname
-            const nicknames = await UtilFunctions.NicknameToRealName(personName, true);
-            const discordName = await GiveRole(interaction, nicknames, roleIndex);
+            //straight to discord id instead of having to find the person in the guild
+            // const nicknames = await UtilFunctions.NicknameToRealName(personName, true);
+            //it is good that it doesn't return an id if not found, that way we know it didn't work
+            discordId = await ConvertName(personName, false, true)
+            const discordName = await GiveRole(interaction, discordId, roleIndex);
             if(discordName) {
                 if(!currentRoleInfo['Given']) currentRoleInfo['Given'] = [];
-                currentRoleInfo['Given'].push(`${discordName}${!nicknames.includes(discordName.toLowerCase()) ? ` (${nicknames.join(', ')})` : ''}`)
+                currentRoleInfo['Given'].push(discordName)
             }
             else {
                 if(!currentRoleInfo['Unfound']) currentRoleInfo['Unfound'] = [];
                 // if they have a different nickname, add that to the string
-                currentRoleInfo['Unfound'].push(`${personName}${!nicknames.includes(personName.toLowerCase()) ? ` (${nicknames.join(', ')})` : ''}`)
+                currentRoleInfo['Unfound'].push(personName)
             }
         }
     }
 }
 
-const GiveRole = async (interaction, potentialNames, roleIndex) => {
-    let LCMemberName = null;
-    const discordAcc = await interaction.guild.members.fetch().then(members => members.find(member => {
-        // if their name is inside the nicknames, or their first name
-        LCMemberName = member?.nickname?.toLowerCase() || member?.username?.toLowerCase() || null;
-        // don't know why but this does return the discord account
-        return LCMemberName ? potentialNames.includes(LCMemberName) || potentialNames.some(pName => pName.split(' ')[0] == LCMemberName) : null;
-    }))
+const GiveRole = async (interaction, discordId, roleIndex) => {
+    if(isNaN(discordId)) return null;
+    const discordAcc = await interaction.guild.members.fetch(discordId)
     if(discordAcc) {
         const roleToGive = await interaction.guild.roles.cache.find(role => role.name == leaderBoardRoles[roleIndex].name)
         //not awaiting because it takes some time to give the actual role and it can be done in the background
         discordAcc.roles.add(roleToGive)
-        return LCMemberName;
+        return discordAcc?.nickname ?? discordAcc.user.username
     }
     //if it didn't return true already
     return null;

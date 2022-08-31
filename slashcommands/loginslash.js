@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
 const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+const { primaryColour } = require("../util/colors");
 const { CreateOrUpdateConfig } = require("./configSlash")
 
 //TODO have an option to parse in cookies instead of password, or even provide a custom link that gets the cookies
@@ -55,7 +56,7 @@ module.exports = {
             // console.log(result);
             loggedInName = await page.evaluate(() => document.querySelector('#usermenu > span').textContent)
             const loginEmbed = new EmbedBuilder()
-            .setColor(UtilFunctions.primaryColour)
+            .setColor(primaryColour)
             .setTitle(`Your discord ID (${interaction.user.id}) is now associated with the moodle account: ${loggedInName}`)
             .setDescription('When a command is run the bot will check the discord ID of the user and unencrypt and log in as you instead of the bot owners credentials, giving you access to more commands')
             .setThumbnail(await page.evaluate(() => document.querySelector('#usermenu > img').src))

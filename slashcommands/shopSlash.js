@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const { GetConfigs } = require("./configSlash");
-const UtilFunctions = require("../util/functions");
+const { primaryColour } = require("../util/colors");
 
 const data = new SlashCommandBuilder()
 	.setName('shop')
@@ -37,7 +37,7 @@ const CreateShopEmbed = (interaction, userConfig, lastI) => {
             // { name: 'Cookies', value: 'Buy some cookies, just cause!'},
         ]
         const ShopOverviewEmbed = new EmbedBuilder()
-            .setColor(UtilFunctions.primaryColour)
+            .setColor(primaryColour)
             .setTitle('Shop')
             //TODO set thumbnail to Moodlecoin logo .setThumbnail(interaction.user.displayAvatarURL())
             //TODO add a banner image to the shop like the boom guy in a tavern with a bunch of moodle coins on the floor
@@ -122,7 +122,7 @@ const SendConfirmationMessage = async (interaction, message, time=30000) => {
     return new Promise(async (resolve, reject) => {
         //create an embed instead
         const confirmationEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle('Confirmation')
         .setDescription(message)
 

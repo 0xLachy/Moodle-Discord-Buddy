@@ -2,8 +2,10 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { EmbedBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions")
+const { primaryColour } = require("../util/colors");
+const { ConvertName } = require('./configSlash')
 
-//.setRequired(true));
+//TODO fix error with too many assignments showing up if bad name is passed (it breaks the program)
 const data = new SlashCommandBuilder()
 	.setName('assignments')
 	.setDescription('Get assignments for the Moodle course')
@@ -63,8 +65,8 @@ module.exports = {
 
         if(chosenTerms == null) return;
         switch (await interaction.options.getSubcommand()) {
-            case 'student':
-                let studentName = await UtilFunctions.NicknameToRealName(await interaction.options.getString("studentname"));
+            case 'missing':
+                let studentName = ConvertName(await interaction.options.getString("studentname"))
                 SendEmbedMessage(await GetWantedAssignments(await GetAllAssignments(page, chosenTerms), studentName), interaction, studentName);
                 break;
             case 'filter':
@@ -180,7 +182,7 @@ async function GetWantedAssignments(assignments, personName, filtering=false, as
 }
 
 
-function SendEmbedMessage(missingAssignments, interaction, personName, title="none", colour=UtilFunctions.primaryColour) {
+function SendEmbedMessage(missingAssignments, interaction, personName, title="none", colour=primaryColour) {
     let embedMsg = new EmbedBuilder();
 
     if(title != "none"){

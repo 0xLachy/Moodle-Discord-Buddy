@@ -1,9 +1,11 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
-const UtilFunctions = require("../util/functions");
+const { primaryColour } = require("../util/colors");
 const mongoose = require('mongoose');
+require("dotenv").config()
 //TODO add the stats viewer screen where you can see your stats
 //And I guess badges too, but I think that should be a seperate command
 let cachedConfigs = [];
+//Todo test that if you change a nickname, it actually saves in cached configs
 //*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices are not added to the database
 const settingsInfo = {
     general: {
@@ -206,6 +208,18 @@ const FixConfigFiles = async () => {
     
 }
 
+const ConvertName = (inputName, nicknameToName=true, toDiscordId=false) => {
+    inputName = inputName.toLowerCase();
+    if(nicknameToName) {
+        inputName = cachedConfigs.find(cfg => cfg.nicknames.includes(inputName))?.name ?? inputName;
+    } 
+    else {
+        const foundConfig = cachedConfigs.find(cfg => cfg.name == inputName)
+        inputName = (toDiscordId ? foundConfig?.discordId : foundConfig?.nicknames) ?? inputName;
+    }
+    return inputName;
+}
+
 const GetConfigById = (discordId) => {
     return cachedConfigs.find(config => config.discordId == discordId)
 }
@@ -261,6 +275,7 @@ module.exports = {
     GetConfigById,
     GetConfigs,
     CreateOrUpdateConfig,
+    ConvertName,
     GetDefaults,
 
     ...data.toJSON(),
@@ -311,7 +326,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
         const startInd = settingIndex == 0 ? 0 : settingsEntries.length - 1 == settingIndex ? settingIndex - 2 : settingIndex - 1;
 
         const currentSettingEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle(`${currentSettingsInfo.title || settingName}`)
         .addFields(
             Object.entries(currentSettings).map(([name, value], index) => { 
@@ -518,7 +533,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
     return new Promise(async (resolve, reject) => {
         let justSaved = false;
         const settingsOverviewEmbed = new EmbedBuilder()
-            .setColor(UtilFunctions.primaryColour)
+            .setColor(primaryColour)
             .setTitle('Settings')
             .setThumbnail(interaction.user.displayAvatarURL())
             .setDescription('This is an overview of the the settings, send your nickname to this channel bellow, click the button to change your real name instead. ' +
@@ -703,7 +718,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
         }
         let justSaved = false;
         const reSettingsEmbed = new EmbedBuilder()
-            .setColor(UtilFunctions.primaryColour)
+            .setColor(primaryColour)
             .setTitle('Reset Settings Overview')
             .setDescription('Choose which settings you want to reset')
             .addFields(

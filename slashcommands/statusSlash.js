@@ -2,6 +2,8 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { EmbedBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+const { ConvertName } = require('./configSlash')
+const { primaryColour } = require("../util/colors");
 
 //INFO:
 /*
@@ -140,7 +142,7 @@ module.exports = {
             case "person":
                 let realInputName = await interaction.options.getString("person-name")
                 //Getting name (which is required) and converting it from nickname, also converts to lower case
-                let inputName = await UtilFunctions.NicknameToRealName(realInputName);
+                let inputName = await ConvertName(realInputName);
                 //console.log(await GetTableOfPeople(page));
 
                 const tableOfPeople = await GetTableOfPeople(page);
@@ -260,7 +262,7 @@ async function GetOnlineLeaderboard(page, embedMessagesArr, showSeconds=false){
 
 }
 
-function CreateEmbedMessage(embedMessagesArr, personData, leaderboard=false, title="none", colour=UtilFunctions.primaryColour) {
+function CreateEmbedMessage(embedMessagesArr, personData, leaderboard=false, title="none", colour=primaryColour) {
 
     let embedCounter = Math.ceil((personData.length) / 25)
     let personIndex = 0;
@@ -300,7 +302,7 @@ function CreateEmbedMessage(embedMessagesArr, personData, leaderboard=false, tit
                 personIndex++;  
             } while ((personIndex + 1) % 25 != 0)
         }
-        statusEmbed.setColor(UtilFunctions.primaryColour);
+        statusEmbed.setColor(primaryColour);
         embedMessagesArr.push(statusEmbed); 
     }
 }

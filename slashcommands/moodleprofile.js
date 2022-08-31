@@ -3,6 +3,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, Util } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+const { primaryColour } = require("../util/colors");
 // const wait = require('node:timers/promises').setTimeout;
 
 //INFO:
@@ -141,7 +142,7 @@ const SendProfileToDiscord = (interaction, profileDataObject) => {
         interaction.editReply("Content Couldn't be loaded, you may not have access to this user, are you sure you chose the right person?")
     }
     let profileEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle(`${profileDataObject.fullName || ''} (${profileDataObject.userId})`.trim())
         .setURL(profileDataObject.profileUrl) // replace this with their url
         .setDescription(profileDataObject.description)

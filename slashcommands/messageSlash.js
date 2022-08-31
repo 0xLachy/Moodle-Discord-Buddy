@@ -5,6 +5,7 @@ const superagent = require('superagent').agent();
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } = require('discord.js');
 // const { EmbedBuilder, Util, ButtonBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+const { primaryColour } = require("../util/colors");
 require("dotenv").config()
 
 
@@ -139,7 +140,7 @@ module.exports = {
 const SendComfirmationMessage = (interaction, page, recipientName, recipientImg) => {
     return new Promise(async (resolve, reject) => {
 		const confirmationEmbed = new EmbedBuilder()
-			.setColor(UtilFunctions.primaryColour)
+			.setColor(primaryColour)
 			.setTitle('Confirmation')
 			.setURL(page.url())
             .setThumbnail(recipientImg)
@@ -258,7 +259,7 @@ const ReadMessages = async (interaction, page, config, recipientName, recipientI
         let title = `Messages With ${recipientName}`
         if (currentEmbed > 0) title += `, Part: ${currentEmbed + 1}`
         return new EmbedBuilder()
-            .setColor(UtilFunctions.primaryColour)
+            .setColor(primaryColour)
             .setTitle(title)
             .setURL(page.url())
             .setThumbnail(recipientImg)
@@ -298,7 +299,7 @@ const SendMessageToUser = async (interaction, page, config, recipientName, recip
     if(sendAmount > 1) title += ` ${sendAmount} times!`;
 
     messageSendEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle(title)
         .setURL(page.url())
         .setThumbnail(recipientImg)

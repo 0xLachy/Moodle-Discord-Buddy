@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const UtilFunctions = require("../util/functions");
+const { primaryColour } = require("../util/colors");
 const { CreateOrUpdateConfig, GetConfigById, GetConfigs, GetDefaults } = require("./configSlash")
 
 //* You actually can put in any valid id for the user id, which means it can be sent from dms
@@ -31,7 +32,7 @@ module.exports = {
         let amount = await interaction.options.getInteger('amount')
         // make sure the person isn't a bot
         if(!recipient && !interaction.inGuild()) {
-            return interaction.reply('if you are using dms, get the users id and use that as recipient role')
+            return interaction.reply('if you are using dms, get the users id (developer mode just right click on their profile and copy id) and use that as recipient option')
         }
         else if(recipient?.id == interaction.user.id) {
             return interaction.reply('You can\'t donate to yourself!')
@@ -45,7 +46,8 @@ module.exports = {
             return await PromptForDonation(interaction, config, recipient, amount)
         }
         else {
-
+            const recipientConfig = GetConfigById(recipient) ?? CreateOrUpdateConfig({ discordId: recipient.id, nicknames: [ recipient?.nickname, recipient.username ].filter(name => name != undefined).map(name => name.toLowerCase())});
+            return FinaliseAndDisplayDonation(interaction, userConfig, interaction.guild.members.fetch(recipient), recipientConfig, amount)
         }
 
         //* call function to remove money and stuff
@@ -66,30 +68,34 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
         const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
 
         const filter = i => i.user.id === interaction.user.id;
-        const collector = await channel.createMessageComponentCollector({ filter, time: 180 * 1000 });
+        //INSTEAD OF USING CHANNEL USE MESSAGE
+        let collector = null
 
 
 
         const donationEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle('Donation Menu')
         .setDescription('Choose a person in the guild to donate your Moodle Money to!\nReset to set it to 0, change default donation amount in config.\nWhenever a button is clicked, adds that amount to donation amount')
 
         
         if(!recipient) {
-            const guildMembers = await interaction.guild.members.fetch();
+            const guildMembers = (await interaction.guild.members.fetch()).filter(member => member.id != interaction.user.id && !member.user.bot);
             const allConfigs = GetConfigs();
             const defaultTokens = GetDefaults().tokens.default;
+            //todo if guildMembers.length > 25 then createPages
             const userSelectMenu = new ActionRowBuilder()
             .addComponents(
                 new SelectMenuBuilder()
                 .setCustomId('select')
                 .setPlaceholder('Choose person to donate to')
-                //! over 25 people can't be displayed, have left and right buttons for this case!!!! also filter out bots
-                .addOptions(guildMembers.map(member => { return { label: `${member?.nickname ?? member.name}`, value: `${member.id}`, description:`They currently hold $${allConfigs.find(uConfig => uConfig.discordId == member.id)?.tokens || defaultTokens}` } }))
+                //! over 25 people can't be displayed, have left and right buttons for this case!!!! 
+                .addOptions(guildMembers.map(member => { return { label: `${member?.nickname ?? member.user.username}`, value: `${member.id}`, description:`They currently hold $${allConfigs.find(uConfig => uConfig.discordId == member.id)?.tokens || defaultTokens}` } }))
             );
             
-            await interaction.editReply({content: ' ', embeds:[donationEmbed], components:[userSelectMenu]})
+            const message = await interaction.editReply({content: ' ', embeds:[donationEmbed], components:[userSelectMenu]})
+            collector = await message.createMessageComponentCollector({ filter, time: 180 * 1000 });
+
             // get them to choose a recipient
             collector.on('collect', async (i) => {
                 if(i.customId == 'select') {
@@ -120,8 +126,8 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
                     .setStyle(ButtonStyle.Success)
                     .setDisabled(amount == 0 || amount > userConfig.tokens)
             )
-            await interaction.editReply({content: ' ', embeds:[donationEmbed], components:[...incrementButtons, confirmationRow]})
-
+            const message = await interaction.editReply({content: ' ', embeds:[donationEmbed], components:[...incrementButtons, confirmationRow], fetchReply: true})
+            collector = await message.createMessageComponentCollector({ filter, max: 1, time: 180 * 1000 });
             collector.on('collect', async (i) => {
                 await i.deferUpdate().catch(() => {})
                 if(i.customId == 'reset') {
@@ -140,9 +146,6 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
                     await collector.stop();
                     //TODO make it a bit nicer
                     return resolve(await interaction.editReply({ content: 'Cancelled Donation :(', embeds: [], components: []}));
-                    // reply.delete()
-                    // return resolve(false)
-                    //* disable all the buttons idk
                 }
                 else if(!isNaN(i.customId)) {
                     //it means the custom id is a number, so just increment that :D
@@ -173,7 +176,7 @@ const FinaliseAndDisplayDonation = async (interaction, userConfig, recipient, re
     await recipientConfig.save();
     await userConfig.save();
     const donationDoneEmbed = new EmbedBuilder()
-    .setColor(UtilFunctions.primaryColour)
+    .setColor(primaryColour)
     .setTitle('Donation Successful!')
     .setDescription(`Congrats <@${recipient.id}> you now have $${recipientConfig.tokens} Moodle Money :partying_face:!\n<@${userConfig.discordId}> donated $${amount} and now has $${userConfig.tokens} Moodle Money left`)
     .setThumbnail(recipient.displayAvatarURL())
@@ -206,4 +209,25 @@ const SplayButtonsToActionRow = (numbersArr) => {
         );
         return actionRows
     }, firstRow)
+}
+
+const GetSelectMenuNextButtons = (page, options) => {
+  let buttons = [];
+  if (page>0) {
+    buttons.push(
+      new MessageButton()
+        .setCustomId('previous_page')
+        .setStyle('SECONDARY')
+        .setEmoji('⬅')
+    )
+  }
+  if (25*(page+1)<options.lenght) {
+    buttons.push(
+      new MessageButton()
+        .setCustomId('next_page')
+        .setStyle('SECONDARY')
+        .setEmoji('➡')
+    )
+  }
+  return buttons;
 }
