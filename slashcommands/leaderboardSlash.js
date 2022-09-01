@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 const { EmbedBuilder, SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const UtilFunctions = require("../util/functions");
-const { primaryColour } = require("../util/colors");
+const { primaryColour } = require("../util/variables");
 const { ConvertName } = require('./configSlash')
 
 //TODO implement code for the role options and also todo, when those roles are added make sure not in dm
@@ -56,9 +56,7 @@ module.exports = {
 
     ...data.toJSON(),
     run: async (client, interaction, config) => {
-
-        await interaction.deferReply();
-
+        await interaction.deferReply()
         // const browser = await puppeteer.launch({headless: false});
         const browser = await puppeteer.launch();
         const page = await browser.newPage();

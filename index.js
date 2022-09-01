@@ -102,6 +102,7 @@ client.on("ready", async () => {
     if(slashcmd.perms && !await interaction.member.permissions.has(slashcmd.perm))
     return await interaction.reply("You do not have permission for this command");
 
+    //DEFERING REPLY BECAUSE IT CAN BE SLOW WIFI
     let config = await GetConfigById(interaction.user.id);
     //* if the user doesn't have config, create one
     if(!config) {

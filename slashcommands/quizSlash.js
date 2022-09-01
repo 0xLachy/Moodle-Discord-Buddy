@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder } = require('discord.js');
 const puppeteer = require('puppeteer');
 const UtilFunctions = require("../util/functions");
-const { primaryColour } = require("../util/colors");
+const { primaryColour } = require("../util/variables");
 const mongoose = require('mongoose')
 require("dotenv").config()
 

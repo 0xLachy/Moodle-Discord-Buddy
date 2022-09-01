@@ -3,7 +3,7 @@ const puppeteer = require('puppeteer');
 const { EmbedBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
 const { ConvertName } = require('./configSlash')
-const { primaryColour } = require("../util/colors");
+const { primaryColour } = require("../util/variables");
 
 //INFO:
 /*

@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const { GetConfigs } = require("./configSlash");
-const { primaryColour } = require("../util/colors");
+const { primaryColour, MoodleCoinImgURL } = require("../util/variables");
 
 const data = new SlashCommandBuilder()
 	.setName('shop')
@@ -21,7 +21,7 @@ module.exports = {
         // either have a button to to choose or select menu to choose stuff :/
         //maybe a select menu to choose the item to you want, e.g choose from 
         await CreateShopEmbed(interaction, config)
-
+        //atfer it is finished you can do anything like **badges**
     }
 }
 
@@ -33,13 +33,12 @@ const CreateShopEmbed = (interaction, userConfig, lastI) => {
             { name: '$150 - Nickname Potion', incrementable: userConfig.maxNicknames, price: 150, enabled: userConfig.maxNicknames != 10, value: userConfig.maxNicknames == 10 ? 'Out of Stock! You are at Max nicknames! ' : `Get an extra nickname (currently you are allowed ${userConfig.maxNicknames})`},
             { name: '$1000 - Become vip!', price: 1000, enabled: !userConfig.vip, value: userConfig.vip ? 'Out of Stock! Thanks for being vip and supporting the bot!' : 'Get exclusive benefits like quiz (full) autofill for free, automatic message spam, name priority etc!'},
             //TODO implement the badge thing the badge thing { name: '$300 - Shop Badge', price: 300, enabled: userConfig.badges != 10, value: userConfig.maxNicknames == 10 ? 'Out of Stock! You are at Max nicknames! ' : `Get an extra nickname (currently you are allowed ${userConfig.maxNicknames})`},
-            { name: 'Donation', enabled: interaction.inGuild(), value: interaction.inGuild() ? 'Donate to another person in the server' : 'You must be in a server to donate to others'}
             // { name: 'Cookies', value: 'Buy some cookies, just cause!'},
         ]
         const ShopOverviewEmbed = new EmbedBuilder()
             .setColor(primaryColour)
             .setTitle('Shop')
-            //TODO set thumbnail to Moodlecoin logo .setThumbnail(interaction.user.displayAvatarURL())
+            .setThumbnail(MoodleCoinImgURL)
             //TODO add a banner image to the shop like the boom guy in a tavern with a bunch of moodle coins on the floor
             .setDescription(`Welcome To the Shop, here you can purchase upgrades and stuff\nAll purchases made are in Moodle Money`)
             .addFields(
@@ -71,15 +70,13 @@ const CreateShopEmbed = (interaction, userConfig, lastI) => {
 
         collector.on('collect', async (i) => {
             await i.deferUpdate().catch(() => {}); // interaction acknowledge thing error
-            if(i.customId.includes('Donation')) {
-                await collector.stop()
-                return resolve(await PromptForDonation(interaction, userConfig))
-            }
-            else if(i.customId == 'Vip Info') {
-               //TODO open new embed thing with info and have just a back button 
+            if(i.customId == 'Vip Info') {
+                await collector.stop();
+                return resolve(await CreateVIPInfoEmbed(interaction, userConfig));
             }
             if(i.customId.includes('Become vip!')) {
                 if(await SendConfirmationMessage(interaction, 'Are You sure you want to buy vip?')) {
+                    await collector.stop();
                     userConfig.tokens -= shopItems.find(item => item.name.includes('Become vip')).price;
                     userConfig.vip = true;
                     await userConfig.save();
@@ -88,37 +85,84 @@ const CreateShopEmbed = (interaction, userConfig, lastI) => {
                 }
             }
             else if(i.customId.includes('Nickname Potion')) {
-                if(await SendConfirmationMessage(interaction, 'Do you want to buy ')) {
+                if(await SendConfirmationMessage(interaction, 'Do you want to buy Nickname Potions')) {
+                    await collector.stop();
                     userConfig.tokens -= shopItems.find(item => item.name.includes('Nickname Potion')).price;
-                    userConfig.vip = true;
+                    userConfig.maxNicknames++;
                     await userConfig.save();
-                    console.log(`${interaction.user.id} b!`)
+                    console.log(`${interaction.user.id} bought a nickname potion!`)
+                    TemporaryResponse(interaction, 'Go to /config, to add your nickname!', 2500) 
                     return resolve(await CreateShopEmbed(interaction, userConfig))
                 }
             }
             else if(i.customId == 'Quit') {
-                await collector.Stop();
-                await interaction.editReply({components: CreatePurchaseComponents(shopItems, userConfig.tokens, true)})
+                await collector.stop();
+                return resolve(await interaction.editReply({components: CreatePurchaseComponents(shopItems, userConfig.tokens, true)}));
             }
-            // else if(shopItems.some(item => item.includes(i.customId))) {
-            //     if(await SendConfirmationMessage(interaction, `Are You sure you want to buy ${i.customId}?`)) {
-            //         userConfig.tokens -= shopItems.find(item => item.name.includes(i.customId)).price;
-            //         //WON"T WORK BECAUSE it doesn't know what to do when you purchase
-            //         userConfig.vip = true;
-            //         await userConfig.save();
-            //         console.log(`${interaction.user.id} purchased vip!`)
-            //         return resolve(await CreateShopEmbed(interaction, userConfig))
-            //     }
-            // }
-            // else {
-            //     await interaction.followUp(`You haven't coded for the item ${i.customId}`)
-            // }
         })
 
-        // function SendComfirmationMessage
+        collector.on('end', async collected => {
+            if(collected.size == 0) {
+                return resolve(await interaction.editReply({components: CreatePurchaseComponents(shopItems, userConfig.tokens, true)}));
+            }
+        });
     });
 }
-const SendConfirmationMessage = async (interaction, message, time=30000) => {
+const CreateVIPInfoEmbed = async (interaction, userConfig) => {
+    //display the info, and then when the back button is clicked, take them back to the shop menu
+    return new Promise(async (resolve, reject) => {
+        //create an embed instead
+        const vipInfoEmbed = new EmbedBuilder()
+        .setColor(primaryColour)
+        .setTitle('vip / general info')
+        .setDescription('vip is a reward for people that use the bot enough to afford it!')
+        .addFields(
+            { name: 'How do I get vip?', value: 'Run the /shop command and click on buy vip option'},
+            { name: `I don't have enough money, how do I get it?`, value: `Moodle money can be gained through donations, dailyQuizzes, but the easiest way is to submit an assignment (not an all my own work one) and allow people to *borrow* your work, then they pay you! `},
+            { name: 'Benefits to vip:', value: 'Below are the benefits'},
+            { name: 'Quizzes', value: 'Autofill (all) for free'},
+            { name: 'Nicknames', value: 'Get double the nicknames!'},
+            { name: 'Rig Leaderboards!', value: 'You can change the amounts people have in leaderboards'},
+            { name: 'Messages', value: 'go from 100 => 200 messages in spamming! Also send messages periodically automatically afterwards.'},
+            { name: 'Server Roles', value: 'Get the vip server role, you get a coloured name and access to any vip only chats'},
+        )
+        .setFooter({text: `Some benefits may not be implemented yet, pull requests are welcome (school is busy rn)`})
+        //TODO setThumbnail(<vip badge url on imgur>)
+
+        const backButtonRow = CreateBackButton()
+
+        const reply = await interaction.editReply({ content: ' ', embeds: [vipInfoEmbed], components: [backButtonRow], fetchReply: true })
+
+        const filter = i => i.user.id === interaction.user.id;
+
+        const collector = await reply.createMessageComponentCollector({ filter, max: 1, time: 180 * 1000})
+
+        collector.on('collect', async (i) => {
+            if(i.customId == 'back') {
+                await i.deferUpdate();
+                return resolve(await CreateShopEmbed(interaction, userConfig))
+            }
+        })
+
+        collector.on('end', async collected => {
+            if(collected.size == 0) {
+                return resolve(await interaction.editReply({content: 'timed out', components: [CreateBackButton(true)]}))
+            }
+        });
+    });
+
+    function CreateBackButton(disabled=false) {
+        return new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('back')
+                .setLabel('back')
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled),
+        );
+    }
+}
+const SendConfirmationMessage = async (interaction, message, time=15000) => {
     return new Promise(async (resolve, reject) => {
         //create an embed instead
         const confirmationEmbed = new EmbedBuilder()
@@ -155,6 +199,11 @@ const SendConfirmationMessage = async (interaction, message, time=30000) => {
             }
         })
 
+        collector.on('end', collected => {
+            if(collected.size == 0) {
+                return resolve(false)
+            }
+        });
     })
 }
 
@@ -169,7 +218,7 @@ const CreatePurchaseComponents = (items, userTokens, disableAll=false) => {
                 .setDisabled(disableAll),
             new ButtonBuilder()
                 .setCustomId('Vip Info')
-                .setLabel('Vip Info')
+                .setLabel('Vip / General Info')
                 .setStyle(ButtonStyle.Success)
                 .setDisabled(disableAll),
         )
@@ -197,31 +246,4 @@ const CreatePurchaseComponents = (items, userTokens, disableAll=false) => {
 const TemporaryResponse = async (interaction, message, time=1000) => {
     const reply = await interaction.followUp({content: message, fetchReply: true})
     setTimeout(() => reply.delete(), time);
-}
-
-const CreateMoveRow = async (middleButtonName, disableBack=false, disableNext=false, disableRest=false) => {
-    return new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('Quit')
-                .setLabel('Quit')
-                .setStyle(ButtonStyle.Danger)
-                .setDisabled(disableRest),
-            new ButtonBuilder()
-                .setCustomId('Back')
-                .setLabel('Back')
-                .setStyle(ButtonStyle.Danger)
-                .setDisabled(disableBack),
-            new ButtonBuilder()
-                .setCustomId(middleButtonName)
-                .setLabel(middleButtonName)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(disableRest),
-            new ButtonBuilder()
-                .setCustomId('Next')
-                .setLabel('Next')
-                .setStyle(ButtonStyle.Success)
-                .setDisabled(disableNext),
-        ) 
-    ;
 }

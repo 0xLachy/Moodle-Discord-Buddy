@@ -3,7 +3,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, Util } = require('discord.js');
 const UtilFunctions = require("../util/functions");
-const { primaryColour } = require("../util/colors");
+const { primaryColour } = require("../util/variables");
 // const wait = require('node:timers/promises').setTimeout;
 
 //INFO:

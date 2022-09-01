@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 const { EmbedBuilder, SlashCommandBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
-const { primaryColour } = require("../util/colors");
+const { primaryColour } = require("../util/variables");
 const { CreateOrUpdateConfig } = require("./configSlash")
 
 //TODO have an option to parse in cookies instead of password, or even provide a custom link that gets the cookies

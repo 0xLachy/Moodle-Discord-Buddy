@@ -2,7 +2,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { EmbedBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions")
-const { primaryColour } = require("../util/colors");
+const { primaryColour } = require("../util/variables");
 const { ConvertName } = require('./configSlash')
 
 //TODO fix error with too many assignments showing up if bad name is passed (it breaks the program)
@@ -45,9 +45,7 @@ module.exports = {
 
     ...data.toJSON(),
     run: async (client, interaction, config) => {
-
-        await interaction.deferReply();
-
+        await interaction.deferReply()
         const browser = await puppeteer.launch();
         const page = await browser.newPage();
         
