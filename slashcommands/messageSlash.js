@@ -159,16 +159,12 @@ const SendComfirmationMessage = (interaction, page, recipientName, recipientImg)
                 .setStyle(ButtonStyle.Success)
             )
         ;
-        // const collector = await interaction.channel.createMessageComponentCollector({ time: 3000 });
-        let channel = await interaction.channel
-        //If the channel isn't inside the guild, you need to create a custom cd channel
-        if(!interaction.inGuild()){
-            channel = await interaction.user.createDM(); 
-        }
-        // create collector to handle when button is clicked using the channel
-        const collector = await channel.createMessageComponentCollector({ /*filter, */time: 5000 });
 
-        await interaction.editReply({embeds: [confirmationEmbed], components: [confirmationRow]})
+        const reply = await interaction.editReply({embeds: [confirmationEmbed], components: [confirmationRow]})
+
+        const filter = i => i.user.id === interaction.user.id;
+        // create collector to handle when button is clicked using the channel
+        const collector = await reply.createMessageComponentCollector({ filter, time: 5000 });
         
         collector.on('collect', async i => {
             // console.log(i.customId)

@@ -335,14 +335,10 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
 
     //sometimes it times out, don't unknown interaction error
     if(lastI) await lastI.deferUpdate({ files: []}).catch(err => {/*console.log(err)*/})
-    await interaction.editReply({ content: ' ', embeds: quizSummaryEmbeds, components: buttonMoveRow, files: []}) 
+    const reply = await interaction.editReply({ content: ' ', embeds: quizSummaryEmbeds, components: buttonMoveRow, files: [], fetchReply: true}) 
     
-    let channel = await interaction.channel
-    //If the channel isn't inside the guild, you need to create a custom cd channel
-    if(!interaction.inGuild()){
-        channel = await interaction.user.createDM(); 
-    }
-    const collector = await channel.createMessageComponentCollector({ time: 180 * 1000 });
+    const filter = i => i.user.id === interaction.user.id;
+    const collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
     // The back buttonn won't work for this because this function won't be called again
     let failed = false;
     //don't submit if they didn't click the submit, but it auto - dones
@@ -390,8 +386,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
         const buttonMoveRow = await CreateMoveRow(questionIndex, 'Next', questionData.questionType == 'text');
         const buttonAnswerRow = new ActionRowBuilder();
 
-        //* If the channel isn't inside the guild, you need to create a custom channel
-        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
+        let reply;
 
         if(questionData.questionType == 'radio' || questionData.questionType == 'checkbox'){
             answerTooLong = questionData.answerData.some(answer => answer.label.length > 80)
@@ -419,7 +414,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 )
             }
 
-            quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: []}) 
+            reply = quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: []}) 
                 
         }
         else if(questionData.questionType == 'text'){
@@ -430,14 +425,16 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
             quizStartEmbed.addFields({ name: 'Answer', value: answer})
 
             if(lastI) await lastI.deferUpdate();
-            quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
+            reply = quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
         }
         else {
             console.error('Invalid Question Type ' + questionData.questionType);
         }
         
+        //* If the channel isn't inside the guild, you need to create a custom channel
+        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
         //TODO maybe it can collect if you type in !save to the channel it will save, or other stuff!
-        const msgCollector = await channel.createMessageCollector({ time: 180 * 1000 });
+        const msgCollector = await channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, time: 180 * 1000 });
         msgCollector.on('collect', m => {
             if(questionData.questionType == 'text') {
                 questionData.answerData[0].value = m.content;
@@ -446,8 +443,9 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 interaction.editReply({embeds: [quizStartEmbed]})
             }
         });
+        const filter = i => i.user.id === interaction.user.id;
         // create collector to handle when button is clicked using the channel 180 seconds in mill
-        const collector = await channel.createMessageComponentCollector({ time: 180 * 1000 });
+        const collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
         let updatedButtons = buttonAnswerRow.components;
         //todo maybe don't await the defer updates? that way they can update while stuff is happening
         collector.on('collect', async (i) => {
@@ -633,11 +631,9 @@ const DisplayQuizzes = async (interaction, quizzes, showDone=true) => {
                     .setStyle(ButtonStyle.Danger) // red 
         );
     
-        await interaction.editReply({ content: ' ', embeds: [quizzesEmbed], components: [ selectRow, quitRow ] });  
-        
-        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM()
+        const reply = await interaction.editReply({ content: ' ', embeds: [quizzesEmbed], components: [ selectRow, quitRow ] });  
     
-        const collector = await channel.createMessageComponentCollector({ time: 180 * 1000 });
+        const collector = await reply.createMessageComponentCollector({ time: 180 * 1000 });
     
         collector.on('collect', async i => {
             await collector.stop()

@@ -55,12 +55,10 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
         amount ??= userConfig.settings?.shop?.DonationAmount ?? 25;
         //TODO make a donation embed top banner
         //TODO make a badge for donating over 50 tt/mm to someone
-        // also add to the stats thing
-        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
 
         const filter = i => i.user.id === interaction.user.id;
         //INSTEAD OF USING CHANNEL USE MESSAGE
-        let collector = null
+        let collector;
 
         const donationEmbed = new EmbedBuilder()
         .setColor(primaryColour)
@@ -75,8 +73,8 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
             // the first page for the select menu, because only 25 people at a time
             let page = 0;
             peopleOptions = guildMembers.map(member => { return { label: `${member?.nickname ?? member.user.username}`, value: `${member.id}`, description:`They currently hold $${allConfigs.find(uConfig => uConfig.discordId == member.id)?.tokens || defaultTokens}` } });
-            const message = await interaction.editReply({content: ' ', embeds:[donationEmbed], components: GetRecipientActionRows(page, peopleOptions) })
-            collector = await message.createMessageComponentCollector({ filter, time: 180 * 1000 });
+            const reply = await interaction.editReply({content: ' ', embeds:[donationEmbed], components: GetRecipientActionRows(page, peopleOptions), fetchReply: true})
+            collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
 
             // get them to choose a recipient
             collector.on('collect', async (i) => {
@@ -116,8 +114,8 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
                     .setStyle(ButtonStyle.Success)
                     .setDisabled(amount == 0 || amount > userConfig.tokens)
             )
-            const message = await interaction.editReply({content: ' ', embeds:[donationEmbed], components:[...incrementButtons, confirmationRow], fetchReply: true})
-            collector = await message.createMessageComponentCollector({ filter, max: 1, time: 180 * 1000 });
+            const reply = await interaction.editReply({content: ' ', embeds:[donationEmbed], components:[...incrementButtons, confirmationRow], fetchReply: true})
+            collector = await reply.createMessageComponentCollector({ filter, max: 1, time: 180 * 1000 });
             collector.on('collect', async (i) => {
                 await i.deferUpdate().catch(() => {})
                 if(i.customId == 'reset') {

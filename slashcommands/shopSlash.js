@@ -59,14 +59,14 @@ const CreateShopEmbed = (interaction, userConfig, lastI) => {
         const purchaseComponents = CreatePurchaseComponents(shopItems, userConfig.tokens)
         // console.log(purchaseComponents)
         const promises = lastI ? [lastI.deferUpdate()] : []
-        promises.push(interaction.editReply({content: ' ', embeds: [ShopOverviewEmbed], components: purchaseComponents }))
-        await Promise.all(promises)
-
-        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
+        promises.push(interaction.editReply({content: ' ', embeds: [ShopOverviewEmbed], components: purchaseComponents, fetchReply: true }))
+        const returnedPromises = await Promise.all(promises)
+        // getting the reply to collect, if both last I was added length is 2, we only want the reply
+        const reply = returnedPromises.length == 2 ? returnedPromises[1] : returnedPromises[0]
         //make sure that it is the right person using the buttons and select menus
         const filter = i => i.user.id === interaction.user.id;
 
-        const collector = await channel.createMessageComponentCollector({ filter, time: 180 * 1000 });
+        const collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
 
         collector.on('collect', async (i) => {
             await i.deferUpdate().catch(() => {}); // interaction acknowledge thing error
@@ -183,10 +183,8 @@ const SendConfirmationMessage = async (interaction, message, time=15000) => {
         );
         const reply = await interaction.followUp({content: ' ', embeds:[confirmationEmbed], components:[confirmationRow], fetchReply: true})
         
-        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
-
         const filter = i => i.user.id === interaction.user.id;
-        const collector = await channel.createMessageComponentCollector({ filter, time });
+        const collector = await reply.createMessageComponentCollector({ filter, time });
 
         collector.on('collect', async (i) => {
             if(i.customId == 'yes') {

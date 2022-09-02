@@ -195,20 +195,11 @@ function AskForCourse(interaction, page, multipleTerms=false){
             )           
         }
 
-        await interaction.editReply({/*ephemeral: true,*/ embeds: [termsEmbed], components: [row]})
+        const reply = await interaction.editReply({/*ephemeral: true,*/ embeds: [termsEmbed], components: [row]})
     
-        // handle buttonMessage only, doesn't work for enter terminfo thing // todo maybe make it so only the author of the button can click em
-        const filter = i => /*Object.keys(termInfo).includes(i.customId)*/i.user.id == 2343242342;
-        //set the channel to send the command
-        let channel = await interaction.channel
-        //If the channel isn't inside the guild, you need to create a custom cd channel
-    //        -channel.isDM()
-            //+channel.type === ChannelType.DM
-        if(!interaction.inGuild()){
-            channel = await interaction.user.createDM(); 
-        }
-        // create collector to handle when button is clicked using the channel
-        const collector = await channel.createMessageComponentCollector({ /*filter, */time: 15000 });
+        const filter = i => i.user.id === interaction.user.id;
+        // create collector to handle when button is clicked using the reply
+        const collector = await reply.createMessageComponentCollector({ filter, time: 15000 });
         let updatedButtons = row.components
         // console.log(updatedButtons)
     
@@ -444,10 +435,8 @@ const SendConfirmationMessage = async (interaction, message, time=30000) => {
         );
         const reply = await interaction.followUp({content: ' ', embeds:[confirmationEmbed], components:[confirmationRow], fetchReply: true})
         
-        const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
-
         const filter = i => i.user.id === interaction.user.id;
-        const collector = await channel.createMessageComponentCollector({ filter, time });
+        const collector = await reply.createMessageComponentCollector({ filter, time });
 
         collector.on('collect', async (i) => {
             if(i.customId == 'yes') {
