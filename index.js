@@ -2,6 +2,7 @@
 const { Client, GatewayIntentBits, Partials, Collection, InteractionType } = require('discord.js');
 const slashcommands = require("./handlers/slashcommands");
 const { FixConfigFiles, GetConfigById, CreateOrUpdateConfig } = require("./slashcommands/configSlash")
+const { CheckForNewBadges } = require('./slashcommands/badgeSlash')
 const { GetLoginsFromDatabase, loginGroups } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
@@ -102,7 +103,7 @@ client.on("ready", async () => {
     if(slashcmd.perms && !await interaction.member.permissions.has(slashcmd.perm))
     return await interaction.reply("You do not have permission for this command");
 
-    //DEFERING REPLY BECAUSE IT CAN BE SLOW WIFI
+    //! If the wifi is too slow, the interaction times out!
     let config = await GetConfigById(interaction.user.id);
     //* if the user doesn't have config, create one
     if(!config) {
@@ -113,8 +114,12 @@ client.on("ready", async () => {
     // then save to the database... every time, might be a bit expensive but better than fetching every time
     await config.save();
     //not awaiting cause other commands can run at the same time I guess idk...
-    slashcmd.run(client, interaction, config)
-    //TODO after runing the slash command, .then, check for badges using their stats, like 50 slash commands ran or $100 donated
+    await slashcmd.run(client, interaction, config)
+    //check that the user doesn't have any new badges yet
+    const newBadges = await CheckForNewBadges(config);
+    if(newBadges.length > 0) {
+        interaction.followUp({ ephemeral: true, content: `You just got ${newBadges.length} badge${newBadges.length > 1 ? 's' : ''} :partying_face: (${newBadges.join(', ')})`})
+    }
 })
 //discord error handling things that might help
 process.on("unhandledRejection", async (err) => {

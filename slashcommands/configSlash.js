@@ -62,7 +62,9 @@ const statsInfo = {
     AssignmentsBorrowed: { type: Number, default: 0, info: '(count of) Assignments you borrowed from other people' },
     QuizzesCompleted: { type: Number, default: 0, info: 'How many quizzes you have done through the bot' },
     TotalCommandsRun: { type: Number, default: 0, info: 'How many times you have run a slash command with moodle buddy' },
-    DailyQuizzesComplete: { type: Number, default: 0, info: 'How many daily quizzes you have done'},
+    DailyQuizzesCompleted: { type: Number, default: 0, info: 'How many daily quizzes you have done'},
+    DailyQuizzesDoneToday: { type: Number, default: 0, info: 'Vip or certain days you can do multiple!'},
+    DailyQuizLastComplete: { type: Date, default: Date.now, info: 'The last time you did a daily quiz'},
 }
 // removing the title and info values because they aren't needed in the database
 const configSettings = Object.entries(settingsInfo).reduce((settings, [settingType, settingData]) => {
@@ -93,7 +95,7 @@ const configSchema = new mongoose.Schema({
     tokens: { type: Number, default: 200, min: 0},
     nicknames: { type: [String], lowercase: true, trim: true },
     maxNicknames: { type: Number, default: 3, min: 1, max: 10},
-    badges: {type: [Number]}, // Indexes of the badges that they own in the order they got them? //TODO need badge command to create badge, fix badge, give badge and delete
+    badges: {type: [String]}, // Indexes of the badges that they own in the order they got them? //TODO need badge command to create badge, fix badge, give badge and delete
     stats: configStats,
     settings: configSettings,
 })
@@ -109,20 +111,22 @@ const Config = config_db.model('Configs', configSchema, 'Configs')
 // TODO edit, I just found out you can save code to the database... too late now...
 // the typeof fix only returned either 'function' or 'object' for everything
 const FixConfigFiles = async () => {
-    const configPrefebSchema = new mongoose.Schema({name: { type: String, default: 'Prefab' }, settings: {} });
-    const ConfigPrefab = config_db.model('Configs', configPrefebSchema, 'Configs')
-    let configPrefab = await ConfigPrefab.find({ name: 'Prefab'})
-    
-    const allConfigs = await config_db.model('Configs', configSchema, 'Configs').find({ name: { $not: { $eq: 'Prefab'} } })
+    const PrefabSchema = new mongoose.Schema({name: { type: String, default: 'Settings' }, data: {}});
+    const Prefab = config_db.model('Prefabs', PrefabSchema, 'Prefabs')
+    let configPrefab = await Prefab.find({ name: 'Settings'})
 
+    let statPrefab = await Prefab.find({ name: 'stats'})
+    const allConfigs = await Config.find({})
+
+    //todo only need to check if one is found (they have both stats and settings, but it could be safer with better checks)
     if(configPrefab.length > 0) {
         configPrefab = configPrefab[0]
         // check that the keys in both objects are the same
-        const settingsTheSame = Object.entries(configSettings).length == Object.entries(configPrefab.settings).length && !Object.entries(configSettings).some(([settingInfoType, settingInfoTypeValObj]) => { 
+        const configSettingsTheSame = Object.entries(configSettings).length == Object.entries(configPrefab.data).length && !Object.entries(configSettings).some(([settingInfoType, settingInfoTypeValObj]) => { 
             //if the type doesn't even exist in the prefab, def some changes
-            if(!configPrefab.settings[settingInfoType]) return true;
+            if(!configPrefab.data[settingInfoType]) return true;
 
-            const oldSettingKeys = Object.keys(configPrefab.settings[settingInfoType]);
+            const oldSettingKeys = Object.keys(configPrefab.data[settingInfoType]);
             const newSettingKeys = Object.keys(settingInfoTypeValObj)
             if(JSON.stringify(oldSettingKeys)==JSON.stringify(newSettingKeys)) {
                 return false;
@@ -131,12 +135,12 @@ const FixConfigFiles = async () => {
                 return true;
             }
         })
-        if(settingsTheSame) {
-            console.log('Config Settings Are The Same :P ')
-        }
-        else {
-
-            for (const config of allConfigs) {
+        
+        for (const config of allConfigs) {
+            if(configSettingsTheSame) {
+                console.log('Config Settings Are The Same :P ')
+            }
+            else {
                 //If it isn't inside one of the info types, it should either be deleted or added.
                 cfgSettings = config.settings
 
@@ -163,25 +167,26 @@ const FixConfigFiles = async () => {
                     }
                     return correctedSettings
                 }, {})
-
-                // Todo move this to seperate checker thing for stats 
-                config.stats = Object.entries(configStats).reduce((fixedStats, [statName, statTypeData]) => {
-                    fixedStats[statName] = config.stats[statName] ?? statTypeData;
-                    return fixedStats;
-                },{})
-                //lastly save the config to the database now the old files were removed and new files added
-                await config.save();
             }
-            //update the prefab settings to be the new ones and add it to the database
-            configPrefab.settings = configSettings;
-            await configPrefab.save();
-            console.log(`Settings have been updated!`)
-            
+
+           // quicker than even bothering to do a check configStats are the stat info from this file
+            config.stats = Object.entries(configStats).reduce((fixedStats, [statName, statTypeData]) => {
+                fixedStats[statName] = config.stats[statName] ?? statTypeData.default;
+                return fixedStats;
+            },{})
+            //lastly save the config to the database now the old files were removed and new files added
+            await config.save();
         }
+        //update the prefab settings to be the new ones and add it to the database
+        configPrefab.data = configSettings;
+        await configPrefab.save();
+            
     }
     else {
-        configPrefab = new ConfigPrefab({ settings: configSettings})
+        configPrefab = new Prefab({ name: 'Settings', data: configSettings})
         configPrefab.save();
+        statPrefab = new Prefab({ name: 'Stats', data: configStats})
+        statPrefab.save();
     }
 
     cachedConfigs = allConfigs;
