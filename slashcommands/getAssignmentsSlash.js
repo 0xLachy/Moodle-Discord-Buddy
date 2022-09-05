@@ -151,7 +151,7 @@ async function GetAllAssignments(page, chosenTerms, pushPeople=true, links=true)
     return assignmentObject;
 }
 
-async function GetWantedAssignments(assignments, personName, filtering=false, assignmentNames=[]){
+function GetWantedAssignments(assignments, personName, filtering=false, assignmentNames=[]){
     missingAssignments = {};
     for(term of Object.entries(assignments)){
         let [termName, assignmentsObj] = term;
