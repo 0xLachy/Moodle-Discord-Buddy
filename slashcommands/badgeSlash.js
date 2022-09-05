@@ -95,10 +95,10 @@ module.exports = {
     }
 }
 
-const DisplayBadgeOverviewEmbed = async (interaction, config, target) => {
+const DisplayBadgeOverviewEmbed = async (interaction, config, target, displayAll=false) => {
     const badgeOverviewEmbed = new EmbedBuilder()
         .setColor(primaryColour)
-        .setTitle(`Badges for ${config.name ?? target?.username ?? config.nicknames[0]}`)
+        .setTitle(displayAll ? `All available badges` : `Badges for ${config.name ?? target?.username ?? config.nicknames[0]}`)
         .setThumbnail(target ? target.displayAvatarURL() : interaction.user.displayAvatarURL())
         .setDescription('Get badges through purchasing them through the shop or getting the right stats.')
         .addFields(
@@ -106,16 +106,39 @@ const DisplayBadgeOverviewEmbed = async (interaction, config, target) => {
             Object.entries(badgeInfo).map(([badgeCategory, badgeData]) => {
                 if(badgeData?.info) {
                     //* there can't be an 'info' badge name
-                    if(!Object.keys(badgeData).some(name => config.badges.includes(name))) return undefined;
+                    if(!displayAll && !Object.keys(badgeData).some(name => config.badges.includes(name))) return undefined;
                     //it's nested so have to do more stuff
-                    return { name: `${badgeCategory}:`, value: Object.entries(badgeData).filter(([n, obj]) => typeof obj != 'string' && config.badges.includes(n)).map(([n, obj]) => `**${n}**\n　${obj.description}`).join('\n')}
+                    return { name: `${badgeCategory}:`, value: Object.entries(badgeData).filter(([n, obj]) => typeof obj != 'string' && (displayAll || config.badges.includes(n))).map(([n, obj]) => `**${n}**\n　${obj.description}`).join('\n')}
                 }
                 else {
-                    if(!config.badges.includes(badgeCategory)) return;
+                    if(!displayAll && !config.badges.includes(badgeCategory)) return;
                     return { name: badgeCategory, value: badgeData.description}
                 }
             }).filter(n=>n)
             // { name: 'Vip Status', value: `${userConfig.vip ? 'true :partying_face:' : 'false'}`, inline: true},
         );
-    await interaction.editReply({ embeds: [badgeOverviewEmbed]})
+    const buttonRow = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('BackBadge') // doesn't matter
+                .setLabel(displayAll ? 'back' : 'more info')
+                .setStyle(ButtonStyle.Secondary) // red back 
+        );
+
+    const reply = await interaction.editReply({ embeds: [badgeOverviewEmbed], components: [buttonRow] })
+
+    const filter = i => i.user.id === interaction.user.id;
+    // create collector to handle when button is clicked using the reply
+    const collector = await reply.createMessageComponentCollector({ filter, max: 1, time: 30000 });
+
+    collector.on('collect', async (i) => {
+        i.deferUpdate();
+        return await DisplayBadgeOverviewEmbed(interaction, config, target, !displayAll)
+    })
+    collector.on('end', collected => {
+        if (collected.size == 0) {
+            // If they ran out of time just remove the back button
+            interaction.editReply({ components: [] });
+        }
+    });
 }
