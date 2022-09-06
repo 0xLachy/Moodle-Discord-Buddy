@@ -64,7 +64,7 @@ const statsInfo = {
     TotalCommandsRun: { type: Number, default: 0, info: 'How many times you have run a slash command with moodle buddy' },
     DailyQuizzesCompleted: { type: Number, default: 0, info: 'How many daily quizzes you have done'},
     DailyQuizzesDoneToday: { type: Number, default: 0, info: 'Vip or certain days you can do multiple!'},
-    DailyQuizLastComplete: { type: Date, default: Date.now, info: 'The last time you did a daily quiz'},
+    DailyQuizLastComplete: { type: Date, default: new Date('2016-1-10'), info: 'The last time you did a daily quiz'}, // random date that aint today
 }
 // removing the title and info values because they aren't needed in the database
 const configSettings = Object.entries(settingsInfo).reduce((settings, [settingType, settingData]) => {
@@ -136,11 +136,12 @@ const FixConfigFiles = async () => {
             }
         })
         
+        if(configSettingsTheSame) {
+            console.log('Config Settings Are The Same :P ')
+        }
+        
         for (const config of allConfigs) {
-            if(configSettingsTheSame) {
-                console.log('Config Settings Are The Same :P ')
-            }
-            else {
+            if(!configSettingsTheSame) {
                 //If it isn't inside one of the info types, it should either be deleted or added.
                 cfgSettings = config.settings
 

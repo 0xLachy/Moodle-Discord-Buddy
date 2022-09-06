@@ -1,14 +1,14 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder } = require('discord.js');
 const puppeteer = require('puppeteer');
 const UtilFunctions = require("../util/functions");
-const { primaryColour } = require("../util/variables");
+const { primaryColour, dailyQuizTokens } = require("../util/variables");
 const mongoose = require('mongoose')
 require("dotenv").config()
 
 let autoSubmit = false;
 let showHints = true;
 
-//TODO maybe on displayQuizzes thing have a do all unfinished button
+// TODO create your own quiz option, provides a link for images, + and - button for the options, they can click on it to make it true or false
 const data = new SlashCommandBuilder()
 	.setName('quiz')
 	.setDescription('Slash command to handle moodle users, to get their profile data')
@@ -65,8 +65,8 @@ module.exports = {
     ...data.toJSON(),
     run: async (client, interaction, config) => {
         await interaction.deferReply(/*{ephemeral: true}*/);
-        const browser = await puppeteer.launch({ headless: false })
-        // const browser = await puppeteer.launch();
+        // const browser = await puppeteer.launch({ headless: false })
+        const browser = await puppeteer.launch();
         const page = await browser.newPage();
         
         const quizConfig = config?.settings['quiz']
@@ -108,12 +108,14 @@ module.exports = {
             dbName: 'Quizzes'
         });
         // get the chosen quiz and questions, if any of them return null, just close the browser as it won't be used anymore
-        const chosenQuizzes = await DisplayQuizzes(interaction, await GetQuizzesList(page, chosenTerm.ID), quizConfig?.ShowAlreadyCompletedQuizzes);
+        const chosenQuizzes = await DisplayQuizzes(interaction, await GetQuizzesList(page, chosenTerm.ID), config, quizConfig?.ShowAlreadyCompletedQuizzes);
         if(chosenQuizzes == null || chosenQuizzes.length == 0) return await browser.close();
 
         for (const chosenQuizIndex in chosenQuizzes) {
             //TODO use a for of or something
             const chosenQuiz = chosenQuizzes[chosenQuizIndex]
+            if(chosenQuiz?.daily) repeatAmount = 1;
+
             let followUpMsg = null;
             if(chosenQuizIndex > 0) {
                 await interaction.followUp({content: `Following up with next quiz: ${chosenQuiz.name}`, fetchReply: true}).then(msg => followUpMsg = msg)
@@ -136,8 +138,21 @@ module.exports = {
                 }
                 //it will add the answers to the database (if it isn't null)
                 await AddQuizDataToDatabase(quiz_db, chosenQuiz.name, correctedAnswers?.questions)
-                //they did a quiz, so add to the counter!
-                config.stats.QuizzesCompleted++;
+                if(correctedAnswers != null) {
+                    //they did a quiz, so add to the counter!
+                    config.stats.QuizzesCompleted++;
+                    //if they were doing the daily also add that!
+                    if(chosenQuiz?.daily) {
+                        //increment the daily quizzes, update the last complete date too
+                        config.stats.DailyQuizzesCompleted++;
+                        config.stats.DailyQuizzesDoneToday++;
+                        config.stats.DailyQuizLastComplete = Date.now();
+                        //give them moodle money reward
+                        config.tokens += dailyQuizTokens;
+                        //TODO tell the person that they earned 
+                        await interaction.followUp({content: `Congrats you earned $${dailyQuizTokens} moodle money :partying_face:, your balance is now $${config.tokens}`, ephemeral: true})
+                    }
+                }
                 // using truthy, once repeat amount reaches 0 it fails could use != 0 instead
             } while (repeatAmount && Number(correctedAnswers.grade) < repeatThreshold);
             // const correctedAnswers = autoFillEverything === true ? await AutoFillAnswers(interaction, page, chosenQuiz.name, scrapedQuestions) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
@@ -148,17 +163,23 @@ module.exports = {
     }
 }
 const DoQuiz = async (page, interaction, chosenQuiz, dataBaseAnswers, autoFillEverything) => {
+    //make sure they can't autofill everything when they are doing the daily quiz
+    if(chosenQuiz?.daily) {
+        autoFillEverything = false;
+    }
+
     let scrapedQuestions = await GetQuizQuestions(page, chosenQuiz.url, dataBaseAnswers, autoFillEverything)
+
     if(scrapedQuestions == null) {
         await interaction.editReply({ content: `You have no more attempts left at ${chosenQuiz.name}`, embeds: [], components: []})
         await browser.close(); 
         return null;
     }
-    
+
     //* returning what was const correctedAnswers
-    return autoFillEverything ? await DisplayQuizSummary(interaction, page, chosenQuiz.name, scrapedQuestions, true): await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz.name, 0)
+    return autoFillEverything ? await DisplayQuizSummary(interaction, page, chosenQuiz, scrapedQuestions, true): await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz, 0)
 }
-const AutoFillAnswers = async (interaction, page, quizTitle, scrapedQuestions, lastI) => {
+const AutoFillAnswers = async (interaction, page, quiz, scrapedQuestions, lastI) => {
     // update all the questions, will do this all at once, so wait for that to finish
     for await (const question of scrapedQuestions) {
         GuessOrFillSpecificQuestion(question);
@@ -166,7 +187,7 @@ const AutoFillAnswers = async (interaction, page, quizTitle, scrapedQuestions, l
     // update the the quiz to have the new values
     await UpdateQuizzesWithInputValues(page, scrapedQuestions)
     // then show the summary of what has happened
-    return await DisplayQuizSummary(interaction, page, quizTitle, scrapedQuestions, lastI)
+    return await DisplayQuizSummary(interaction, page, quiz, scrapedQuestions, lastI)
 }
 const GetCorrectAnswersFromResultsPage = async (page, updatedQuestions) => {
     //Got an error from this but everything worked fine for some reason
@@ -230,14 +251,15 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
     //* this is probably not how to do the replacing, because I am using a schema thing, but oh well
     await MoodleQuiz.replaceOne({ name: quizTitle }, { name: newQuiz.name, questions: newQuiz.questions }, { upsert: true })
 }
-const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions, preSubmission=true, lastI) => {
+const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, preSubmission=true, lastI) => {
+    const quizTitle = quiz.name
     //loops through all the questions and adds them as message fields
     //if it has been submitted add the grade to to title
     let gradePercentAsInt = 100;
     if(autoSubmit && preSubmission) {
         let correctedAnswers = await GetCorrectAnswersFromResultsPage(page, updatedQuestions)
         // display the quiz summary for the last time with the corrected answers
-        return await DisplayQuizSummary(interaction, page, quizTitle, correctedAnswers, false);
+        return await DisplayQuizSummary(interaction, page, quiz, correctedAnswers, false);
     }
     //thanks samantha - first one is 20 so take that off the count and just add one to the counter
     let questionLength = updatedQuestions.length- 20;
@@ -331,7 +353,7 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
         quizSummaryEmbeds.push(quizSummaryEmbed)
     }
     //as long as it is not 0
-    const buttonMoveRow = preSubmission ?  [ await CreateMoveRow(3, 'Submit!') ] : [] 
+    const buttonMoveRow = preSubmission ?  [ await CreateMoveRow(3, 'Submit!', quiz?.daily) ] : [] 
 
     //sometimes it times out, don't unknown interaction error
     if(lastI) await lastI.deferUpdate({ files: []}).catch(err => {/*console.log(err)*/})
@@ -345,7 +367,7 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
     // let correctedAnswers;
     if(preSubmission){
         // returning because it is now going to display the summary again inside this
-        return await WaitForNextOrBack(collector, interaction, page, updatedQuestions, quizTitle, !preSubmission).catch(() => failed=true);
+        return await WaitForNextOrBack(collector, interaction, page, updatedQuestions, quiz, !preSubmission).catch(() => failed=true);
         // if it failed, they didn't submit and return nothing as they timed out
         if(failed) return null;
     }
@@ -359,7 +381,7 @@ const DisplayQuizSummary = async (interaction, page, quizTitle, updatedQuestions
 }
 
 //back applies -1 to question Index, whilst next adds 1, simple
-const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizName,  questionIndex) => {
+const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  questionIndex) => {
     return new Promise(async (resolve, reject) => {
         // await interaction.editReply({components: []})
         const questionData = scrapedQuestions[questionIndex]
@@ -383,7 +405,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
             await page.goBack()
         }
 
-        const buttonMoveRow = await CreateMoveRow(questionIndex, 'Next', questionData.questionType == 'text');
+        const buttonMoveRow = await CreateMoveRow(questionIndex, 'Next', quiz?.daily);
         const buttonAnswerRow = new ActionRowBuilder();
 
         let reply;
@@ -454,18 +476,18 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 await msgCollector.stop();
                 if (scrapedQuestions.length != questionIndex + 1) {
                     await i.deferUpdate();
-                    return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quizName, questionIndex + 1));
+                    return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex + 1));
                 }
                 else {
                     await UpdateQuizzesWithInputValues(page, scrapedQuestions)
-                    return resolve(await DisplayQuizSummary(interaction, page, quizName, scrapedQuestions, true, i)); // finish the function and return the new updated questions
+                    return resolve(await DisplayQuizSummary(interaction, page, quiz, scrapedQuestions, true, i)); // finish the function and return the new updated questions
                 }
             }
             else if (i.customId == 'Back') {
                 await collector.stop();
                 await msgCollector.stop();
                 await i.deferUpdate();
-                return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quizName, questionIndex - 1));
+                return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex - 1));
             }
             else if (i.customId == 'Quit') {
                 await collector.stop();
@@ -479,7 +501,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quizNam
                 await collector.stop();
                 await msgCollector.stop();
                 await UpdateQuizzesWithInputValues(page, scrapedQuestions)
-                return resolve(await DisplayQuizSummary(interaction, page, quizName, scrapedQuestions, true, i))
+                return resolve(await DisplayQuizSummary(interaction, page, quiz, scrapedQuestions, true, i))
             }
             else if (i.customId == 'AutoFill') {
                 if(questionData.questionType == 'text') {
@@ -603,7 +625,7 @@ const GetQuizzesList = async (page, termID) => {
     })
 }
 
-const DisplayQuizzes = async (interaction, quizzes, showDone=true) => {
+const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
     return new Promise(async (resolve, reject) => {
         const quizzesEmbed = new EmbedBuilder()
         .setColor(primaryColour)
@@ -622,32 +644,50 @@ const DisplayQuizzes = async (interaction, quizzes, showDone=true) => {
                     .setMaxValues(selectedOptions.length)
                     .addOptions(...selectedOptions)
         );
-
-        const quitRow = new ActionRowBuilder()
+        const maxDailys = config.vip ? 2 : 1;
+        //falsy statement, if it aint zero
+        if(config.stats.DailyQuizzesDoneToday) {
+            //basically it goes is "2016-02-18" != "2016-02-19"
+            if(config.stats.DailyQuizLastComplete.toISOString().split('T')[0] != new Date().toISOString().split('T')[0]) {
+                config.stats.DailyQuizzesDoneToday = 0;
+            }
+        }
+        const canDoDailyQuiz = config.stats.DailyQuizzesDoneToday < maxDailys;
+        const buttonRow = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
-                    .setCustomId('Quit')
-                    .setLabel('Quit')
-                    .setStyle(ButtonStyle.Danger) // red 
+                    .setCustomId('quit')
+                    .setLabel('quit')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('daily')
+                    .setLabel('daily')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(!canDoDailyQuiz)
         );
     
-        const reply = await interaction.editReply({ content: ' ', embeds: [quizzesEmbed], components: [ selectRow, quitRow ] });  
+        const reply = await interaction.editReply({ content: ' ', embeds: [quizzesEmbed], components: [ selectRow, buttonRow ] });  
     
-        const collector = await reply.createMessageComponentCollector({ time: 180 * 1000 });
+        const filter = i => i.user.id === interaction.user.id;
+        const collector = await reply.createMessageComponentCollector({filter, max: 1, time: 180 * 1000 });
     
         collector.on('collect', async i => {
-            await collector.stop()
-            if (i.customId == 'Quit') {
-                collector.stop();
+            // merge all of the quiz options into one array so that it can find the urls and extra info about the questions chosen
+            if (i.customId == 'quit') {
                 await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] })
                 return resolve(null)
             }
+            else if(i.customId == 'daily') {
+                //get the name and url from the choice and return the daily, add daily = true
+                await i.deferUpdate()
+                const { name, url } = quizzes['due'].length > 0 ? quizzes['due'][Math.floor(Math.random() * quizzes['due'].length)] : quizzes['done'][Math.floor(Math.random() * quizzes['done'].length)]
+                await interaction.editReply({ content: `Going to ${name} to get quiz questions and attempt now!`, embeds: [], components: []});
+                return resolve([{ name, url, daily: true}])
+            }
             //* Interaction has already been acknowlegded with just update, trying deferUpdate
             await i.deferUpdate({ content: `Going to ${i.values.join(', ')} to get quiz questions and attempt now!`, embeds: [], components: []})
-           
-            // merge all of the quiz options into one array so that it can find the urls and extra info about the questions chosen
-            let quizOptions = [ ...quizzes['due'], ...(quizzes['done']) ]
-            //Logging which questions the user chose 
+            
+            const quizOptions = [ ...quizzes['due'], ...(quizzes['done']) ]//Logging which questions the user chose 
             console.log(`The Quizzes: "${i.values.map(selectedUrl => quizOptions.find(quizOption => quizOption.url == selectedUrl).name).join('", "')}" Were Chosen`)
             //complete the function by returning the chosen terms with their urls and stuff
             resolve(i.values.map(selectedUrl => {
@@ -929,7 +969,7 @@ async function GuessOrFillSpecificQuestion(question) {
     return question
 }
 
-async function WaitForNextOrBack(collector, interaction, page, updatedQuestions, quizName, finish) {
+async function WaitForNextOrBack(collector, interaction, page, updatedQuestions, quiz, finish) {
     return new Promise(async (resolve, reject) => {
         await collector.on('collect', async (i) => {
             if (i.customId == 'Next') {
@@ -939,19 +979,19 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
                 if(finish) await interaction.editReply({ components: []})
                 let correctedAnswers = await GetCorrectAnswersFromResultsPage(page, updatedQuestions)
                 // display the quiz summary for the last time with the corrected answers
-                return resolve(await DisplayQuizSummary(interaction, page, quizName, correctedAnswers, false));
+                return resolve(await DisplayQuizSummary(interaction, page, quiz, correctedAnswers, false));
             }
             else if (i.customId == 'Back') {
                 // await i.update({ content: ' ' }); // just acknowledge the button click
                 // await i.deferUpdate();
                 await collector.stop();
-                return resolve(await DisplayQuestionEmbed(interaction, page, updatedQuestions, quizName, updatedQuestions.length - 1));
+                return resolve(await DisplayQuestionEmbed(interaction, page, updatedQuestions, quiz, updatedQuestions.length - 1));
             }
             else if (i.customId == 'AutoFill'){
                 // await i.update({content: ' '});
                 await i.deferUpdate()
                 await collector.stop();
-                return resolve(await AutoFillAnswers(interaction, page, quizName, updatedQuestions, i))
+                return resolve(await AutoFillAnswers(interaction, page, quiz, updatedQuestions, i))
             }
             else if (i.customId == 'Quit') {
                 await interaction.editReply({content: 'Quit Successfully, answers are saved when overview is looked at. (or if you have autosave)', components: [], embeds: []})
@@ -968,7 +1008,7 @@ async function WaitForNextOrBack(collector, interaction, page, updatedQuestions,
     })
 }
 
-async function CreateMoveRow(questionIndex, nextButtonLabel='Next') {
+async function CreateMoveRow(questionIndex, nextButtonLabel='Next', disableAutofill=false) {
     let newMoveRow = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
@@ -983,8 +1023,8 @@ async function CreateMoveRow(questionIndex, nextButtonLabel='Next') {
             new ButtonBuilder()
                 .setCustomId('AutoFill')
                 .setLabel('AutoFill')
-                .setStyle(ButtonStyle.Primary),
-                // .setDisabled(nextButtonLabel != 'Next'), // disable if you can't go next
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(disableAutofill), // disable if you can't go next
             new ButtonBuilder()
                 .setCustomId('Next')
                 .setLabel(nextButtonLabel)

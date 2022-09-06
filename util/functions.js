@@ -487,6 +487,55 @@ async function DeleteSecuritykey(moodleName) {
     const newValue = data.replace(new RegExp(`(${moodleName}=")(.+?)(")`, 's'), '');
     fs.writeFileSync('.env', newValue, 'utf-8');
 }
+
+// this function was modified from https://www.reddit.com/r/Discordjs/comments/sf00wb/comment/ilt1mgg/
+const GetSelectMenuOverflowActionRows = (page, options) => {
+    const RecipientRows = [ GetRecipientSelectMenu(page, options) ]
+    const moveButtons = GetSelectMenuNextButtons(page, options.length);
+    if(moveButtons.components.length > 0) {
+        RecipientRows.push(moveButtons)
+    }
+    return RecipientRows;
+}
+
+const GetRecipientSelectMenu  = (page, options) => {
+    let selectMenu = new SelectMenuBuilder()
+    .setCustomId('select')
+    .setPlaceholder('Choose an option')
+    // .addOptions(options.filter((option, i) => i * page < 25 * (page +1) ));
+    //This lower bit might be faster but it is giving emoji errors for some reason so yeah idk :P
+    for (let i = 25*page; i < options.length && i < 25 * (page + 1); i++) {
+        selectMenu.addOptions(options[i])
+        // selectMenu.addOptions({ label: 'fillter', value: '32424234' + i, description: 'hi'})
+    }
+
+    return new ActionRowBuilder()
+    .addComponents(
+        selectMenu
+    );
+}
+
+const GetSelectMenuNextButtons = (page, optionLength) => {
+    const buttonActionRow = new ActionRowBuilder()
+    if (page>0) {
+        buttonActionRow.addComponents(
+        new ButtonBuilder()
+            .setCustomId('previous_page')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('⬅')
+        )
+    }
+    if (25 * (page + 1) < optionLength) {
+        buttonActionRow.addComponents(
+        new ButtonBuilder()
+            .setCustomId('next_page')
+            .setStyle(ButtonStyle.Secondary)
+            .setEmoji('➡')
+        )
+    }
+    return buttonActionRow;
+}
+
 module.exports = {
     getFiles,
     LoginToMoodle,
@@ -498,6 +547,7 @@ module.exports = {
     UpdateActionRowButtons,
     GetLoginsFromDatabase,
     SendConfirmationMessage,
+    GetSelectMenuOverflowActionRows,
     loginGroups,
     mainStaticUrl,
 }

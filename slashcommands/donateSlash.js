@@ -1,8 +1,8 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
-const UtilFunctions = require("../util/functions");
+const { GetSelectMenuOverflowActionRows } = require("../util/functions");
 const { primaryColour, MoodleCoinImgURL } = require("../util/variables");
 const { CreateOrUpdateConfig, GetConfigById, GetConfigs, GetDefaults } = require("./configSlash")
-
+//TODO make it so if admin use the bot they can also remove tokens from people
 //* You actually can put in any valid id for the user id, which means it can be sent from dms
 const data = new SlashCommandBuilder()
 	.setName('donate')
@@ -73,7 +73,7 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
             // the first page for the select menu, because only 25 people at a time
             let page = 0;
             peopleOptions = guildMembers.map(member => { return { label: `${member?.nickname ?? member.user.username}`, value: `${member.id}`, description:`They currently hold $${allConfigs.find(uConfig => uConfig.discordId == member.id)?.tokens || defaultTokens}` } });
-            const reply = await interaction.editReply({content: ' ', embeds:[donationEmbed], components: GetRecipientActionRows(page, peopleOptions), fetchReply: true})
+            const reply = await interaction.editReply({content: ' ', embeds:[donationEmbed], components: GetSelectMenuOverflowActionRows(page, peopleOptions), fetchReply: true})
             collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
 
             // get them to choose a recipient
@@ -85,11 +85,11 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
                 }
                 else if(i.customId == 'next_page') {
                     page++;
-                    await interaction.editReply({ components: GetRecipientActionRows(page, peopleOptions)})
+                    await interaction.editReply({ components: GetSelectMenuOverflowActionRows(page, peopleOptions)})
                 }
                 else if(i.customId == 'previous_page') {
                     page--;
-                    await interaction.editReply({ components: GetRecipientActionRows(page, peopleOptions)})
+                    await interaction.editReply({ components: GetSelectMenuOverflowActionRows(page, peopleOptions)})
                 }
             })
         }
@@ -197,56 +197,4 @@ const SplayButtonsToActionRow = (numbersArr) => {
         );
         return actionRows
     }, firstRow)
-}
-
-// this function was modified from https://www.reddit.com/r/Discordjs/comments/sf00wb/comment/ilt1mgg/
-const GetRecipientActionRows = (page, options) => {
-    const RecipientRows = [ GetRecipientSelectMenu(page, options) ]
-    const moveButtons = GetSelectMenuNextButtons(page, options);
-    if(moveButtons.components.length > 0) {
-        RecipientRows.push(moveButtons)
-    }
-    return RecipientRows;
-}
-
-const GetRecipientSelectMenu  = (page, options) => {
-    let selectMenu = new SelectMenuBuilder()
-    .setCustomId('select')
-    .setPlaceholder('Choose a person you want to donate to')
-    // .addOptions(options.filter((option, i) => i * page < 25 * (page +1) ));
-    //This lower bit might be faster but it is giving emoji errors for some reason so yeah idk :P
-    for (let i = 25*page; i < options.length && i < 25 * (page + 1); i++) {
-        selectMenu.addOptions(options[i])
-        // selectMenu.addOptions({ label: 'fillter', value: '32424234' + i, description: 'hi'})
-    }
-    // for (let i=25*page; i < options.length || i < 25 * (page + 1); i++) {
-    //     // selectMenu.addOptions(options[i])
-    //     console.log(i)
-    //     selectMenu.addOptions({ label: 'fillter', value: '32424234', description: 'hi'})
-    // }
-    return new ActionRowBuilder()
-    .addComponents(
-        selectMenu
-    );
-}
-
-const GetSelectMenuNextButtons = (page, options) => {
-    const buttonActionRow = new ActionRowBuilder()
-    if (page>0) {
-        buttonActionRow.addComponents(
-        new ButtonBuilder()
-            .setCustomId('previous_page')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('⬅')
-        )
-    }
-    if (25 * (page + 1) < options.length) {
-        buttonActionRow.addComponents(
-        new ButtonBuilder()
-            .setCustomId('next_page')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('➡')
-        )
-    }
-    return buttonActionRow;
 }

@@ -2,6 +2,16 @@
 const primaryColour = 0x156385;
 const errorColour = 0xFF0000;
 
+//REWARDS
+const dailyQuizTokens = 25;
+const assignmentSubmissionTokens = 75;
+const confirmationTokens = 100;
+
+const assignmentBorrowCost = 50;
+
+//PENALTIES
+const fakeAssignmentPenalty = 150; // if the confirmation is found that they added a fake assignment
+
 //IMAGES -- Upload them to a file hosting website because it is quicker for embeds
 // https://postimages.org/ > https://imgur.com/
 const MoodleCoinImgURL = 'https://i.postimg.cc/s2SBqYDx/glowing-m-coin-supernatural.png';
@@ -14,4 +24,9 @@ module.exports = {
     primaryColour,
     errorColour,
     MoodleCoinImgURL,
+    dailyQuizTokens,
+    assignmentSubmissionTokens,
+    confirmationTokens,
+    assignmentBorrowCost,
+    fakeAssignmentPenalty,
 }
