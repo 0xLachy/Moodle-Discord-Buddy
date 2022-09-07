@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle  } = require('discord.js');
+const { ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ComponentBuilder} = require('discord.js');
 const { resolve } = require("path");
 const crypto = require("crypto");
 const { ConvertName } = require('../slashcommands/configSlash');
@@ -209,7 +209,7 @@ function AskForCourse(interaction, page, multipleTerms=false){
             if (multipleTerms) {
                 // if enter button, stop early
                 if(i.customId == 'Enter'){
-                    // console.log("Stopped on enter")
+                    i.deferUpdate();
                     await collector.stop()
                     return;
                 }   
@@ -489,8 +489,8 @@ async function DeleteSecuritykey(moodleName) {
 }
 
 // this function was modified from https://www.reddit.com/r/Discordjs/comments/sf00wb/comment/ilt1mgg/
-const GetSelectMenuOverflowActionRows = (page, options) => {
-    const RecipientRows = [ GetRecipientSelectMenu(page, options) ]
+const GetSelectMenuOverflowActionRows = (page, options, placeholder) => {
+    const RecipientRows = [ GetRecipientSelectMenu(page, options, placeholder) ]
     const moveButtons = GetSelectMenuNextButtons(page, options.length);
     if(moveButtons.components.length > 0) {
         RecipientRows.push(moveButtons)
@@ -498,10 +498,10 @@ const GetSelectMenuOverflowActionRows = (page, options) => {
     return RecipientRows;
 }
 
-const GetRecipientSelectMenu  = (page, options) => {
+const GetRecipientSelectMenu  = (page, options, placeholder='Choose an option') => {
     let selectMenu = new SelectMenuBuilder()
     .setCustomId('select')
-    .setPlaceholder('Choose an option')
+    .setPlaceholder(placeholder)
     // .addOptions(options.filter((option, i) => i * page < 25 * (page +1) ));
     //This lower bit might be faster but it is giving emoji errors for some reason so yeah idk :P
     for (let i = 25*page; i < options.length && i < 25 * (page + 1); i++) {

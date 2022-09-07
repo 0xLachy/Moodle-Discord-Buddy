@@ -679,7 +679,7 @@ const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
             }
             else if(i.customId == 'daily') {
                 //get the name and url from the choice and return the daily, add daily = true
-                await i.deferUpdate()
+                await i.deferUpdate();
                 const { name, url } = quizzes['due'].length > 0 ? quizzes['due'][Math.floor(Math.random() * quizzes['due'].length)] : quizzes['done'][Math.floor(Math.random() * quizzes['done'].length)]
                 await interaction.editReply({ content: `Going to ${name} to get quiz questions and attempt now!`, embeds: [], components: []});
                 return resolve([{ name, url, daily: true}])
