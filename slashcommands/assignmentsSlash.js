@@ -9,6 +9,7 @@ const os = require('os')
 const path = require('path')
 const axios = require('axios');
 
+//TODO give them an extra reward for getting a grade
 //TODO give huge warning when they want to submit nothing
 //TODO maybe I should make it so you can choose the price of your assignment, with default in constants.js
 const data = new SlashCommandBuilder()
@@ -102,8 +103,21 @@ module.exports = {
         const browser = await puppeteer.launch({headless: false});
         const page = await browser.newPage();
         
-        //log into the browser
-        await LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : interaction.user.id)
+        const assignmentNameInput = await interaction.options.getString('assignment-name')?.toLowerCase()?.replace('&action=editsubmission', '');// if they start at the editing quiz (not wanted)
+        const wentStraightToAssignment = assignmentNameInput?.startsWith('https://');
+
+        //log into the browser, if assignmentName input is a url, just go straight to it.
+        await LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : interaction.user.id, wentStraightToAssignment ? assignmentNameInput : undefined) 
+        
+        if(wentStraightToAssignment) {
+            // can't find a better way of doing this, .then wasn't working
+            let foundErr = false;
+            await Promise.all([page.goto(assignmentNameInput), page.waitForNavigation({ waitUntil: 'networkidle2' })]).catch(err => {
+                interaction.editReply('An error has occured, did you put in an invalid url?');
+                foundErr = true;
+            })
+            if(!foundErr) await DisplayFullInfo(interaction, await GetFullAssignmentInfo(page), config, page, true);
+        }
 
         const chosenTerms = await AskForCourse(interaction, page, true).catch(reason => {
             //If no button was pressed, then just quit
@@ -125,7 +139,7 @@ module.exports = {
 
                 await AddAndWaitForMoreSelect(interaction, page, config, Object.entries(filteredAssignments).reduce((selectOptions, [term, assignments]) => { 
                     for (const assignment of assignments) {
-                       selectOptions.push({ label: assignment.name, value: assignment.link, description: term }) 
+                        selectOptions.push({ label: assignment.name, value: assignment.link, description: term }) 
                     }
                     return selectOptions;
                 }, []))
@@ -138,7 +152,7 @@ module.exports = {
 
                 await AddAndWaitForMoreSelect(interaction, page, config, Object.entries(filteredAssignments).reduce((selectOptions, [term, assignments]) => { 
                     for (const assignment of assignments) {
-                       selectOptions.push({ label: assignment.name, value: assignment.link, description: term }) 
+                        selectOptions.push({ label: assignment.name, value: assignment.link, description: term }) 
                     }
                     return selectOptions
                 }, []))
@@ -151,44 +165,38 @@ module.exports = {
                 `People Who did Assignments:`)
                 await AddAndWaitForMoreSelect(interaction, page, config, Object.entries(filteredAssignments).reduce((selectOptions, [term, assignments]) => { 
                     for (const assignment of assignments) {
-                       selectOptions.push({ label: assignment.name, value: assignment.link, description: term }) 
+                        selectOptions.push({ label: assignment.name, value: assignment.link, description: term }) 
                     }
                     return selectOptions
                 }, []))
                 break;
             case 'submit':
-                console.log(await interaction.options.getAttachment('work1'))
-                const assignmentName = await interaction.options.getString('assignment-name');
-                const allAssignments = await GetAllAssignments(page, chosenTerms, false)
+                const allAssignments = await GetAllAssignments(page, chosenTerms, false);
                 // filteredAssignments = await GetWantedAssignments(await GetAllAssignments(page, chosenTerms, false), 'malaga', true, [ assignmentName ])
-                filteredAssignments = GetWantedAssignments(allAssignments, assignmentName ?? 'any', true)
+                filteredAssignments = GetWantedAssignments(allAssignments, assignmentNameInput ?? 'any', true);
 
                 const assignChoiceEmbed = new EmbedBuilder()
-                .setTitle('Assignment Choice')
-                .setColor(primaryColour)
-                .setDescription('Choose an assignment from the list, make sure you choose the right term/s')
+                    .setTitle('Assignment Choice')
+                    .setColor(primaryColour)
+                    .setDescription('Choose an assignment from the list, make sure you choose the right term/s');
 
-                await interaction.editReply({content: '', embeds: [assignChoiceEmbed]})
+                await interaction.editReply({ content: '', embeds: [assignChoiceEmbed] });
 
-                await AddAndWaitForMoreSelect(interaction, page, config, Object.entries(filteredAssignments).reduce((selectOptions, [term, assignments]) => { 
+                await AddAndWaitForMoreSelect(interaction, page, config, Object.entries(filteredAssignments).reduce((selectOptions, [term, assignments]) => {
                     for (const assignment of assignments) {
-                       selectOptions.push({ label: assignment.name, value: assignment.link, description: term }) 
+                        selectOptions.push({ label: assignment.name, value: assignment.link, description: term });
                     }
-                    return selectOptions
-                }, []), 'Choose the assignment you want to submit / get more info on', true)
-                //TODO then add the select menu function but with the submitting true
-                // if assignmentName is null, then they can decide it later
-                // if work is null, submit nothing, but warn them
-                // we already got the course, so now we need to get all the assignments and stuff
+                    return selectOptions;
+                }, []), 'Choose the assignment you want to submit / get more info on', true);
                 break;
             default:
                 //can editReply or follow up
                 interaction.editReply(`Didn't code the use of ${interaction.options.getSubcommand()} yet, sorry`)
                 break;
         }
-        //TODO Once its done, close the browser to stop the browsers stacking up
-        // await browser.close();
     }
+    //TODO Once its done, close the browser to stop the browsers stacking up
+    // await browser.close();
 }
 
 async function GetAllAssignments(page, chosenTerms, pushPeople=true){
@@ -372,7 +380,7 @@ const GetFullAssignmentInfo = async (page, getComments=true) => {
     
     if(commentsFound) {
         //* wait for the comments to load
-        await page.waitForSelector('div[role="main"] ul div.text_to_html')
+        await page.waitForSelector(/*div[role="main"] */'ul div.text_to_html')
     }
 
     return await page.evaluate(() => {
@@ -522,11 +530,12 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
         const filter = i => i.user.id === interaction.user.id;
         collector = await reply.createMessageComponentCollector({ filter, time: 60 * 1000 });
 
+        const clearButton = buttonRow.components.find(btn => btn.data.label == 'Clear')
 
         // get them to choose a recipient
         collector.on('collect', async (i) => {
-            await i.deferUpdate();
             if(i.customId == 'quit') {
+                await i.deferUpdate();
                 collector.stop();
                 if(!config.settings.general.AutoSave) {
                     //? there might be better ways to click a button
@@ -537,12 +546,13 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
             }
             else if(i.customId == 'clear') {
                 await interaction.editReply({components: [CreateSubmitButtonsRow(true, true, true)]})
-                // clearButton = buttonRow.components.find(btn => btn.data.label == 'Clear')
-                // clearButton.setDisabled(true)
+                await i.deferUpdate();
+                clearButton.setDisabled(true)
                 await interaction.editReply({ components: [buttonRow]})
-                for (const submFile of await page.$$('div.fp-thumbnail')) {
-                    await submFile.click();
-                    await DeleteFileFromPage(page)
+                for await (const submFile of await page.$$('div.fp-thumbnail')) {
+                    //* for some reason when a thing is deleted, sometimes it stays on the page unfortunately
+                    await submFile.click().catch();
+                    await DeleteFileFromPage(page);
                 }
                 assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = 'none'
                 await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
@@ -550,6 +560,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
             else if(i.customId == 'add work') {
                 //* it should be disabled if they have no work, but just a precausion
                 if(chosenWork.attachments.length == 0) {
+                    await i.deferUpdate();
                     return TemporaryResponse(interaction, 'You have no work to add!')
                 }
                 // const addWorkButton = buttonRow.components.find((button) => button.data.label == 'add work')
@@ -557,15 +568,41 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 // await addWorkButton.setDisabled(true)
                 // CreateSubmitButtonsRow(Boolean(personalOnlyCheckBox) || dbWork.length == 0, chosenWork.attachments.length == 0);
                 await interaction.editReply({components: [CreateSubmitButtonsRow(true, true, true)]})
+                await i.deferUpdate();
+                
                 //if donating and not all my own work, add to the database. also add attachments if provided
                 await page.waitForSelector('div.filemanager-toolbar a[title="Add..."]')
                 if(chosenWork.attachments.length > 0) {
                     for (const work of chosenWork.attachments) {
+                        if(!clearButton.data.disabled) {
+                            const alreadySubmittedFile = await page.$(`div.fp-thumbnail img[title="${work.name}"]`)
+                            
+                            //* deleting the old file, cause they are uploading a new one
+                            if(alreadySubmittedFile) {
+                                //await needed because this has to be done before the delete button is clicked
+                                await alreadySubmittedFile.click().then(async () => {
+                                    //all the buttons are already loaded in the dom for some reason (before popup), so just click the delete, but waiting just in case
+                                    await DeleteFileFromPage(page)
+                                }).catch();
+                            }
+                        }
                         await CreateTmpAndUpload(page, work)          
                     }
-                    workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
+                    clearButton.setDisabled(false); // now it isn't empty they can click it once it's shown
+                    let workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
                     // set the value to be the new values added, if it was already added it won't duplicate
-                    workOnAssignInfo.value = new Set([...workOnAssignInfo.value.split(', '), ...chosenWork.attachments.map(work => work.name)]).join(', ');
+                    // workOnAssignInfo.value = new Set([...workOnAssignInfo.value.split(', '), ...chosenWork.attachments.map(work => work.name)]).join(', ');
+                    //? probably a better quicker algorithm for this, but at least it is a one liner which I like
+                    // adds the new assignment, if it wasn't already in the list 
+                    workOnAssignInfo.value = workOnAssignInfo.value.trim().replace('none', '');
+                    console.log(workOnAssignInfo.value)
+                    for (const attc of chosenWork.attachments) {
+                        if(!workOnAssignInfo.value.includes(attc.name)) {
+                            workOnAssignInfo.value += `${workOnAssignInfo.value.length > 0 ? ', ' : ''}${attc.name}`;
+                        }
+                    }
+                    // workOnAssignSplit = workOnAssignInfo.value.split(', ');
+                    // workOnAssignInfo.value = workOnAssignSplit.push(...(chosenWork.attachments.map(work => work.name).filter(name => !workOnAssignSplit.includes(name)))).join(', ');
                     // if(workOnAssignInfo.includes(chosenWork.attachworkOnAssignInfo+= chosenWork.attachments.map(work => work.name).join(', ')
                     await interaction.editReply({ embeds: [assignmentEmbed]})
                 }
@@ -576,6 +613,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 // await interaction.editReply({components: [CreateSubmitButtonsRow(Boolean(personalOnlyCheckBox) || dbWork.length == 0, chosenWork.attachments.length == 0)]})
             }
             else if(i.customId == 'save') {
+                await i.deferUpdate();
                 await collector.stop()
                 //* click the save button to finalise changes and wait for page to load
                 // if the work has an owner and that owner is not the user they need to pay
@@ -612,12 +650,14 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                         // return resolve(await DisplayFullInfo(interaction, updatedInfo, config, page, false));
                     }
                 }
-                await Promise.all([
-                    page.waitForNavigation(),
-                    page.evaluate(() => document.querySelector('input[type="submit"][value="Save changes"]').click()),
-                ])
+                // await Promise.all([
+                //     page.waitForNavigation(),
+                //     page.evaluate(() => document.querySelector('input[type="submit"][value="Save changes"]').click()),
+                // ])
                 
-                const updatedInfo = await GetFullAssignmentInfo(page)
+                //TODO fix the comment here after testing and enable the save button again
+                const updatedInfo = info;
+                // const updatedInfo = await GetFullAssignmentInfo(page)
 
                 // if they have donating set to true and it isn't personal only and they aren't using borrowed work
                 if(!UsingBorrowedWork && userWork.length > 0 && config.settings.assignments.Donating && !personalOnlyCheckBox) {
@@ -638,6 +678,9 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                             attachments: userWork
                         })
                         newAssignment.save();
+                        config.stats.AssignmentNames.push(info.title);
+                        config.tokens += assignmentSubmissionTokens;
+                        config.save();
                         console.log(`${interaction.user.name} donated their work to the assignment ${info.title}`)
                     }
                 }
@@ -645,6 +688,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 return resolve(await DisplayFullInfo(interaction, updatedInfo, config, page, false));
             }
             else if(i.customId == 'submission list') {
+                await i.deferUpdate();
                 //make it so that the collector will last longer than the submission list collector 
                 // if there was a way to pause it that would be nice :P
                 collector.resetTimer({ time: 185 * 1000 })
@@ -812,16 +856,6 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, chosenWork, dbWo
 }
 
 const CreateTmpAndUpload = async (page, work) => {
-    // const tmpfilePath = path.join(os.tmpdir(),'assignmentUpload.png')
-    const alreadySubmittedFile = await page.$(`div.fp-thumbnail img[title="${work.name}"]`)
-
-    //* deleting the old file, cause they are uploading a new one
-    if(alreadySubmittedFile) {
-        //await needed because this has to be done before the delete button is clicked
-        await alreadySubmittedFile.click();
-        //all the buttons are already loaded in the dom for some reason (before popup), so just click the delete, but waiting just in case
-        await DeleteFileFromPage(page);
-    }
 
     
     const tmpfilePath = path.join(os.tmpdir(), work.name)
