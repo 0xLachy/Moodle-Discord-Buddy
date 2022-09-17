@@ -414,6 +414,12 @@ function encrypt(loginDetails){
     // console.log("Encrypted message: " + encryptedData);
     return { name: loginDetails.username, initVector, Securitykey, encryptedPassword }
 }
+
+const TemporaryResponse = async (interaction, message, time=1000) => {
+    const reply = await interaction.followUp({content: message, fetchReply: true})
+    setTimeout(() => reply.delete(), time);
+}
+
 const SendConfirmationMessage = async (interaction, message, time=30000) => {
     return new Promise(async (resolve, reject) => {
         //create an embed instead
@@ -546,6 +552,7 @@ module.exports = {
     ConvertTime,
     UpdateActionRowButtons,
     GetLoginsFromDatabase,
+    TemporaryResponse,
     SendConfirmationMessage,
     GetSelectMenuOverflowActionRows,
     loginGroups,

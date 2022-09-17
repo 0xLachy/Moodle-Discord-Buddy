@@ -146,7 +146,9 @@ module.exports = {
                         //increment the daily quizzes, update the last complete date too
                         config.stats.DailyQuizzesCompleted++;
                         config.stats.DailyQuizzesDoneToday++;
+                        //don't need to mark changes unless calling the function like .setDate()
                         config.stats.DailyQuizLastComplete = Date.now();
+                        // config.markModified('config.stats.DailyQuizLastComplete')
                         //give them moodle money reward
                         config.tokens += dailyQuizTokens;
                         //TODO tell the person that they earned 
@@ -268,6 +270,7 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
 
     const quizSummaryEmbeds = [];
     let questionIndex = 0
+    //? why did I go backwards??? 
     for (let i = embedCount; i > 0; i--) {
         let EmbedTitle = i == embedCount ? quizTitle : `${quizTitle} part ${embedCount - i}`
         // could also add the grade to the title? but that is already in the description elements

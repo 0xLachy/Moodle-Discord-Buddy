@@ -36,6 +36,13 @@ const settingsInfo = {
         ShowHints: { type: Boolean, default: true, info: 'If you want the buttons to light up red or green and stuff' },
         AutoSubmit: { type: Boolean, default: false, info: 'Bypass the overview screen (makes it so you submit faster essentially), not really reccomended unless you are lazy :/'},
     },
+    assignments: { 
+        title: 'Assignment Settings',
+        info: 'Anything to do with submitting and borrowing assignments',
+        ShowFileSubmissionInfo: { type: Boolean, default: true, info: `When viewing an assignments full info, edit submission to find more info (don't have to actually edit the submission)`},
+        HideSelfGrade: { type: Boolean, default: false, info: `Don't allow people to see your grade`},
+        Donating: { type: Boolean, default: true, info: `When assignments are shareable, share the assigment and get paid (mdl) and help out the boys at the same time!`},
+    },
     messages: {
         title: 'Message Settings',
         info: 'Sends a message to someone through the moodle using your account, it can also read messages and send them to discord, when running the command you can change the args like showSent=true, these are just default values',
@@ -60,6 +67,7 @@ const statsInfo = {
     // Purchases: { type: [], info: 'Stuff you have bought with Moodle Money'}, // store as { vip: 1, nicknames: 1}
     AssignmentsShared: { type: Number, default: 0, info: '(count of) Assignments you gave to other people' },
     AssignmentsBorrowed: { type: Number, default: 0, info: '(count of) Assignments you borrowed from other people' },
+    AssignmentNames: { type: [String], info: 'The names of the assignments that you have completed through the moodle buddy'},
     QuizzesCompleted: { type: Number, default: 0, info: 'How many quizzes you have done through the bot' },
     TotalCommandsRun: { type: Number, default: 0, info: 'How many times you have run a slash command with moodle buddy' },
     DailyQuizzesCompleted: { type: Number, default: 0, info: 'How many daily quizzes you have done'},
@@ -421,8 +429,8 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
             console.log(choiceInfo)
         }
         const promises = lastI ? [lastI.deferUpdate()] : []
-        promises.push(interaction.editReply({content: ' ', embeds: [currentSettingEmbed], components: inputActionRow.components.length > 0 ? [moveRow, inputActionRow] : [moveRow]}))
-        await Promise.all(promises)
+        promises.push(interaction.editReply({content: ' ', embeds: [currentSettingEmbed], fetchReply: true, components: inputActionRow.components.length > 0 ? [moveRow, inputActionRow] : [moveRow]}))
+        const [reply] = await Promise.all(promises)
 
         let channelResponse = false;
         //make sure that it is the right person using the buttons and select menus
@@ -431,7 +439,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
         
         const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
         
-        const collector = await channel.createMessageComponentCollector({ filter, time: 180 * 1000 });
+        const collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
         const msgCollector = await channel.createMessageCollector({ filter: msgFilter, time: 180 * 1000 });
         
         collector.on('collect', async (i) => {

@@ -1,5 +1,5 @@
 {
-  "name": "lism-leadersboards",
+  "name": "moodle-discord-buddy",
   "version": "1.0.0",
   "description": "Discord bot that scrapes lismore moodle data",
   "main": "index.js",
@@ -9,6 +9,7 @@
   "author": "0xLachy",
   "license": "GPL-3.0",
   "dependencies": {
+    "axios": "^0.27.2",
     "discord.js": "^14.0.3",
     "dotenv": "^16.0.0",
     "mongoose": "^6.5.0",
