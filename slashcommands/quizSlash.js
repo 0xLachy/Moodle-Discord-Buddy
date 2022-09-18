@@ -1,7 +1,7 @@
-const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder } = require('discord.js');
 const puppeteer = require('puppeteer');
 const UtilFunctions = require("../util/functions");
-const { primaryColour, dailyQuizTokens } = require("../util/variables");
+const { primaryColour, dailyQuizTokensPerQuestion } = require("../util/variables");
 const mongoose = require('mongoose')
 require("dotenv").config()
 
@@ -150,9 +150,8 @@ module.exports = {
                         config.stats.DailyQuizLastComplete = Date.now();
                         // config.markModified('config.stats.DailyQuizLastComplete')
                         //give them moodle money reward
-                        config.tokens += dailyQuizTokens;
-                        //TODO tell the person that they earned 
-                        await interaction.followUp({content: `Congrats you earned $${dailyQuizTokens} moodle money :partying_face:, your balance is now $${config.tokens}`, ephemeral: true})
+                        config.tokens += dailyQuizTokensPerQuestion * correctedAnswers.questions.length;
+                        await interaction.followUp({content: `Congrats you earned $${dailyQuizTokensPerQuestion * correctedAnswers.questions.length} moodle money :partying_face:, your balance is now $${config.tokens}`, ephemeral: true})
                     }
                 }
                 // using truthy, once repeat amount reaches 0 it fails could use != 0 instead
