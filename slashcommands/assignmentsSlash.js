@@ -117,6 +117,7 @@ module.exports = {
                 foundErr = true;
             })
             if(!foundErr) await DisplayFullInfo(interaction, await GetFullAssignmentInfo(page), config, page, true);
+            return browser.close();
         }
 
         const chosenTerms = await AskForCourse(interaction, page, true).catch(reason => {
@@ -662,45 +663,57 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 // if they have donating set to true and it isn't personal only and they aren't using borrowed work
                 if(!UsingBorrowedWork && userWork.length > 0 && config.settings.assignments.Donating && !personalOnlyCheckBox) {
                     //send a confirmation message saying, do you want to donate this assignment?
+                    console.log(updatedInfo)
                     if(replacingSharedWork) {
-                        replacingSharedWork.modifyDate = updatedInfo.submissionData['Last modified'];
+                        replacingSharedWork.modifyDate = updatedInfo.submissionData.find(subm => subm.name == 'Last modified').value;
                         const submittedFiles = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value.split(', ');
+                        //if they have updated files, remove the same ones before pushing (replacing them if they exist) and make sure it was actually part of the submit
+                        replacingSharedWork.attachments = replacingSharedWork.attachments.filter(attc => !userWork.attachments.some(userAttc => userAttc.name == attc.name) && submittedFiles.includes(attc.name))
                         replacingSharedWork.attachments.push(...userWork);
-                        replacingSharedWork.attachments = replacingSharedWork.attachments.filter(attc => submittedFiles.includes(attc.name))
                         replacingSharedWork.save();
-                        console.log(`${interaction.user.name} updated their work for the assignment ${info.title}`)
+                        console.log(`${interaction.user.username} updated their work for the assignment ${info.title}`)
                     }
                     else {
                         const newAssignment = new AssignmentModel({ 
                             name: updatedInfo.title, 
                             owner: interaction.user.id,
-                            modifyDate: updatedInfo.submissionData['Last modified'],
+                            modifyDate: updatedInfo.submissionData.find(subm => subm.name == 'Last modified').value,
                             attachments: userWork
                         })
                         newAssignment.save();
                         config.stats.AssignmentNames.push(info.title);
                         config.tokens += assignmentSubmissionTokens;
                         config.save();
-                        console.log(`${interaction.user.name} donated their work to the assignment ${info.title}`)
+                        console.log(`${interaction.user.username} donated their work to the assignment ${info.title}`)
                     }
                 }
                 //finally update the embed to have the new submitted stats
                 return resolve(await DisplayFullInfo(interaction, updatedInfo, config, page, false));
-            }
-            else if(i.customId == 'submission list') {
+            } // submission list
+            else if(i.customId == 'shared work') {
                 await i.deferUpdate();
                 //make it so that the collector will last longer than the submission list collector 
                 // if there was a way to pause it that would be nice :P
                 collector.resetTimer({ time: 185 * 1000 })
-                await TemporaryResponse(interaction, 'Sorry Currently in development, feel free to PR on github!');
-                const listQuit = await CreateSubmissionListEmbedAndButtons(interaction, chosenWork, dbWork, userWork, submitterConfigs, info.title)
+                // await TemporaryResponse(interaction, 'Sorry Currently in development, feel free to PR on github!');
+                chosenWork = await CreateSubmissionListEmbedAndButtons(interaction, page, chosenWork, dbWork, userWork, submitterConfigs, info.title)
 
-                if(listQuit) {
+                if(chosenWork) {
+                    //TODO update the embed to show that they are using the new work edit the chosen word field not this
+                // assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = 'none'
+        // assignmentEmbed.addFields({ name: 'Work to Add', value: userWork.map(work => `[${work.name}](${work.attachment})`).join(', ') || 'none'})
+                    //TODO add if its their or someone elses work to this section of the thing
+                    assignmentEmbed.data.fields.find(field => field.name == 'Work to Add').value =`${chosenWork?.owner ? `(<@${chosenWork.owner}>'s work)` : '(Your work)'} ${chosenWork.attachments.map(work => `[${work.name}](${work.attachment})`).join(', ') || 'none'}`;
+                    //TODo and then edit the interaction embed to have the proper buttons and stuff
+        // const clearButton = buttonRow.components.find(btn => btn.data.la/bel == 'Clear')
+                    buttonRow.components.find(btn => btn.data.label == 'Add Work').setDisabled(chosenWork.attachments.length == 0)
+                    // addWorkButton.setDisabled(chosenWork.attachments.length == 0)
+                    // console.log(addWorkButton)
+                    await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
+                }
+                else {
                     return resolve(interaction.editReply({components: [CreateSubmitButtonsRow(true, true, true)]}))
                 }
-                //get database stuff i guess :P
-                //do function for **creating** the embed, but probably just stay in here so I don't need to reload stuff
-                // but idk maybe reloading is actually better and it isn't like I need to get the info and stuff again
             }
         })
         
@@ -713,7 +726,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
     });
 }
 
-const CreateSubmissionListEmbedAndButtons = async (interaction, chosenWork, dbWork, userWork, submitterConfigs, assignmentName) => {
+const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork, dbWork, userWork, submitterConfigs, assignmentName) => {
     //If this function is being called dbWork.length > 0 is true so iteration works
     //*now I doubt 25 people will submit assignments, but I should probably code for that
     // todo if admin, allow them to delete submissions, or if validy is false auto delete I guess
@@ -729,7 +742,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, chosenWork, dbWo
     `or set as work to submit. If you choose to borrow work you will have to pay the user ${assignmentBorrowCost} when you click save`)
     .setFields(GetWorkFields());
 
-    const reply = await interaction.editReply({ content: '', embeds: [listEmbed], components: [GetWorkButtonRows(workIndex == 0, nextDisabled == dbWork.length - 1)], fetchReply: true});
+    const reply = await interaction.editReply({ content: '', embeds: [listEmbed], components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1), fetchReply: true});
 
     const filter = i => i.user.id === interaction.user.id;
 
@@ -738,64 +751,85 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, chosenWork, dbWo
     return new Promise(async (resolve, reject) => {
         collector.on('collect', async (i) => {
             // await collector.stop();
-            await i.deferUpdate()
-            if(i.customId == 'Quit') {
-                await interaction.editReply({ components: [GetWorkButtonRows(false, false, false)] });
-                return resolve(true);
+            if(i.customId == 'return') {
+                await i.deferUpdate()
+                return resolve(chosenWork);
+                // await interaction.editReply({ components: GetWorkButtonRows(false, false, false) });
+                // return resolve(true);
             }
             else if(i.customId == 'reset') {
-                // change work choice back to userWork *it gets rid of the owner*
+                await i.deferUpdate()
+                //* change work choice back to userWork *it gets rid of the owner*
                 chosenWork = { attachments: userWork };
             }
-            else if(i.customId == 'Next') {
+            else if(i.customId == 'next') {
+                await i.deferUpdate()
                 //next is disabled if it can't go any further, so this is safe
                 workIndex++;
             }
-            else if(i.customId == 'Back') {
+            else if(i.customId == 'back') {
+                await i.deferUpdate()
                 workIndex--;
             }
             else if(i.customId == 'verify') {
+                // if the person isn't logged in, we can't check!
+                if(!loginGroups.hasOwnProperty(dbWork[workIndex].owner)) {
+                    await i.deferUpdate();
+                    return await interaction.followUp(`The user is logged out! I don't reccomend using this work, but it's an option`)
+                }
+                await interaction.editReply({ components: GetWorkButtonRows(true, true, true)});
+                await i.deferUpdate();
                 // create a new browser with new cookies, log in as the owner id and go to the current quiz and get info
-                //TODO remove headless false
                 const personToVerify = submitterConfigs.find(subConf => subConf.discordId == dbWork[workIndex].owner);
-                const verifyingBrowser = await puppeteer.launch({headless: false});
+                const verifyingBrowser = await puppeteer.launch();
                 const verifyingPage = await verifyingBrowser.newPage();
                 // go to the non editing version of the page to get the info
                 // await verifyingPage.goto(page.url().replace('&action=editsubmission', ''))
-                //login to moodle through 
-                await LoginToMoodle(verifyingPage, dbWork[workIndex].owner, page.url().replace('&action=editsubmission', ''))
-                await page.waitForSelector('div.submissionstatustable tbody tr')
-                const veryPersonInfo = await GetFullAssignmentInfo(page, false);
+                //login to moodle through new page, it automatically waits for navigation
+                LoginToMoodle(verifyingPage, dbWork[workIndex].owner, page.url().replace('&action=editsubmission', '')).catch((err) => {
+                    console.log(err)
+                    interaction.followUp({ content: 'An error occured while signing into moodle, they might have changed their password but not logged out and back in'})
+                    interaction.editReply({components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1)})
+                });
+                await verifyingPage.waitForSelector('div.submissionstatustable tbody tr td')
+                const veryPersonInfo = await GetFullAssignmentInfo(verifyingPage, false);
+                verifyingBrowser.close();
 
                 dbWork[workIndex].grade = personToVerify.settings.assignments.HideSelfGrade ? 'disabled' : veryPersonInfo.submissionData['Grading status']
 
-                if(dbWork[workIndex].modifyDate != veryPersonInfo.submissionData['Last modified']) {
+                if(dbWork[workIndex].modifyDate != veryPersonInfo.submissionData.find(subm => subm.name == 'Last modified').value) {
                     //THEY CHANGED THEIR WORK WITHOUT THE BOT!!! DELETE THEIR WORK AND TAKE AWAY THEIR MONEY
                     // they can always resubmit again if they didn't mean to edit it so it is on purpose
                     await interaction.followUp(`<@${personToVerify.discordId}> had different dates! They submitted on ${dbWork[workIndex].modifyDate}, but it was ` +
-                    `found that they had edited it on ${veryPersonInfo.submissionData['Last modified']}! Their assignment work will now be deleted and they will pay a penalty!`);
+                    `found that they had edited it on ${veryPersonInfo.submissionData.find(subm => subm.name == 'Last modified').value}! Their assignment work will now be deleted and they will pay a penalty of $${fakeAssignmentPenalty}! (As well as taking back their submission earnings of $${assignmentSubmissionTokens})`);
+                    personToVerify.tokens -= assignmentSubmissionTokens;
                     personToVerify.tokens -= fakeAssignmentPenalty;
+
+                    //delete the file from the database
                     await dbWork[workIndex].delete();
-                    console.log(dbWork)
-                    //! I don't know if I need to remove it from the array now It is deleted???
+                    // it won't be deleted from the array though, so delete it here to!
                     dbWork.splice(workIndex, 1);
-                    console.log(dbWork)
                 }
-                //
-                return TemporaryResponse(interaction, 'Not coded for yet, feel free to create a PR on github')
+                else {
+                    TemporaryResponse(interaction, 'They have not modified the assignment without the bot, you are good to go!')
+                }
+                // don't need these as it is run for every function that doesn't return
+                // listEmbed.setFields(GetWorkFields())
+                // await interaction.editReply({ components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1) });
             }
             else if(i.customId == 'use work') {
-                chosenWork = dbWork[workIndex]
+                await i.deferUpdate();
+                chosenWork = { owner: dbWork[workIndex].owner, attachments: dbWork[workIndex].attachments };
             }
             listEmbed.setFields(GetWorkFields());
-            await interaction.editReply({embeds: [listEmbed], components: [GetWorkButtonRows(workIndex == 0, nextDisabled == dbWork.length - 1)]})
+            await interaction.editReply({embeds: [listEmbed], components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1)})
         })
         
         collector.on('end', collected => {
             if (collected.size == 0) {
                 // If they ran out of time to choose just return nothing
-                interaction.editReply({ content: "Interaction Timed Out (You didn't choose anything for 180 seconds), re-run the command again", components: [GetWorkButtonRows(false, false, false)] });
-                return resolve(true);
+                interaction.editReply({ content: "Interaction Timed Out (You didn't choose anything for 180 seconds), re-run the command again", components: GetWorkButtonRows(false, false, false) });
+                return resolve(false);
             }
         });
     })
@@ -808,36 +842,36 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, chosenWork, dbWo
                 //if they don't have a name, use their first nickname, otherwise just put it in discord format
                 // I think because it is an embed it actually shows account so that by default
                 // name: `${currentPerson.name ?? currentPerson.nicknames[0] ?? `<@${currentPerson.discordId}>`}`
-                name: `<@${currentPerson.discordId}> (${currentPerson.name ?? currentPerson.nicknames[0] ?? 'n/a'})${index == workIndex ? '【 SELECTED 】' : ''}`,
+                name: `${currentPerson.name ?? currentPerson.nicknames[0] ?? currentPerson.discordId}${index == workIndex ? '【 SELECTED 】' : ''}`,
                 //Not using (name)[url] for attachments because they could submit for free (and without the bot)
                 value: `Grade: ${work.grade}\nSubmitted on ${work.modifyDate}\nAttachments: ${work.attachments.map(att => att.name).join(', ')}`
             }
-        }), { name: 'Current Chosen Work: ', value: `${chosenWork?.owner ? '(Your Work) ' : `(<@${chosenWork.owner}>'s Work) `}${chosenWork.attachments.map(att => att.name).join(', ') || 'none' }`}]
+        }), { name: 'Current Chosen Work: ', value: `${chosenWork?.owner ? `(<@${chosenWork.owner}>'s Work) ` : '(Your Work) '}${chosenWork.attachments.map(att => att.name).join(', ') || 'none' }`}]
     }
 
     function GetWorkButtonRows(backDisabled=false, nextDisabled=false, disableAll=false) {
         return [ 
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId('quit')
-                    .setLabel('Quit')
-                    .setDisabled(disableAll)
-                    .setStyle(ButtonStyle.Danger),
+                .setCustomId('reset')
+                .setLabel('Reset Work Choice')
+                .setDisabled(disableAll)
+                .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
-                    .setCustomId('reset')
-                    .setLabel('Reset Work Choice')
+                    .setCustomId('return')
+                    .setLabel('Return')
                     .setDisabled(disableAll)
-                    .setStyle(ButtonStyle.Danger),
+                    .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
                     .setCustomId('back')
                     .setLabel('Back')
                     .setDisabled(backDisabled || disableAll)
-                    .setStyle(ButtonStyle.Secondary),
+                    .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
                     .setCustomId('next')
                     .setLabel('Next')
                     .setDisabled(nextDisabled || disableAll)
-                    .setStyle(ButtonStyle.Secondary),
+                    .setStyle(ButtonStyle.Primary),
             ),
             new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
