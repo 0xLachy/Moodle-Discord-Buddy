@@ -1,6 +1,6 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { EmbedBuilder } = require('discord.js');
-const { primaryColour, errorColour } = require("../util/variables");
+const { primaryColour, errorColour } = require("../util/constants");
 
 //Code to get all the command names:
 

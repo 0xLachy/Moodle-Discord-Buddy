@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const { GetConfigs } = require("./configSlash");
-const { primaryColour, MoodleCoinImgURL } = require("../util/variables");
+const { primaryColour, MoodleCoinImgURL } = require("../util/constants");
 
 const data = new SlashCommandBuilder()
 	.setName('shop')

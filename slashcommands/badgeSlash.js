@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const { GetConfigById } = require("./configSlash")
-const { primaryColour } = require("../util/variables");
+const { primaryColour } = require("../util/constants");
 
 //PUT THE BADGES HERE, URL is the icon for the badge (reccomended)
 //* need the info for nested objects because thats how it checks

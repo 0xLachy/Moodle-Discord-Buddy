@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
-const { primaryColour } = require("../util/variables");
+const { primaryColour } = require("../util/constants");
 const mongoose = require('mongoose');
 require("dotenv").config()
 //TODO add the stats viewer screen where you can see your stats

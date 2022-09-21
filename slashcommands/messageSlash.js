@@ -5,7 +5,7 @@ const superagent = require('superagent').agent();
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } = require('discord.js');
 // const { EmbedBuilder, Util, ButtonBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
-const { primaryColour } = require("../util/variables");
+const { primaryColour } = require("../util/constants");
 require("dotenv").config()
 
 

@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder } = require('discord.js');
 const puppeteer = require('puppeteer');
 const UtilFunctions = require("../util/functions");
-const { primaryColour, dailyQuizTokensPerQuestion } = require("../util/variables");
+const { primaryColour, dailyQuizTokensPerQuestion } = require("../util/constants");
 const mongoose = require('mongoose')
 require("dotenv").config()
 

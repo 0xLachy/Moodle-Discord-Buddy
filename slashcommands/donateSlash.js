@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const { GetSelectMenuOverflowActionRows } = require("../util/functions");
-const { primaryColour, MoodleCoinImgURL } = require("../util/variables");
+const { primaryColour, MoodleCoinImgURL } = require("../util/constants");
 const { CreateOrUpdateConfig, GetConfigById, GetConfigs, GetDefaults } = require("./configSlash")
 //TODO make it so if admin use the bot they can also remove tokens from people
 //* You actually can put in any valid id for the user id, which means it can be sent from dms

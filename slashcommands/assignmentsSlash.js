@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder, CommandInteractionOptionResolver } = require('discord.js');
 const puppeteer = require('puppeteer');
 const { GetSelectMenuOverflowActionRows, LoginToMoodle, AskForCourse, SendConfirmationMessage, TemporaryResponse, mainStaticUrl, loginGroups } = require("../util/functions")
-const { primaryColour, assignmentBorrowCost, assignmentSharedTokens, assignmentSubmissionTokens, fakeAssignmentPenalty } = require("../util/variables");
+const { primaryColour, assignmentBorrowCost, assignmentSharedTokens, assignmentSubmissionTokens, fakeAssignmentPenalty } = require("../util/constants");
 const { ConvertName, GetConfigById } = require('./configSlash')
 const mongoose = require('mongoose')
 const fs = require('fs')

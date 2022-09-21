@@ -1,7 +1,7 @@
 const puppeteer = require('puppeteer');
 const { EmbedBuilder, SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const UtilFunctions = require("../util/functions");
-const { primaryColour } = require("../util/variables");
+const { primaryColour } = require("../util/constants");
 const { ConvertName } = require('./configSlash')
 
 //TODO implement code for the role options and also todo, when those roles are added make sure not in dm
