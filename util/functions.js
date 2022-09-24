@@ -2,7 +2,7 @@ const fs = require("fs");
 const { ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ComponentBuilder} = require('discord.js');
 const { resolve } = require("path");
 const crypto = require("crypto");
-const { ConvertName } = require('../slashcommands/configSlash');
+const { ConvertName, GetConfigById } = require('../slashcommands/configSlash');
 const mongoose = require('mongoose');
 require("dotenv").config()
 
@@ -165,58 +165,122 @@ const GetCourseUrls = async (page) => {
 function AskForCourse(interaction, page, multipleTerms=false){
     // you aren't supposed to put async in new promise but oh well, WHOS GONNA STOP ME!!!
     return new Promise(async (resolve, reject) => {
+        //* There is always a user config now, so yeah that should be here
+        const config = GetConfigById(interaction.user.id)
+        let blackListedUrls = config.settings.courses.BlackListedUrls;
+        let defaultDisabledUrls = config.settings.courses.DefaultDisabledUrls;
+
         const termInfo = await GetCourseUrls(page)
         const termsEmbed = new EmbedBuilder()
         .setColor(primaryColour)
-        .setTitle('Term / Courses Select')
-        .setURL(dashboardUrl)
-        .setDescription("Click on one of the buttons bellow to choose the term, you might need to be logged in if the bot owner isn't in the same course");
         
-        if (multipleTerms) termsEmbed.setDescription("Click on Terms to disable them, if they are disabled they are grey, click on them again to make them blue, which means they are included!\n\nYou have 15 seconds to set up, or press enter to send it early!")
-        const row = new ActionRowBuilder();
-        // term info is <termname> = [ <url> , <id>]
-        for (const term of Object.keys(termInfo)) {
-            // let termButton = new ButtonBuilder().setCustomId(term).setLabel(term).setStyle(ButtonStyle.Primary)
-            // row.addComponents(termButton)
-            row.addComponents(
-                new ButtonBuilder()
-                    .setCustomId(term)
-                    .setLabel(term)
-                    .setStyle(ButtonStyle.Primary),
-            );	
-        }
-        // If allowing multiple, have a enter button
-        if (multipleTerms){
-            row.addComponents(
-                new ButtonBuilder()
-                .setCustomId('Enter')
-                .setLabel('Enter')
-                .setStyle(ButtonStyle.Success)
-            )           
-        }
+        //set the normal title, like this because of edit option
+        SetDefaultTitle();
 
-        const reply = await interaction.editReply({/*ephemeral: true,*/ embeds: [termsEmbed], components: [row]})
+        if (multipleTerms) termsEmbed.setDescription("Click on Terms to disable them, if they are disabled they are grey, click on them again to make them blue, which means they are included!\n\nYou have 15 seconds to set up, or press enter to send it early!")
+        // const rows = [ new ActionRowBuilder() ];
+        const rows = [];
+        // term info is <termname> = [ <url> , <id>]
+
+        //TODO add in a blacklist and set default button or whatever
+        // if they are on a single course select, turn this into multiselect button
+        // then reset it back
+        // const termsForButtons = Object.keys(termInfo);
+        // the incrementing will be done wrong
+        AddTermsToRows();
+        // If allowing multiple, have a enter button and an edit button
+        //TODO I think I might not want to do this if they don't have any courses
+
+
+        const reply = await interaction.editReply({/*ephemeral: true,*/ embeds: [termsEmbed], components: rows})
     
         const filter = i => i.user.id === interaction.user.id;
         // create collector to handle when button is clicked using the reply
         const collector = await reply.createMessageComponentCollector({ filter, time: 15000 });
-        let updatedButtons = row.components
-        // console.log(updatedButtons)
+        // let updatedButtons = row.components
+        //flatten so all the buttons are in the same array because of row.components
+        let updatedButtons = rows.slice(0, -1).map(row => row.components).flat();
     
+        //so I could do rows[rows.length -1].components.find(c => c.customId == 'Edit').Enabled but this is cleaner I think 
         // So if one of the buttons was clicked, then update text
         collector.on('collect', async i => {
 
             if (multipleTerms) {
+                const editingRightNow = rows[rows.length - 1].components.find(c => c.data.custom_id == 'Edit').data.disabled
                 // if enter button, stop early
                 if(i.customId == 'Enter'){
+                    if(editingRightNow) {
+                        for (const termButton of updatedButtons) {
+                            //? now I can either reset, or delete from other lists, idk what is better
+                            //TODO refactor this code because is has repeat code that can be shortened down but I am feeling lazy rn
+                            const termUrl = termInfo[termButton.data.custom_id].URL
+                            const indexInsideDisableList = config.settings.courses.DefaultDisabledUrls.indexOf(termUrl);
+                            const indexinsideBlackList = config.settings.courses.BlackListedUrls.indexOf(termUrl);
+                            if(termButton.data.style == ButtonStyle.Danger) {
+                                // if it is included in disable list, remove it
+                                if(indexInsideDisableList != -1) {
+                                    config.settings.courses.DefaultDisabledUrls.splice(indexInsideDisableList, 1);
+                                }
+                                // add to the blacklist on the users config if it doesn't exist
+                                if(indexinsideBlackList == -1) {
+                                    config.settings.courses.BlackListedUrls.push(termUrl)
+                                }
+                            }
+                            else if(termButton.data.style == ButtonStyle.Secondary) {
+                                //same as the function above but reverse
+                                if(indexinsideBlackList != -1) {
+                                    config.settings.courses.BlackListedUrls.splice(indexinsideBlackList, 1);
+                                }
+                                if(indexInsideDisableList == -1) {
+                                    config.settings.courses.DefaultDisabledUrls.push(termUrl)
+                                }
+                            }
+                            else if(termButton.data.style == ButtonStyle.Primary) {
+                                //remove from any of the lists entirely
+                                if(indexinsideBlackList != -1) {
+                                    config.settings.courses.BlackListedUrls.splice(indexinsideBlackList, 1);
+                                }
+                                if(indexInsideDisableList != -1) {
+                                    config.settings.courses.DefaultDisabledUrls.splice(indexInsideDisableList, 1);
+                                }
+                            }
+                            else {
+                                console.log(`Error inside term choice function, the style ${termButton.data.style} did not work in the code, (it is the button ${button.data.label})`)
+                            }
+                        }
+                        collector.resetTimer({ time: 15 * 1000 })
+                        SetDefaultTitle();
+                        rows.length = 0;
+                        AddTermsToRows()
+                        await interaction.editReply({embeds: [termsEmbed], components: rows})
+                        //? could combine this with a promise with some other stuff if I wanted too
+                        await config.save()
+                        return i.deferUpdate();
+                    }
                     i.deferUpdate();
-                    await collector.stop()
-                    return;
+                    return await collector.stop();
                 }   
+                else if(i.customId == 'Edit') {
+                    // edit the embed so the buttons are all deselected and only blacklisted ones are
+                    // make an option for reset blacklist as well as done or enter
+                    //* extending the timer out so they have time to edit
+                    collector.resetTimer({ time: 120 * 1000})
+                    termsEmbed.setTitle('Course Option Editing');
+                    termsEmbed.setURL(null);
+                    termsEmbed.setDescription('Click on the select, if they are red, they will be blacklisted meaning they will not be shown, if they are blue they will be '
+                        + 'selected by default (when multi select), grey for unselected by default (but still shown)\n click on the button to cycle colors');
+
+                    //resetting the rows because adding the blacklisted ones
+                    // it also disables the edit button so that
+                    rows.length = 0;
+                    AddTermsToRows(true)
+                    await interaction.editReply({embeds: [termsEmbed], components: rows})
+                    return await i.deferUpdate();
+                }
                 // let updatedActionRowComponent = []
 
                 //loop through each action row on the embed and update it accordingly
-                await UpdateActionRowButtons(i);           
+                await UpdateActionRowButtons(i, editingRightNow);           
 
                 // Respond to the interaction, 
                 // and send updated components to the Discord API
@@ -225,25 +289,35 @@ function AskForCourse(interaction, page, multipleTerms=false){
                 // await i.update({components: i.message.components})
                 // Update button info because a button has been clicked
                 //message components are stored as an array as action rows, but all that matters is the components (The wanted buttons are in the first(only) row)
-                updatedButtons = await i.message.components[0].components;
+                // updatedButtons = await i.message.components[0].components;
+                // set the buttons to be all the rows but the last one, and map out so it's only their components
+                updatedButtons = i.message.components.slice(0, -1).map(compRow => compRow.components).flat();
             }     
             else {
+                if(config.settings.courses.AutoChangeMain) {
+                    config.settings.courses.DefaultMainCourseUrl = termInfo[i.customId].URL
+                }
                 await i.update({ content: 'Term Chosen, Scraping Now!', components: [], embeds: [] });
                 resolve(termInfo[i.customId])
                 await collector.stop()
             }
+
             // return i;
         });
     
         collector.on('end', collected => {
             if (multipleTerms) {
+                // only in multiple terms is the edit option available
+                if(rows[rows.length - 1].components.find(c => c.data.custom_id == 'Edit').disabled) {
+                    return reject('Timed out on editing courses')
+                }
                 // on end, remove the buttons and embed // maybe insteadof content, use a new embed that says the chosen terms
-                leaderboardData = updatedButtons.reduce((leaderboardData, button) => {
+                chosenTermsData = updatedButtons.reduce((chosenTermsData, button) => {
                     // If the Enter button is primary then do button.customId != 'Enter'
                     if(button.data.style == ButtonStyle.Primary) {
-                        leaderboardData[button.data.custom_id] = termInfo[button.data.custom_id]
+                        chosenTermsData[button.data.custom_id] = termInfo[button.data.custom_id]
                     }
-                    return leaderboardData
+                    return chosenTermsData
                 }, {})
                 
                 let analyserEmbed = new EmbedBuilder()
@@ -252,15 +326,21 @@ function AskForCourse(interaction, page, multipleTerms=false){
                 .setURL(dashboardUrl)
                 .setDescription("Going To each Term / Course and Scraping data. The more here, the longer it will take :/ ");
                 
-                for (const termName of Object.keys(leaderboardData)) {
-                    analyserEmbed.addFields({ name: termName, value: `URL: ${leaderboardData[termName].URL}` })
+                for (const termName of Object.keys(chosenTermsData)) {
+                    analyserEmbed.addFields({ name: termName, value: `URL: ${chosenTermsData[termName].URL}` })
                 }
                 interaction.editReply({components: [], embeds: [analyserEmbed]})
 
-                resolve(leaderboardData)
+                resolve(chosenTermsData)
             }
             else if(collected.size == 0) {
-                reject("No button was pressed")
+                // if multiple terms it doesn't get here, if null or undefined it is false
+                if(Object.keys(termInfo).includes(config.settings.courses.DefaultMainCourseUrl)) {
+                    resolve(config.settings.courses.DefaultMainCourseUrl);
+                }
+                else {
+                    reject("No button was pressed")
+                }
             }
             //clean way to delete it, but maybe it's better to just edit the message? 
             // interaction.deleteReply()
@@ -268,6 +348,64 @@ function AskForCourse(interaction, page, multipleTerms=false){
             // callback(i.customId);
             // return 
         });
+
+        function AddTermsToRows(editing=false) {
+            let termAddedIndex = 0;
+            for (const term of Object.keys(termInfo)) {
+                // const term = termsForButtons[termIndex]
+                // if the term is added, don't bother adding it
+                const curTermUrl = termInfo[term].URL;
+                // if not editing don't show blacklisted url terms
+                if (!editing && blackListedUrls.includes(curTermUrl))
+                    continue;
+                const rowNumber = Math.floor(termAddedIndex / 3);
+                if (rowNumber > rows.length - 1) {
+                    // create the thing
+                    rows.push(new ActionRowBuilder());
+                }
+                // let termButton = new ButtonBuilder().setCustomId(term).setLabel(term).setStyle(ButtonStyle.Primary)
+                // row.addComponents(termButton)
+                if (multipleTerms) {
+                    rows[rowNumber].addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(term)
+                            .setLabel(term)
+                            //* convoluted but basically, if it is blacklisted than make it red, if it is off then grey, otherwise blue for on.
+                            //it will only show if 
+                            .setStyle(blackListedUrls.includes(curTermUrl) ? ButtonStyle.Danger : defaultDisabledUrls.includes(curTermUrl) ? ButtonStyle.Secondary : ButtonStyle.Primary)
+                    );
+                } else {
+                    //If it is only select one, than just show them all as blue because disable doesn't matter
+                    rows[rowNumber].addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(term)
+                            .setLabel(term)
+                            .setStyle(ButtonStyle.Primary)
+                    );
+                }
+                termAddedIndex++;
+            }
+            if(multipleTerms) {
+            rows.push( new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                .setCustomId('Edit')
+                .setLabel('Edit')
+                .setDisabled(editing)
+                .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                .setCustomId('Enter')
+                // if editing say done otherwise say enter, still handles by enter id
+                .setLabel(editing ? 'Done' : 'Enter')
+                .setStyle(ButtonStyle.Success)
+            ))
+        }
+        }
+
+        function SetDefaultTitle() {
+            termsEmbed.setTitle('Term / Courses Select')
+            termsEmbed.setDescription("Click on one of the buttons bellow to choose the term, you might need to be logged in if the bot owner isn't in the same course");
+            termsEmbed.setURL(dashboardUrl)
+        }
     })
 
 }
@@ -321,7 +459,7 @@ const GetUserUrlByName = async (page, inputName) => {
     }, await ConvertName(inputName)) 
 }
 
-async function UpdateActionRowButtons(i) {
+async function UpdateActionRowButtons(i, editingRightNow=false) {
     let newActionRowEmbeds = i.message.components.map(oldActionRow => {
         //create a new action row to add the new data
         updatedActionRow = new ActionRowBuilder();
@@ -338,7 +476,15 @@ async function UpdateActionRowButtons(i) {
                     newButton.setStyle(ButtonStyle.Secondary);
                 }
                 else if (buttonComponent.style == ButtonStyle.Secondary) {
-                    newButton.setStyle(ButtonStyle.Primary);
+                    if(editingRightNow) {
+                        newButton.setStyle(ButtonStyle.Danger);
+                    }
+                    else {
+                        newButton.setStyle(ButtonStyle.Primary);
+                    }
+                }
+                else if (buttonComponent.style == ButtonStyle.Danger) {
+                    newButton.setStyle(ButtonStyle.Primary)
                 }
             }
             return newButton;

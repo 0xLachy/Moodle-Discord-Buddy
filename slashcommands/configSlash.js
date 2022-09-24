@@ -49,11 +49,20 @@ const settingsInfo = {
         SendAmount: { type: Number, min: 1, max: 100, default: 1, info: 'The default amount of times to send that message to someone'},
         ShowSent: { type: Boolean, default: false, info: 'When reading messages, show the ones you sent by default'},
         ShowReceived: { type: Boolean, default: true, info: 'When reading messages, show the ones others sent to you by default'},
-        Ephemeral: { type: Boolean, default: false, info: 'Only shows the result to you, deletes embed when you close discord, best way is probably this false and dm the bot'}
+        Ephemeral: { type: Boolean, default: false, info: 'Only shows the result to you, deletes embed when you close discord, best way is probably this false and dm the bot'},
+    },
+    courses: {
+        title: 'Course Settings',
+        info: 'For when a command is run and modify the functionality of the course selection button menu thing',
+        BlackListedUrls: { type: [String], lowercase: true, trim: true, info: `Don't even show these courses as an option to select`},
+        DefaultDisabledUrls: { type: [String], lowercase: true, trim: true, info: 'Which courses to be unselected by default when you do a command that requires multiple courses'},
+        DefaultMainCourseUrl: { type: String, default: null, lowercase: true, trim: true, info: 'The course you want to be selected by default for single course commands like status'},
+        AutoChangeMain: { type: Boolean, default: true, info: 'Whenever it is just a single select, change your main default course url to whatever you select'},
     },
     config: {
         title: 'Configuration Settings',
         info: 'Settings for the settings!',
+        ConfigMsgCommandPrefix: { type: String, default: null, lowercase: true, trim: true, info: 'Instead of clicking next or other buttons, just type in your choice to the channel and switch, by default it\s not needed, but if you do something, it will then be required, e.g ! means you do !next for next or !enter for enter etc'},
         MultiBoolean: { type: Boolean, default: true, info: 'When editing config, display multiple booleans at once or just the current value selected.'},
         DeleteSettingMessages: { type: Boolean, default: true, info: '(Only deletes inside guild) When you send in messages to edit config, delete them once they are passed'},
     },
@@ -202,21 +211,21 @@ const FixConfigFiles = async () => {
 
     //typeof is sh*t, instance of, .constructor, can't find anything online
     //yeah so you can use code in mongodb, crap... too late now
-    function CompareTypes(type) {
-        if(type === Number){
+    function CompareTypes(inputType) {
+        if(inputType === Number){
             return 'number'
         }
-        else if(type === Boolean){
+        else if(inputType === Boolean){
             return 'boolean'
         }
-        else if(type === String){
+        else if(inputType === String){
             return 'string'
         }
-        else if(typeof type == typeof [String]){
+        else if(typeof inputType == typeof [String]){
             return 'object'
         }
         else {
-            return typeof type
+            return typeof inputType
         }
     }
     
@@ -347,7 +356,7 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                 const info = Object.values(currentSettingsInfo).filter(value => typeof value == 'object')[index];
                 // display all the setting items, show selected on the one selected and display info and then on new line what they have in the config there
                 return { name: `${name.split(/(?=[A-Z])/).join(' ')}${settingIndex == index ? ' [ SELECTED ]' : userConfig.settings.config.MultiBoolean && selectedIsBool && typeof value == 'boolean' && index >= startInd && index < startInd + 3 ? ' { SELECTED }' : ''}`,
-                 value: `${info.info ? info.info + '\n' : ''}${info.min ? `min: ${info.min} ` : ''}${info.max ? `max: ${info.max} \n` : ''}**value: ${value}**` } 
+                 value: `${info.info ? info.info + '\n' : ''}${info.min ? `min: ${info.min} ` : ''}${info.max ? `max: ${info.max} \n` : ''}**value: ${Array.isArray(value) ? value.join(', ') || value : value}**` } 
             })
         );
         if(currentSettingsInfo.info) {
@@ -423,6 +432,14 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
         //? maybe have choices for string array as an option too! if it doesn't fit don't add the string :D
         else if(choiceInfo.type === String || typeof choiceInfo.type == typeof [String]) {
             currentSettingEmbed.addFields({name: 'Input Value', value: `Type the value bellow to change ${choiceName}`})
+            if(typeof choiceInfo.type == typeof [String]) {
+                inputActionRow.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('Clear')
+                        .setLabel('Clear')
+                        .setStyle(ButtonStyle.Danger)
+                )
+            }
         }
         else {
             console.log('You forgot to code the type for this kind of config item, ln 164')
@@ -470,6 +487,12 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
             else if(i.customId == 'Back') {
                 return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex - 1, i))
             }
+            else if(i.customId == 'Clear') {
+                // reset the current input thing, used for array of string input
+                //This is how to clear an array
+                currentSettings[Object.keys(currentSettings)[settingIndex]].length = 0;
+                return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex, i))
+            }
             else if(i.customId == 'Overview') {
                 await i.deferUpdate();
                 return resolve(await CreateSettingsOverview(interaction, userConfig))
@@ -486,30 +509,79 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
         });
 
         msgCollector.on('collect', async m => {
-            const inputCommand = m.content.toLowerCase();
-            if(inputCommand == 'quit') {
-                StopCollecting();
-                await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] });
-                return resolve(userConfig);
+            const confPrefix = userConfig.settings.config.ConfigMsgCommandPrefix;
+            //replace will leave it the same if it is null
+            const inputCommand = m.content.trim().toLowerCase().replace(confPrefix, '');
+            //if it is null, or it starts with the prefix, than it means that is is a command probably
+            if(!confPrefix || m.content.toLowerCase().startsWith(confPrefix)){
+                if(inputCommand == 'quit') {
+                    StopCollecting();
+                    await interaction.editReply({ content: 'Quit Successfully', embeds: [], components: [] });
+                    return resolve(userConfig);
+                }
+                else if(inputCommand == 'save') {
+                    userConfig.save();
+                    await TemporaryResponse(interaction, 'Saved!')
+                    if(interaction.inGuild() && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
+                    //gotta return so that 'save' doesn't get added to the value running
+                    return;
+                }
+                else if(inputCommand == 'clear') {
+                    if(Array.isArray(currentSettings[Object.keys(currentSettings)[settingIndex]])){
+                        StopCollecting();
+                        currentSettings[Object.keys(currentSettings)[settingIndex]].length = 0;
+                        return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex))
+                    }
+                    else {
+                        await TemporaryResponse(interaction, `Can't clear on an option that isn't an array, maybe in the future it will make stuff default, but haven't gotten around to it yet, feel free to PR!`)
+                        if(interaction.inGuild() && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
+                        return;
+                    }
+                }
+                else if(inputCommand.includes('remove')) {
+                    const editingVal = currentSettings[Object.keys(currentSettings)[settingIndex]];
+                    const splitCommand = inputCommand.split(' ');
+                    if(Array.isArray(editingVal)) {
+                        //if they type in 'remove at 2' and the array length is 2 or greater, than they can remove it
+                        if(splitCommand[1] == 'at' && Number(splitCommand[2]) <= editingVal.length){
+                            StopCollecting();
+                            //I don't have to put number but yeah it doesn't matter, not zero indexed for user
+                            editingVal.splice(Number(splitCommand[2]) - 1, 1)
+                            return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex))
+                        }
+                        else if(editingVal.includes(splitCommand[1])) {
+                            StopCollecting();
+                            editingVal.splice(editingVal.indexOf(splitCommand[1]), 1)
+                            return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex))
+                        }
+                    }
+                    //if it didn't return do this instead, StopCollecting never gets called so delete message here
+                    await TemporaryResponse(interaction, `Couldn't remove because either you used it wrong, or remove is not an option for this type config option`)
+                    if(interaction.inGuild() && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
+                    return;
+                }
+                else if(inputCommand == 'next' && settingIndex != Object.keys(currentSettings).length - 1) {
+                    StopCollecting()
+                    return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex + 1));
+                }
+                else if(inputCommand == 'back' && settingIndex != 0) {
+                    StopCollecting();
+                    return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex - 1));
+                }
+                else if(inputCommand == 'overview') {
+                    StopCollecting();
+                    return resolve(await CreateSettingsOverview(interaction, userConfig))
+                }
+                else if(confPrefix) {
+                    //if it had a prefix, but didn't find a command, then tell them off (also makes sure it doesn't get added)
+                    await TemporaryResponse(interaction, `No msg command for ${confPrefix ?? ''}${inputCommand}, but you can do stuff like next, back, overview, `)
+                    if(interaction.inGuild() && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
+                    return;
+                }
+
             }
-            else if(inputCommand == 'save') {
-                userConfig.save();
-                await TemporaryResponse(interaction, 'Saved!')
-                if(interaction.inGuild() && userConfig.settings.config.DeleteSettingMessages) { m.delete() };
-            }
-            else if(inputCommand == 'next' && settingIndex != Object.keys(currentSettings).length - 1) {
-                StopCollecting()
-                return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex + 1));
-            }
-            else if(inputCommand == 'back' && settingIndex != 0) {
-                StopCollecting();
-                return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex - 1));
-            }
-            else if(inputCommand == 'overview') {
-                StopCollecting();
-                return resolve(await CreateSettingsOverview(interaction, userConfig))
-            }
-            else if(choiceInfo.type == String || choiceInfo.type == [String] || choiceInfo.choices == undefined || choiceInfo?.choices.includes(inputCommand) || (choiceInfo.type == Boolean && (inputCommand == 'true' || inputCommand == 'false'))) {
+            //if it was a command, it would have returned by now, so this is fine
+            if(choiceInfo.type == String || choiceInfo.type == [String] || choiceInfo.choices == undefined || choiceInfo?.choices.includes(inputCommand) || (choiceInfo.type == Boolean && (inputCommand == 'true' || inputCommand == 'false'))) {
                 //doesn't work, need to check if choice info.max and min
                 if(choiceInfo.type == Number) {
                     if(isNaN(inputCommand)){
@@ -527,7 +599,13 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                     
                 }
                 else {
-                    currentSettings[Object.keys(currentSettings)[settingIndex]] = inputCommand;
+                    //if the curVal is an array, then push, otherwise just set it
+                    if(Array.isArray(currentSettings[Object.keys(currentSettings)[settingIndex]])) {
+                        currentSettings[Object.keys(currentSettings)[settingIndex]].push(inputCommand)
+                    }
+                    else {
+                        currentSettings[Object.keys(currentSettings)[settingIndex]] = inputCommand
+                    }
                 }
                 StopCollecting()
                 return resolve(await DisplayChosenSetting(interaction, userConfig, settingName, settingIndex));

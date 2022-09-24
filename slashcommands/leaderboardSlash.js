@@ -58,7 +58,7 @@ module.exports = {
     run: async (client, interaction, config) => {
         await interaction.deferReply()
         // const browser = await puppeteer.launch({headless: false});
-        const browser = await puppeteer.launch();
+        // const browser = await puppeteer.launch();
         const page = await browser.newPage();
         
         //log into the browser
@@ -71,7 +71,7 @@ module.exports = {
             }
         } catch (error) {
             console.log(error)
-            return await interaction.editReply("The Wifi is Too Slow and timed out on Navigation, here is the error") // TODO put in error name and title
+            return await interaction.editReply(`The Wifi is Too Slow and timed out on Navigation or maybe your login details are wrong, the error is: \n\`${error.toString()}\``);
         }
 
         let chosenTerms = await UtilFunctions.AskForCourse(interaction, page, true).catch(reason => {
@@ -118,11 +118,12 @@ async function FasterLeaderboard(page, chosenTerms, rigPerson=null, mergeResults
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
     let leaderboardResults = {};
 
+    //* the .URL of chosen terms is just the general course url, not the assignment listing url unfortunately
     for (termName of Object.keys(chosenTerms)){
-        let termData = chosenTerms[termName]
-        let term_url = `${UtilFunctions.mainStaticUrl}/course/recent.php?id=${termData.ID}`
+        const termData = chosenTerms[termName]
+        const termUrl = `${UtilFunctions.mainStaticUrl}/course/recent.php?id=${termData.ID}`
 
-        await page.goto(term_url)
+        await page.goto(termUrl)
     
         try {
             await page.click('#id_date_enabled');
