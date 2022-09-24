@@ -58,7 +58,7 @@ module.exports = {
     run: async (client, interaction, config) => {
         await interaction.deferReply()
         // const browser = await puppeteer.launch({headless: false});
-        // const browser = await puppeteer.launch();
+        const browser = await puppeteer.launch();
         const page = await browser.newPage();
         
         //log into the browser
