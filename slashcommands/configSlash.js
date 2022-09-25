@@ -54,10 +54,10 @@ const settingsInfo = {
     courses: {
         title: 'Course Settings',
         info: 'For when a command is run and modify the functionality of the course selection button menu thing',
-        BlackListedUrls: { type: [String], lowercase: true, trim: true, info: `Don't even show these courses as an option to select`},
-        DefaultDisabledUrls: { type: [String], lowercase: true, trim: true, info: 'Which courses to be unselected by default when you do a command that requires multiple courses'},
+        BlackListedUrls: { type: [String], max: 20, lowercase: true, trim: true, info: `Don't even show these courses as an option to select`},
+        DefaultDisabledUrls: { type: [String], max: 20, lowercase: true, trim: true, info: 'Which courses to be unselected by default when you do a command that requires multiple courses'},
         DefaultMainCourseUrl: { type: String, default: null, lowercase: true, trim: true, info: 'The course you want to be selected by default for single course commands like status'},
-        AutoChangeMain: { type: Boolean, default: true, info: 'Whenever it is just a single select, change your main default course url to whatever you select'},
+        AutoChangeMain: { type: Boolean, default: true, info: 'Whenever it is just a single select, change your main default course url to whatever you selected last'},
     },
     config: {
         title: 'Configuration Settings',
@@ -600,10 +600,21 @@ const DisplayChosenSetting = async (interaction, userConfig, settingName, settin
                 }
                 else {
                     //if the curVal is an array, then push, otherwise just set it
-                    if(Array.isArray(currentSettings[Object.keys(currentSettings)[settingIndex]])) {
-                        currentSettings[Object.keys(currentSettings)[settingIndex]].push(inputCommand)
+                    const curVal = currentSettings[Object.keys(currentSettings)[settingIndex]]
+                    if(Array.isArray(curVal)) {
+                        //* limiting how many times they can push to an array like this, I feel like you would never have to go over 10
+                        // discord luckilly limits the string length for us, just need to limit the push amount, so after a while it will just shift
+                        console.log(choiceInfo.max)
+                        if(curVal.length - 1 > (choiceInfo?.max ?? 15)) { 
+                            curVal.pop()
+                            curVal.unshift(inputCommand)
+                        }
+                        else {
+                            curVal.push(inputCommand)
+                        }
                     }
                     else {
+                        //can't assign to const, but without const the curVal won't be linked, so this is the only way unfortunately
                         currentSettings[Object.keys(currentSettings)[settingIndex]] = inputCommand
                     }
                 }
