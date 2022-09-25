@@ -1,4 +1,8 @@
 //* put everything added here into module.exports
+
+//todo get rid of using bot owners in client, and use it from here instead, seems cleaner
+//Your discord id, get that by being in developer mode and right clicking on your profile in a chat and copy id
+const botOwners = ['618689924970840103'];
 //colour stuff
 const primaryColour = 0x156385;
 const errorColour = 0xFF0000;
@@ -27,6 +31,7 @@ const MoodleCoinImgURL = 'https://i.postimg.cc/s2SBqYDx/glowing-m-coin-supernatu
 // 'https://i.imgur.com/M5sJ1zK.png' // abstract m coin
 
 module.exports = {
+    botOwners,
     primaryColour,
     errorColour,
     MoodleCoinImgURL,

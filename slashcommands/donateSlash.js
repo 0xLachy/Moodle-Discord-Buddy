@@ -1,6 +1,6 @@
-const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, CategoryChannel, ComponentBuilder} = require('discord.js');
 const { GetSelectMenuOverflowActionRows } = require("../util/functions");
-const { primaryColour, MoodleCoinImgURL } = require("../util/constants");
+const { botOwners, primaryColour, MoodleCoinImgURL } = require("../util/constants");
 const { CreateOrUpdateConfig, GetConfigById, GetConfigs, GetDefaults } = require("./configSlash")
 //TODO make it so if admin use the bot they can also remove tokens from people
 //* You actually can put in any valid id for the user id, which means it can be sent from dms
@@ -73,7 +73,7 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
             // the first page for the select menu, because only 25 people at a time
             let page = 0;
             peopleOptions = guildMembers.map(member => { return { label: `${member?.nickname ?? member.user.username}`, value: `${member.id}`, description:`They currently hold $${allConfigs.find(uConfig => uConfig.discordId == member.id)?.tokens || defaultTokens}` } });
-            const reply = await interaction.editReply({content: ' ', embeds:[donationEmbed], components: GetSelectMenuOverflowActionRows(page, peopleOptions), fetchReply: true})
+            const reply = await interaction.editReply({content: ' ', embeds:[donationEmbed], components: GetSelectMenuOverflowActionRows(page, peopleOptions, 'Choose a person to donate to!'), fetchReply: true})
             collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
 
             // get them to choose a recipient
@@ -85,11 +85,11 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
                 }
                 else if(i.customId == 'next_page') {
                     page++;
-                    await interaction.editReply({ components: GetSelectMenuOverflowActionRows(page, peopleOptions)})
+                    await interaction.editReply({ components: GetSelectMenuOverflowActionRows(page, peopleOptions, 'Choose a person to donate to!')})
                 }
                 else if(i.customId == 'previous_page') {
                     page--;
-                    await interaction.editReply({ components: GetSelectMenuOverflowActionRows(page, peopleOptions)})
+                    await interaction.editReply({ components: GetSelectMenuOverflowActionRows(page, peopleOptions, 'Choose a person to donate to!')})
                 }
             })
         }
@@ -114,6 +114,15 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
                     .setStyle(ButtonStyle.Success)
                     .setDisabled(amount == 0 || amount > userConfig.tokens)
             )
+            // if the owner of the bot or admin they can see and therefore use the take button
+            if(botOwners.includes(interaction.user.id) || interaction?.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+                confirmationRow.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('Take Away')
+                        .setLabel('Take Away')
+                        .setStyle(ButtonStyle.Danger),
+                )
+            }
             const reply = await interaction.editReply({content: ' ', embeds:[donationEmbed], components:[...incrementButtons, confirmationRow], fetchReply: true})
             collector = await reply.createMessageComponentCollector({ filter, max: 1, time: 180 * 1000 });
             collector.on('collect', async (i) => {
@@ -124,11 +133,14 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
                     return resolve(await PromptForDonation(interaction, userConfig, recipient, amount));
                 }
                 else if(i.customId == 'confirm') {
+                    //* finalise the purchase
                     await collector.stop();
                     return resolve(await FinaliseAndDisplayDonation(interaction, userConfig, recipient, recipientConfig, amount));
-                    // reply.delete()
-                    // return resolve(true)
-                    //* finalise the purchase
+                }
+                else if(i.customId == 'Take Away') {
+                    //* swapping around the user and recipient, so that they donate to the taker!
+                    await collector.stop();
+                    return resolve(await FinaliseAndDisplayDonation(interaction, recipientConfig, interaction.user, userConfig, amount));
                 }
                 else if(i.customId == 'cancel') {
                     await collector.stop();
