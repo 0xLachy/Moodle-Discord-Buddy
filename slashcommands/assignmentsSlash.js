@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder, CommandInteractionOptionResolver } = require('discord.js');
 const puppeteer = require('puppeteer');
 const { GetSelectMenuOverflowActionRows, LoginToMoodle, AskForCourse, SendConfirmationMessage, TemporaryResponse, mainStaticUrl, loginGroups } = require("../util/functions")
-const { primaryColour, assignmentBorrowCost, assignmentSharedTokens, assignmentSubmissionTokens, fakeAssignmentPenalty } = require("../util/constants");
+const { primaryColour, assignmentBorrowCost, assignmentSharedTokens, assignmentSubmissionTokens, fakeAssignmentPenalty, botOwners } = require("../util/constants");
 const { ConvertName, GetConfigById } = require('./configSlash')
 const mongoose = require('mongoose')
 const fs = require('fs')
@@ -868,11 +868,23 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 await i.deferUpdate()
                 workIndex--;
             }
+            else if(i.customId == 'Delete Shared') {
+                i.deferUpdate();
+                //send a confirmation message asking w
+                if(SendConfirmationMessage(interaction, `Are you sure that you want to delete the work containing \`${dbWork[workIndex].attachments.map(work => work.name).join(', ')}\` by <@${dbWork[workIndex].owner}>?`)) {
+                    if(SendConfirmationMessage(interaction, `Do you want to take back the tokens that they earned for posting the assignment?`)) {
+                        GetConfigById(dbWork[workIndex].owner).tokens -= assignmentSubmissionTokens;
+                    }
+                    //delete from the database, and then delete from the array
+                    await dbWork[workIndex].delete();
+                    dbWork.splice(workIndex, 1);
+                }
+            }
             else if(i.customId == 'Verify') {
                 // if the person isn't logged in, we can't check!
                 if(!loginGroups.hasOwnProperty(dbWork[workIndex].owner)) {
                     await i.deferUpdate();
-                    return await interaction.followUp(`The user is logged out! I don't reccomend using this work, but it's an option`)
+                    return await interaction.followUp(`The user is logged out! I don't recommend using this work, but it's an option`)
                 }
                 await interaction.editReply({ components: GetWorkButtonRows(true, true, true)});
                 await i.deferUpdate();
@@ -948,6 +960,15 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
     }
 
     function GetWorkButtonRows(backDisabled=false, nextDisabled=false, disableAll=false) {
+        const mainActionRow = new ActionRowBuilder();
+        if(botOwners.includes(interaction.user.id) || interaction?.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+            mainActionRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId('Delete Shared')
+                    .setLabel('Delete')
+                    .setStyle(ButtonStyle.Danger),  
+            )
+        }
         return [ 
             new ActionRowBuilder().addComponents(
                 // new ButtonBuilder()
@@ -971,15 +992,15 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                     .setDisabled(nextDisabled || disableAll)
                     .setStyle(ButtonStyle.Primary),
             ),
-            new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('Verify')
-                    .setLabel('Verify')
-                    .setDisabled(disableAll)
-                    .setStyle(ButtonStyle.Primary),
+            mainActionRow.addComponents(
                 new ButtonBuilder()
                     .setCustomId('Add Borrowed Work')
                     .setLabel('Add Work')
+                    .setDisabled(disableAll)
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('Verify')
+                    .setLabel('Verify')
                     .setDisabled(disableAll)
                     .setStyle(ButtonStyle.Primary),
             )
