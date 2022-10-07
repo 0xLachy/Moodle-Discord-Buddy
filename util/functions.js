@@ -591,16 +591,23 @@ const SendConfirmationMessage = async (interaction, message, time=30000) => {
         const collector = await reply.createMessageComponentCollector({ filter, time });
 
         collector.on('collect', async (i) => {
+            collector.stop()
             if(i.customId == 'yes') {
-                reply.delete()
                 return resolve(true)
             }
             else if(i.customId == 'no') {
-                reply.delete()
                 return resolve(false)
             }
         })
 
+        //by default I am going to assume if they forget, don't confirm it cause it is likely something like spending money and they might not want to!
+        collector.on('end', collected => {
+            reply.delete();
+            if(collected.size == 0) {
+                // submitting ? interaction.deleteReply() : interaction.editReply({components: []})
+                return resolve(false); //we finished the function
+            }
+        });
     })
 }
 // function decrypt(username, encryptedPassword, Securitykey, initVector){
