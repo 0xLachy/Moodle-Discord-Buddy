@@ -826,39 +826,33 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
     await page.waitForSelector('form div[id*="question"] div.content > div');
     
     const questionDivs = await page.$$('form div[id*="question"] div.content > div')
-    console.log(questionDivs)
     for (const questionDivContent of questionDivs) {
         //qtext contains only the title of the question
-        const questionName = questionDivContent.$('div.qtext').textContent;
+        const questionName = await questionDivContent.$('div.qtext').textContent;
         
         // if it has answers is can set them correct, otherwise they will be null
         // I have to do this because it gives error if null
         const currentdbAnswer = dbAnswers != {} ? dbAnswers[questionName] : undefined
 
         //usually it's like Select One: or Choose Multiple: (that way the user knows what to do)
-        const questionPrompt = questionDivContent.$('div.prompt')?.textContent;
+        const questionPrompt = await questionDivContent.$('div.prompt')?.textContent;
 
         //check if it is undefined before using it :/, not all have
-        const questionImgs = questionDivContent.$$eval('img', img => img?.src)
+        const questionImgs = await questionDivContent.$$eval('img', img => img?.src)
 
         const essayResponse = await questionDivContent.$('div.qtype_essay_response')
         const textAnswer = await questionDivContent.$('span.answer input');
         let answerData = []
         let questionType = '';
         if(essayResponse) {
-            //* frame doesn't event work for getting nested elems dumb...
-            const frame = await page.waitForSelector(`div#${await (await essayResponse.getProperty('id')).jsonValue()} iframe`)
-            // const frame = essayResponse.$('iframe')
+            //* get the element handle, and then get the actual frame document
+            const frameHandle = await page.waitForSelector(`div#${await (await essayResponse.getProperty('id')).jsonValue()} iframe`)
+            const frame = await frameHandle.contentFrame();
+            //TODO fix this waitforselector
             // await frame.waitForSelector('body#tinymce p')
-            // console.log(frame.childFrames())
-            // console.log(frame.contentWindow)
             // await frame.contentWindow.document.waitForSelector('body#tinymce p')
-            // await frame.waitForSelector('body#tinymce p')
             //? don't know if they have other elements than just <p>!
             questionType = 'essay'
-            // answerData = await page.evaluate((frame, currentdbAnswer) => {
-            //     await frame.contentWindow..contentWindow.document.querySelectorAll('body#Tinymce p')
-            // })
             answerData = await frame.$$eval('body#tinymce p', (essayLines, currentdbAnswer) => essayLines.map((line, index) => {
                 return {
                     answerNumber: index,
@@ -915,19 +909,19 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             answerData
         });
         
-        if(autoFillEverything) {
-            for (const questionIndex in scrapedQuestions) {
-                //for some reason editing the question in the for of loop doesn't update it inside the
-                // actual scraped questions, so using the index and assigning it should work
-                let question = scrapedQuestions[questionIndex]
-                question = await GuessOrFillSpecificQuestion(question)
-                // I feel like I could do
-                //scrapedQuestions[questionIndex] = await GuessOrFillSpecificQuestion(scrapedQuestions[questoinIndex]) but idk
-                scrapedQuestions[questionIndex] = question
-            }
-        }
-        return scrapedQuestions
     }
+    if(autoFillEverything) {
+        for (const questionIndex in scrapedQuestions) {
+            //for some reason editing the question in the for of loop doesn't update it inside the
+            // actual scraped questions, so using the index and assigning it should work
+            let question = scrapedQuestions[questionIndex]
+            question = await GuessOrFillSpecificQuestion(question)
+            // I feel like I could do
+            //scrapedQuestions[questionIndex] = await GuessOrFillSpecificQuestion(scrapedQuestions[questoinIndex]) but idk
+            scrapedQuestions[questionIndex] = question
+        }
+    }
+    return scrapedQuestions
     // return await page.evaluate(async (scrapedQuestions, dbAnswers, autoFillEverything) => {
     //     //get all the questions on the current page
     //     const questionDivs = document.querySelectorAll('form div[id*="question"] div.content > div');
