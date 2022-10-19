@@ -490,8 +490,19 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
     const personalOnlyCheckBox = await page.$('div.form-check input[name="submissionstatement"]')
     // CommandInteractionOptionResolver.log
     if(personalOnlyCheckBox) {
-        //checkbox so making it true
-        personalOnlyCheckBox.setAttribute('value', 1);
+
+        // personalOnlyCheckBox.checked = true;
+        //! I am pretty sure that checked needs set with a click because moodle changes stuff when check is clicked, but test this first
+        await personalOnlyCheckBox.evaluate(node => node.setAttribute('checked', true))
+        // personalOnlyCheckBox.setAttribute('value', 1);
+        //! get attribute and set and all of that stopped working when they used to, so eval it is I guess
+        // console.log(await personalOnlyCheckBox.evaluate(node => node.getAttribute('aria-invalid')))
+        // if(await personalOnlyCheckBox.evaluate(node => node.getAttribute('aria-invalid')) == 'true') {
+        //     //checkbox so making it true
+        //     personalOnlyCheckBox.click();
+        // }
+        
+
         assignmentEmbed.addFields({ name: 'YOUR OWN WORK', value: `This assignment has to be all your own work, you will not get paid if submitting because it can't be shared!`})
         // await interaction.editReply({ embeds: [assignmentEmbed]})
     }
@@ -503,7 +514,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
     //* I do have access to config in here which is very nice
     return new Promise(async (resolve, reject) => {
         // creates action row
-        // the max work you can upload is 3 files at a time to the moodle website
+        // the max work you can upload is basically always 1 - 3 files at a time to the moodle website
         // sometimes you do need to upload 3 files, so that is why i did it like this
         const userWork = [ 
             await interaction.options.getAttachment('work1'), 
@@ -512,15 +523,17 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
         ].filter(w=>w)//get rid of the null / undefined ones (truthy statement)
         
         //this is what the max file size is: Maximum file size: 64MB, maximum number of files: 1
-        const restrictionsString = page.$('div.fp-restrictions span').textContent;
+        //!even though the docs basically say that this works, it doesn't, it should....
+        // const restrictionsString = page.$('div.fp-restrictions span').textContent;
+        const restrictionsString = await page.evaluate(() => document.querySelector('div.fp-restrictions span').textContent)
 
         //returns numbers or null I guess, if it isn't in mb then I'm just gonna set then max to be the discord limit of 100mb (but discord does it for me!)
-        //*max file size in megabytes
-        const maxFileSize = restrictionsString.match(/Maximum file size: (\d+)mb/gi)
-        const maxNumberOfFiles = restrictionsString.match(/maximum number of files: (\d+)/gi)
+        //*max file size in megabytes [1] to get the group and not the match, i so it isn't case sensitive
+        const maxFileSize = restrictionsString.match(/Maximum file size: (\d+)mb/i)[1]
+        const maxNumberOfFiles = restrictionsString.match(/maximum number of files: (\d+)/i)[1]
 
         //returns in format of: '.pdf' , '.exe' etc
-        const fileTypeAllowedStrings = page.$$('div.form-filetypes-descriptions li small', fileTypeElem => fileTypeElem.textContent)
+        const fileTypeAllowedStrings = await page.evaluate(() => Array.from(document.querySelectorAll('div.form-filetypes-descriptions li small'), elem => elem.textContent))
         
         //always have userWork stored, (so they can go back to using their own, use chosenWork for whatever work is currently in use)
         // let chosenWork = { attachments: userWork };
@@ -532,21 +545,27 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
 
         // the configs of everyone that owns work and has added it to the shared list
         const submitterConfigs = dbWork.map(work => GetConfigById(work.owner))
+        const submitFullyDisabled = Boolean(personalOnlyCheckBox) || dbWork.length == 0;
 
         // create action row, disable work list, disable add work are args
-        const buttonRow = CreateSubmitButtonsRow(Boolean(personalOnlyCheckBox) || dbWork.length == 0, userWork.length == 0);
+        const buttonRow = CreateSubmitButtonsRow(submitFullyDisabled, userWork.length == 0);
 
         //get these out so I can modify them at times when needed, like the remove button right now!
         const addWorkButton = buttonRow.components.find(btn => btn.data.label == 'Add Work');
+        const sharedWorkButton = buttonRow.components.find(btn => btn.data.label == 'Shared');
         const removeButton = buttonRow.components.find(btn => btn.data.label == 'Remove');
 
+        //set the shared work button to have extra info because that way it is known if its fully disabled cause yeah
+        //! this might cause discordAPI issues
+        sharedWorkButton.data.fullyDisabled = submitFullyDisabled;
         // then just check if user work is different to other work and viola. thats how you know
         assignmentEmbed.addFields({ name: 'Work to Add', value: userWork.map(work => `[${work.name}](${work.attachment})`).join(', ') || 'none'})
         //* the current work is in the submission info, but like yeah I guess this can be for when it isn't saved yet
-        const curWorkOnAssignment = await page.evaluate(() => Array.from(document.querySelectorAll('div.fp-thumbnail img'), elem => elem.title));
+        const curWorkOnAssignment = await GetWorkOnAssignment(page);
 
         assignmentEmbed.addFields({ name: 'Current work on Assignment', value: curWorkOnAssignment.join(', ') || 'none' })
         
+        console.log(curWorkOnAssignment)
         //truthy falsy, anything greater than 0 is enabled
         removeButton.setDisabled(!curWorkOnAssignment.length)
 
@@ -555,7 +574,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
         const filter = i => i.user.id === interaction.user.id;
         const collector = await reply.createMessageComponentCollector({ filter, time: 60 * 1000 });
 
-        let nestedConfirmationCollector;
+        const nestedConfirmationCollector = {};
 
         // get them to choose a recipient
         collector.on('collect', async (i) => {
@@ -575,32 +594,48 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 // await i.deferUpdate();
                 const removeCompRow = CreateSubmitButtonsRow(true, true, false, true,);
                 
-                // if currently in the adding work stage, close the adding work window
-                if(interaction.data.components[0] == removeCompRow) {
+                // console.log(i.message.components[0], removeCompRow)
+                // if currently in the removing work stage, close the adding work window
+                // i.message.components[0].components.for
+                if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == removeCompRow.components[index].data.disabled)) {
                     // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
-                    await nestedConfirmationCollector.stop();
-                    await interaction.editReply({ components: [buttonRow] })
-                    return await i.deferUpdate();
+                    await nestedConfirmationCollector.collector.stop();
+                    i.deferUpdate();
+                    return await interaction.editReply({ components: [buttonRow]})
+                    // return await i.deferUpdate({ components: [buttonRow] });
                 }
 
+                //* can't edit components in defer update because they vanish back to normal in seconds, I swear that used to work
+                await i.deferUpdate();
+                await interaction.editReply({components: [removeCompRow]})
+                // await i.deferUpdate({components: [removeCompRow]});
                 
                 //this button should be disabled if the thing says none
-                let workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').trim()
-                const splitUpSubmittedAssignments = workOnAssignInfo.value.split(', ');
 
-                const filesToRemoveNames = AmountConfirmationInput(interaction, nestedConfirmationCollector, splitUpSubmittedAssignments, 'Choose whether or not to remove all or just a certain file from the assignment', ButtonStyle.Danger)
+                // let workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
+                // const splitUpSubmittedAssignments = workOnAssignInfo.value.trim().split(', ');
 
-                await interaction.editReply({ components: [buttonRow]})
+                const splitUpSubmittedAssignments = await GetWorkOnAssignment(page);
+
+                const filesToRemoveNames = await AmountConfirmationInput(interaction, nestedConfirmationCollector, splitUpSubmittedAssignments, 'Choose whether or not to remove all or just a certain file from the assignment', ButtonStyle.Danger)
+
+                // await interaction.editReply({ components: [buttonRow]})
                 for await (const submFile of await page.$$('div.fp-thumbnail')) {
-                    if(filesToRemoveNames.includes(submFile.querySelector('img').title)) {
+                    const submFileName = await submFile.evaluate((node) => node.querySelector('img').title);
+                    if(filesToRemoveNames.includes(submFileName)) {
                         //* for some reason when a thing is deleted, sometimes it stays on the page unfortunately
                         await submFile.click().catch();
                         await DeleteFileFromPage(page);
+
+                        // remove it from the submitted assignments thing
+                        splitUpSubmittedAssignments.splice(splitUpSubmittedAssignments.indexOf(submFileName), 1)
                     }
                 }
 
-                const oldWorkOnAssign = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment');
-                oldWorkOnAssign.value = oldWorkOnAssign.value.split(', ').filter(olWork => !filesToRemoveNames.includes(olWork)).join(', ') || 'none';
+                // const oldWorkOnAssign = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment');
+                //!!!! IF THERE IS A COMMA LIKE THAT, IT THINKS IT IS MORE THAN ONE ASSIGNMENT!
+                // oldWorkOnAssign.value = oldWorkOnAssign.value.split(', ').filter(olWork => !filesToRemoveNames.includes(olWork)).join(', ') || 'none';
+                assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ? `'${splitUpSubmittedAssignments.join(`', '`)}'` : 'none';
 
                 await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
             }
@@ -613,83 +648,11 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
 
                 const addWorkOnlyRow = CreateSubmitButtonsRow(true, false, true, true);
                 
-                // if currently in the adding work stage, close the adding work window
-                if(interaction.data.components[0] == addWorkOnlyRow) {
-                    // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
-                    await nestedConfirmationCollector.stop();
-                    await i.deferUpdate();
-                    return await interaction.editReply({ components: [buttonRow] })
-                }
+                await CheckToAddWorkAndGetNames(interaction, i, nestedConfirmationCollector, chosenWork, userWork, assignmentEmbed, 
+                    addWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, maxNumberOfFiles)
 
-                let workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
-                workOnAssignInfo.value = workOnAssignInfo.value.trim().replace('none', '');
-                const splitUpSubmittedAssignments = workOnAssignInfo.value.split(', ');
-
-                // so if the thing has the same name, it can be added so that's fine, add all won't be allowed if they have more than three (in the future account for assignments that require different amounts)
-                // they can always add three at a time if it is an unlimited file submisson if I go down that route and do that.
-                const AddAllButtonDisabled = userWork.reduce((total, work) => {
-                    // if the name isn't in the submission already, then that is a new file so add it to the total
-                    if(!splitUpSubmittedAssignments.includes(work.name)) {
-                        total++;
-                    }
-                    return total
-                }, 0) + splitUpSubmittedAssignments.length > maxNumberOfFiles;
-
-                const workToAddNames = AmountConfirmationInput(interaction, nestedConfirmationCollector, userWork.map(work => work.name), 'Choose a choice of work that you want to add, or all at once!', ButtonStyle.Primary, AddAllButtonDisabled)
-                
-                // const addWorkButton = buttonRow.components.find((button) => button.data.label == 'add work')
-                //don't let them try add work at the same time
-                // await addWorkButton.setDisabled(true)
-                // CreateSubmitButtonsRow(Boolean(personalOnlyCheckBox) || dbWork.length == 0, chosenWork.attachments.length == 0);
-                await interaction.editReply({components: [addWorkOnlyRow]})
-                //TODO add a follow up add thing that gives the choice of *all* work1, work2 etc (if available)
-                //adds all or one at a time and disabled if it goes over the limit of three file submissions
-                await i.deferUpdate();
-                
-                //if donating and not all my own work, add to the database. also add attachments if provided
-                await page.waitForSelector('div.filemanager-toolbar a[title="Add..."]')
-
-                for (const work of userWork) {
-                    if(!clearButton.data.disabled && workToAddNames.includes(work.name)) {
-                        const alreadySubmittedFile = await page.$(`div.fp-thumbnail img[title="${work.name}"]`)
-                        
-                        //* deleting the old file, cause they are uploading a new one
-                        if(alreadySubmittedFile) {
-                            //await needed because this has to be done before the delete button is clicked
-                            await alreadySubmittedFile.click().then(async () => {
-                                //all the buttons are already loaded in the dom for some reason (before popup), so just click the delete, but waiting just in case
-                                await DeleteFileFromPage(page)
-                            }).catch();
-                        }
-                        await CreateTmpAndUpload(page, work)          
-
-                        chosenWork.push(work)
-                    }
-                }
-                clearButton.setDisabled(false); // now it isn't empty they can click it once it's shown
-                // let workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
-                // set the value to be the new values added, if it was already added it won't duplicate
-                // workOnAssignInfo.value = new Set([...workOnAssignInfo.value.split(', '), ...chosenWork.attachments.map(work => work.name)]).join(', ');
-                //? probably a better quicker algorithm for this, but at least it is a one liner which I like
-                // adds the new assignment, if it wasn't already in the list 
-                // workOnAssignInfo.value = workOnAssignInfo.value.trim().replace('none', '');
-                for (const attc of chosenWork) {
-                    if(!workOnAssignInfo.value.includes(attc.name)) {
-                        workOnAssignInfo.value += `${workOnAssignInfo.value.length > 0 ? ', ' : ''}${attc.name}`;
-                    }
-                }
-
-                // doing greater than, just incase they added an extra one then they are supposed to!
-                addWorkButton.setDisabled(workOnAssignInfo.value.split(', ').length >= maxNumberOfFiles);
-                // workOnAssignSplit = workOnAssignInfo.value.split(', ');
-                // workOnAssignInfo.value = workOnAssignSplit.push(...(chosenWork.attachments.map(work => work.name).filter(name => !workOnAssignSplit.includes(name)))).join(', ');
-                // if(workOnAssignInfo.includes(chosenWork.attachworkOnAssignInfo+= chosenWork.attachments.map(work => work.name).join(', ')
                 await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
-                //after it is finished enable it
-                // await addWorkButton.setDisabled(false)
-                // await interaction.editReply({components: [buttonRow]})
-                // I think I don't need this because button row has the default stuff already
-                // await interaction.editReply({components: [CreateSubmitButtonsRow(Boolean(personalOnlyCheckBox) || dbWork.length == 0, chosenWork.attachments.length == 0)]})
+
             }
             else if(i.customId == 'Save') {
                 await i.deferUpdate();
@@ -902,7 +865,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 });
                 await verifyingPage.waitForSelector('div.submissionstatustable tbody tr td')
                 const veryPersonInfo = await GetFullAssignmentInfo(verifyingPage, false);
-                verifyingBrowser.close();
+                await verifyingBrowser.close();
 
                 dbWork[workIndex].grade = personToVerify.settings.assignments.HideSelfGrade ? 'disabled' : veryPersonInfo.submissionData['Grading status']
 
@@ -927,7 +890,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 // await interaction.editReply({ components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1) });
             }
             else if(i.customId == 'Add Borrowed Work') {
-                await i.deferUpdate();
+                // await i.deferUpdate({ components});
+                // const
                 //TODO add the work to the assignment, but work in use should now include the other persons work, and the cost!
                 // chosenWork = { owner: dbWork[workIndex].owner, attachments: dbWork[workIndex].attachments };
             }
@@ -959,7 +923,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
         }), { name: 'Current Chosen Work: ', value: `${chosenWork?.owner ? `(<@${chosenWork.owner}>'s Work) ` : '(Your Work) '}${chosenWork.attachments.map(att => att.name).join(', ') || 'none' }`}]
     }
 
-    function GetWorkButtonRows(backDisabled=false, nextDisabled=false, disableAll=false) {
+    function GetWorkButtonRows(backDisabled=false, nextDisabled=false, disableAll=false, addWorkDisabled=false) {
         const mainActionRow = new ActionRowBuilder();
         if(botOwners.includes(interaction.user.id) || interaction?.memberPermissions.has(PermissionFlagsBits.Administrator)) {
             mainActionRow.addComponents(
@@ -984,19 +948,19 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 new ButtonBuilder()
                     .setCustomId('Back')
                     .setLabel('Back')
-                    .setDisabled(backDisabled || disableAll)
+                    .setDisabled(backDisabled)
                     .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
                     .setCustomId('Next')
                     .setLabel('Next')
-                    .setDisabled(nextDisabled || disableAll)
+                    .setDisabled(nextDisabled)
                     .setStyle(ButtonStyle.Primary),
             ),
             mainActionRow.addComponents(
                 new ButtonBuilder()
                     .setCustomId('Add Borrowed Work')
                     .setLabel('Add Work')
-                    .setDisabled(disableAll)
+                    .setDisabled(addWorkDisabled)
                     .setStyle(ButtonStyle.Primary),
                 new ButtonBuilder()
                     .setCustomId('Verify')
@@ -1055,13 +1019,111 @@ const CreateTmpAndUpload = async (page, work) => {
 
 }
 
-//max is probably like three for btnChoices
+const CheckToAddWorkAndGetNames = async (interaction, i, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, addWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles, deleting=false) => {
+    // if currently in the adding work stage, close the adding work window
+    if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == addWorkOnlyRow.components[index].data.disabled)) {
+        // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
+        await nestedConfirmationCollector.collector.stop();
+        i.deferUpdate();
+        return await interaction.editReply({ components: [buttonRow]})
+        // return await i.deferUpdate({ components: [buttonRow] });
+    }
+
+    //?BOTH OF THESE METHODS ARE VIABLE, WHATS BETTER, IDK... //////////////
+    // let workOnAssignInfo = mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
+    // workOnAssignInfo.value = workOnAssignInfo.value.trim().replace('none', '');
+    // const splitUpSubmittedAssignments = workOnAssignInfo.value.split(`', '`);
+
+    const splitUpSubmittedAssignments = await GetWorkOnAssignment(page);
+
+    //? /////////////////////////////////////////////////////
+    
+    //basically check if added the max amount of assignments by getting the total and checking against limit
+    const AddAllButtonDisabled = workToAdd.reduce((total, work) => {
+        // if the name isn't in the submission already, then that is a new file so add it to the total
+        if(!splitUpSubmittedAssignments.includes(work.name)) {
+            total++;
+        }
+        return total
+    }, 0) + splitUpSubmittedAssignments.length > maxNumberOfFiles;
+
+    const workToChangeNames = AmountConfirmationInput(interaction, nestedConfirmationCollector, workToAdd.map(work => work.name), 'Choose a choice of work that you want to add, or all at once!', ButtonStyle.Primary, AddAllButtonDisabled)
+    
+    // await interaction.editReply({components: [addWorkOnlyRow]})
+    await i.deferUpdate({components: [addWorkOnlyRow]});
+    
+    if(deleting) {
+        for await (const submFile of await page.$$('div.fp-thumbnail')) {
+            const submFileName = await submFile.evaluate((node) => node.querySelector('img').title);
+            if(filesToRemoveNames.includes(submFileName)) {
+                //* for some reason when a thing is deleted, sometimes it stays on the page unfortunately
+                await submFile.click().catch();
+                await DeleteFileFromPage(page);
+
+                //remove it from chosen work, if it was on chosen work
+                const chosenWorkIndex = chosenWork.map(work => work.name).indexOf(submFileName);
+                //-1 if it doesn't exist
+                if(chosenWorkIndex != -1) {
+                    chosenWork.splice(chosenWorkIndex, 1)
+                }
+                // remove it from the submitted assignments thing (for display to user)
+                splitUpSubmittedAssignments.splice(splitUpSubmittedAssignments.indexOf(submFileName), 1)
+            }
+        }
+    }
+    else {
+        for (const work of userWork) {
+            if(!clearButton.data.disabled && workToChangeNames.includes(work.name)) {
+                const alreadySubmittedFile = await page.$(`div.fp-thumbnail img[title="${work.name}"]`)
+                
+                //* deleting the old file, cause they are uploading a new one
+                if(alreadySubmittedFile) {
+                    //await needed because this has to be done before the delete button is clicked
+                    await alreadySubmittedFile.click().then(async () => {
+                        //all the buttons are already loaded in the dom for some reason (before popup), so just click the delete, but waiting just in case
+                        await DeleteFileFromPage(page)
+                    }).catch();
+                }
+                await CreateTmpAndUpload(page, work)          
+    
+                //add to the work information thing
+                chosenWork.push(work)
+                splitUpSubmittedAssignments.push(work.name)
+            }
+        }
+
+        //now work has been added we can re-enabled the remove button if it was ever disabled
+        removeButton.setDisabled(false);
+    }
+
+    
+    // for (const attc of chosenWork) {
+    //     if(!workOnAssignInfo.value.includes(attc.name)) {
+    //         workOnAssignInfo.value += `${workOnAssignInfo.value.length > 0 ? ', ' : ''}${attc.name}`;
+    //     }
+    // }
+
+    mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ? `'${splitUpSubmittedAssignments.join(`', '`)}'` : 'none';
+
+    // doing greater than, just incase they added an extra one then they are supposed to!
+    // const addingWorkDisabled = workOnAssignInfo.value.split(', ').length >= maxNumberOfFiles;
+    const addingWorkDisabled = splitUpSubmittedAssignments.length >= maxNumberOfFiles;
+    addWorkButton.setDisabled(addingWorkDisabled);
+    //If shared work isn't already disabled change the disabled of this, 
+    //! dosen't work if removing files and re - enabling!!!
+    // if(!sharedWorkButton.data.disabled) sharedWorkButton.setDisabled(addingWorkDisabled);
+    if(!sharedWorkButton.data.fullyDisabled) sharedWorkButton.setDisabled(addingWorkDisabled);
+
+    await interaction.editReply({ embeds: [mainEmbed], components: [buttonRow]})
+}
+
+//todo max is probably like three for btnChoices, so maybe account for that later
 //returns array of the choices which are strings
-const AmountConfirmationInput = async (interaction, collector, btnChoices, message, btnStyle=ButtonStyle.Danger, allBtnDisabled=false, time=30000) => {
+const AmountConfirmationInput = async (interaction, nestedConfirmationCollector, btnChoices, message, btnStyle=ButtonStyle.Danger, allBtnDisabled=false, time=30000) => {
     return new Promise(async (resolve, reject) => {
         //create an embed instead
         const confirmationEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle('Confirmation')
         .setDescription(message)
 
@@ -1084,11 +1146,11 @@ const AmountConfirmationInput = async (interaction, collector, btnChoices, messa
         const reply = await interaction.followUp({content: ' ', embeds:[confirmationEmbed], components:[confirmationRow], fetchReply: true})
         
         const filter = i => i.user.id === interaction.user.id;
-        collector = await reply.createMessageComponentCollector({ filter, time });
+        nestedConfirmationCollector.collector = await reply.createMessageComponentCollector({ filter, time });
 
-        collector.on('collect', async (i) => {
-            await collector.stop();
-            await interaction.deferUpdate();
+        nestedConfirmationCollector.collector.on('collect', async (i) => {
+            await nestedConfirmationCollector.collector.stop();
+            await i.deferUpdate();
             if(i.customId == 'All') {
                 //resolve every choice, so just return the choices!
                 return resolve(btnChoices)
@@ -1102,7 +1164,7 @@ const AmountConfirmationInput = async (interaction, collector, btnChoices, messa
             // }
         })
         
-        collector.on('end', collected => {
+        nestedConfirmationCollector.collector.on('end', collected => {
             reply.delete();
             if(collected.size == 0) {
                 // submitting ? interaction.deleteReply() : interaction.editReply({components: []})
@@ -1148,4 +1210,8 @@ const CreateSubmitButtonsRow = (sharedWorkDisabled=false, addWorkDisabled=false,
             .setDisabled(disableAll)
             .setStyle(ButtonStyle.Success),
     )
+}
+
+const GetWorkOnAssignment = async (page) => {
+    return await page.evaluate(() => Array.from(document.querySelectorAll('div.fp-thumbnail img'), elem => elem.title));
 }

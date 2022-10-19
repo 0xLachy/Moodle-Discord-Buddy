@@ -8,6 +8,7 @@ require("dotenv").config()
 let autoSubmit = false;
 let showHints = true;
 
+// TODO fix term4, good way to get top level of each question inside form document.querySelectorAll('form div[id*="question"]')
 // TODO create your own quiz option, provides a link for images, + and - button for the options, they can click on it to make it true or false
 const data = new SlashCommandBuilder()
 	.setName('quiz')
@@ -65,8 +66,8 @@ module.exports = {
     ...data.toJSON(),
     run: async (client, interaction, config) => {
         await interaction.deferReply(/*{ephemeral: true}*/);
-        // const browser = await puppeteer.launch({ headless: false })
-        const browser = await puppeteer.launch();
+        const browser = await puppeteer.launch({ headless: false })
+        // const browser = await puppeteer.launch();
         const page = await browser.newPage();
         
         const quizConfig = config?.settings['quiz']
@@ -237,11 +238,14 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
         if(question.questionType == 'text')  {
             // question.answerData[0].label = question.answerData[0].value;
             if(question.answerData[0].correct === true){
-                textAnswerString = question.answerData[0].value.toLowerCase();
                 newQuiz.questions[question.questionName] = { correct: question.answerData[0].correctStrings }
             }
         }
-        {
+        else if(question.questionType == 'essay') {
+            // I'm not sure if I have to filter out all the correct ones like text but I don't see the point
+            newQuiz.questions[question.questionName] = { correct: question.answerData.map(a => a.correctStrings) }
+        }
+        else {
             const correct = question.answerData.filter(answer => answer.correct === true).map(answer => answer.label);
             // By default we don't want incorrect ones added if it is a radio button (no need -- unless we don't know the correct one yet)
             const incorrect = question.answerData.filter(answer => answer.correct === false && (correct.length == 0 || question.QuestionType === 'checkbox')).map(answer => answer.label)
@@ -314,12 +318,12 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
             for (const answerIndex in question.answerData) {
                 const answer = question.answerData[answerIndex];
                 //that way if it doesn't know or it is incorrect it won't show
-                if(question.questionType == 'text'){
+                if(question.questionType == 'text' || question.questionType == 'essay'){
                     questionAnswersString += answer.value
                     questionAnswersString += answer.correct === true ? ' ✓ ' : answer.correct === false ? ' X ' : ' ';
                 }
                 if(preSubmission) {
-                    if (question.questionType != 'text'){
+                    if (question.questionType != 'text' && question.questionType != 'essay'){
                         let answerWithSymbol = answer.correct === true ? `[${answer.label} ✓] ` : answer.correct === false ? `[${answer.label} X] ` : `[${answer.label}] `
                         // let correctsymbol = await CheckAnswer(quizTitle, updatedQuestions, questionIndex, answerIndex) ? '✓' : undefined
                         //then add in the correctsymbol next to the answer value if it isn't null
@@ -330,7 +334,7 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
                     if(question.questionType == 'text' && answer.reason) {
                         questionAnswersString += answer.reason.trim();
                     }
-                    else if (answer.value && question.questionType != 'text') {
+                    else if (answer.value && question.questionType != 'text' && question.questionType != 'essay') {
                         questionAnswersString += answer.correct === true ? `[ ${answer.label} ✓ ` : answer.correct === false ? `[ ${answer.label} X ` : `[ ${answer.label} `
                         questionAnswersString += answer.reason ? `${answer.reason.trim()}]` : '] '
                     }
@@ -383,7 +387,7 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
 }
 
 //back applies -1 to question Index, whilst next adds 1, simple
-const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  questionIndex) => {
+const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  questionIndex=0) => {
     return new Promise(async (resolve, reject) => {
         // await interaction.editReply({components: []})
         const questionData = scrapedQuestions[questionIndex]
@@ -397,14 +401,23 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         if(questionData.questionName.length > 256) {
             quizStartEmbed.addFields({ name: 'Quiz Title', value: questionData.questionName})
         }
-        let quizImgAttachment;
+        const quizImgAttachments = [];
         // do the image if the question has one
-        if (questionData.questionImg != undefined) {
-            const imgSrc = await page.goto(questionData.questionImg)
-            const imgBuffer = await imgSrc.buffer();
-            quizImgAttachment = new AttachmentBuilder(imgBuffer).setName(`questionImg.png`).setDescription('Img for the current question')
-            quizStartEmbed.setImage(`attachment://questionImg.png`);
-            await page.goBack()
+        if (questionData.questionImgs != undefined) {
+            for (const questionImgIndex in questionData.questionImgs) {
+                // 4 means 5 done which I think is the limit discord allows
+                if(i > 4) break;
+                if (Object.hasOwnProperty.call(questionData.questionImgs, questionImgIndex)) {
+                    const questionImg = questionData.questionImgs[questionImgIndex];
+                    const imgSrc = await page.goto(questionImg)
+                    const imgBuffer = await imgSrc.buffer();
+                    quizImgAttachments.push(new AttachmentBuilder(imgBuffer).setName(`questionImg${questionImgIndex}.png`).setDescription('Img for the current question'));
+                    if(questionImgIndex == 0) quizStartEmbed.setImage(`attachment://questionImg${questionImgIndex}.png`);
+                    await page.goBack()
+                }
+            }
+            // make the first image the main one, if there are others just add them to the message
+            quizStartEmbed.setImage(`attachment://questionImg0.png`);
         }
 
         const buttonMoveRow = await CreateMoveRow(questionIndex, 'Next', quiz?.daily);
@@ -438,8 +451,14 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 )
             }
 
-            reply = quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: []}) 
+            reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: []}) 
                 
+        }
+        else if(questionData.questionType == 'essay') {
+            quizStartEmbed.setDescription('Essay Response, click the buttons to cycle through each line, copy the selected line (Don\'t copy the【 SELECTED 】part), paste it back in but edit it so it\'s correct and enter')
+            // cycle through the fields, if it is the selected line, Display the selected part to the user
+            quizStartEmbed.addFields(questionData.answerData.map((line, index) => `${line}${index == questionIndex ? '【 SELECTED 】' : ''}`))
+            reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
         }
         else if(questionData.questionType == 'text'){
             // when referring to the correct answers use answers[0].value because this will be the text
@@ -448,8 +467,8 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
 
             quizStartEmbed.addFields({ name: 'Answer', value: answer})
 
-            if(lastI) await lastI.deferUpdate();
-            reply = quizImgAttachment != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: [quizImgAttachment]}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
+            // if(lastI) await lastI.deferUpdate();
+            reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
         }
         else {
             console.error('Invalid Question Type ' + questionData.questionType);
@@ -460,9 +479,10 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         //TODO maybe it can collect if you type in !save to the channel it will save, or other stuff!
         const msgCollector = await channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, time: 180 * 1000 });
         msgCollector.on('collect', m => {
-            if(questionData.questionType == 'text') {
-                questionData.answerData[0].value = m.content;
-                if(questionData.answerData[0].correctStrings.includes(m.content.toLowerCase())) m.content += ' ✓'
+            if(questionData.questionType == 'text' || questionData.questionType == 'essay') {
+                questionData.answerData[questionIndex].value = m.content;
+                // both text and essay use correctSTrings
+                if(questionData.answerData[0].correctStrings.includes(m.content.toLowerCase())) m.content += ' ✓';
                 quizStartEmbed.setFields({ name: 'Answer', value: m.content })
                 interaction.editReply({embeds: [quizStartEmbed]})
             }
@@ -519,6 +539,14 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                     quizStartEmbed.setFields({ name: 'Answer', value: AnswerEmbedString })
                     interaction.editReply({embeds: [quizStartEmbed]})
                 }
+                else if(questionData.questionType == 'essay') {
+                    // there can be more than one correct line
+                    const curCorrectAnswer = questionData.answerData[questionIndex]?.correct[0];
+                    questionData.answerData[questionIndex].value = curCorrectAnswer ?? questionData.answerData[questionIndex].value.replace('...', (Math.random() > 0.5).toString());
+                    
+                    quizStartEmbed.setFields({ name: 'Answer', value: `${questionData.answerData[questionIndex].value}${curCorrectAnswer != null ? ' ✓' : ''}` })
+                    interaction.editReply({embeds: [quizStartEmbed]})
+                }
                 else {
                     let checkedAnswer = true;
                     let correctAnswerIds = await questionData.answerData.filter(answer => answer.correct === true)?.map(answer => answer.answerNumber)
@@ -546,7 +574,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 console.log("Timed Out On Question")
                 return interaction.editReply({content: 'Timed out, answers not saved until you view the summary (overview)!', embeds: [], components: [], files: []})
             }
-            else if (questionData.questionType != 'text') {
+            else if (questionData.questionType != 'text' && questionData.questionType != 'essay') {
                 //update the question by button values accordingly
                 for (const buttonIndex in updatedButtons) {
 
@@ -797,80 +825,207 @@ const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
 const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, autoFillEverything=false) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
     
-    return await page.evaluate(async (scrapedQuestions, dbAnswers, autoFillEverything) => {
-        //get all the questions on the current page
-        const questionDivs = document.querySelectorAll('form div[id*="question"] div.content > div');
+    const questionDivs = await page.$$('form div[id*="question"] div.content > div')
+    console.log(questionDivs)
+    for (const questionDivContent of questionDivs) {
+        //qtext contains only the title of the question
+        const questionName = questionDivContent.$('div.qtext').textContent;
+        
         // if it has answers is can set them correct, otherwise they will be null
-        const hasAnswers = dbAnswers != {};
-        //loop through each question
-        for (const questionDivContent of questionDivs) {
-            //get the name, it has a nested p or many but this should work better!
-            const questionName = questionDivContent.querySelector('div.qtext').textContent;
-            
-            const currentdbAnswer = hasAnswers ? dbAnswers[questionName] : undefined
+        // I have to do this because it gives error if null
+        const currentdbAnswer = dbAnswers != {} ? dbAnswers[questionName] : undefined
 
-            //usually it's like Select One: or Choose Multiple: (that way the user knows what to do)
-            const questionPrompt = questionDivContent.querySelector('div.prompt')?.textContent;
+        //usually it's like Select One: or Choose Multiple: (that way the user knows what to do)
+        const questionPrompt = questionDivContent.$('div.prompt')?.textContent;
 
-            //check if it is undefined before using it :/, not all have
-            const questionImg = questionDivContent.querySelector('img')?.src;
+        //check if it is undefined before using it :/, not all have
+        const questionImgs = questionDivContent.$$eval('img', img => img?.src)
 
-            let textAnswer = questionDivContent.querySelector('span.answer input')
-            let answerData = []
-            let questionType = '';
-            if(textAnswer){
-                questionType = 'text'
-                answerData = [{
-                    answerNumber: 0,
+        const essayResponse = await questionDivContent.$('div.qtype_essay_response')
+        const textAnswer = await questionDivContent.$('span.answer input');
+        let answerData = []
+        let questionType = '';
+        if(essayResponse) {
+            //* frame doesn't event work for getting nested elems dumb...
+            const frame = await page.waitForSelector(`div#${await (await essayResponse.getProperty('id')).jsonValue()} iframe`)
+            // const frame = essayResponse.$('iframe')
+            // await frame.waitForSelector('body#tinymce p')
+            // console.log(frame.childFrames())
+            // console.log(frame.contentWindow)
+            // await frame.contentWindow.document.waitForSelector('body#tinymce p')
+            // await frame.waitForSelector('body#tinymce p')
+            //? don't know if they have other elements than just <p>!
+            questionType = 'essay'
+            // answerData = await page.evaluate((frame, currentdbAnswer) => {
+            //     await frame.contentWindow..contentWindow.document.querySelectorAll('body#Tinymce p')
+            // })
+            answerData = await frame.$$eval('body#tinymce p', (essayLines, currentdbAnswer) => essayLines.map((line, index) => {
+                return {
+                    answerNumber: index,
                     correct: null,
-                    correctStrings: currentdbAnswer?.correct || [], 
-                    label: questionDivContent.querySelector('label').textContent,
-                    type: 'text',
-                    value: questionDivContent.querySelector('span.answer input').value // "erganomic design"
-                    //returns 1 for some weird reason but oh well
-                }];
-            }
-            else {
-                answerData = Array.from(questionDivContent.querySelectorAll('div.answer div'), (answerDiv, answerNumber) => {
-                    const label = answerDiv.querySelector('label').childNodes[1]?.textContent || answerDiv.querySelector('label')?.textContent // only get the label and don't include the answer number
-                    const clickableButton = answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"] )')
-                    // the new answer will be correct if in correct strings, false if in false strings, or null not in any
-                    const newAnswerCorrect = currentdbAnswer?.correct.some(correctString => correctString == label) ? true : currentdbAnswer?.incorrect.some(incorrectString => incorrectString == label) ? false : null;
-                    
-                    return {
-                        //use array instead of answer number but it says A. and stuff with isn't even a number
-                        answerNumber: answerDiv.querySelector('span.answernumber')?.textContent || answerNumber.toString(),
-                        correct: newAnswerCorrect,
-                        label,
-                        type: clickableButton.type,
-                        value: clickableButton.checked // boolean
-                    };
-
-                });
-                //all the buttons should be the same type so only need the first to determine what type it is
-                questionType = answerData[0].type;
-            }
-
-
-            scrapedQuestions.push({
-                questionName: questionName,
-                questionType: questionType,
-                questionPrompt: questionPrompt,
-                questionImg: questionImg,
-                answerData: answerData
-            });
+                    correctStrings: currentdbAnswer?.correctStrings || [], 
+                    //* The label will be the value!!!
+                    // label: questionDivContent.querySelector('label')?.textContent,
+                    type: 'essay',
+                    //* if textcontent doesn't exist then I need to fix that error, not gonna shortcircuit on purpose
+                    value: line.textContent
+                }
+            }), currentdbAnswer)
+            console.log(answerData)
         }
+        // only text answer contains this
+        else if(textAnswer){
+            questionType = 'text'
+            answerData = [{
+                answerNumber: 0,
+                correct: null,
+                correctStrings: currentdbAnswer?.correct || [], 
+                label: questionDivContent.$('label').textContent,
+                type: 'text',
+                value: textAnswer.value // "erganomic design"
+            }];
+        }
+        else {
+            answerData = await questionDivContent.$$eval('div.answer div', (answerDivs, currentdbAnswer) => answerDivs.map((answerDiv, answerNumber) => {
+                const label = answerDiv.querySelector('label').childNodes[1]?.textContent || answerDiv.querySelector('label')?.textContent // only get the label and don't include the answer number
+                const clickableButton = answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"] )')
+                // the new answer will be correct if in correct strings, false if in false strings, or null not in any
+                const newAnswerCorrect = currentdbAnswer?.correct.some(correctString => correctString == label) ? true : currentdbAnswer?.incorrect.some(incorrectString => incorrectString == label) ? false : null;
+                
+                return {
+                    //use array instead of answer number but it says A. and stuff with isn't even a number
+                    answerNumber: answerDiv.querySelector('span.answernumber')?.textContent || answerNumber.toString(),
+                    correct: newAnswerCorrect,
+                    label,
+                    type: clickableButton.type,
+                    value: clickableButton.checked // boolean
+                };
+
+            }), currentdbAnswer);
+            //all the buttons should be the same type so only need the first to determine what type it is
+            questionType = answerData[0].type;
+        }
+
+
+        scrapedQuestions.push({
+            questionName,
+            questionType,
+            questionPrompt,
+            questionImgs,
+            answerData
+        });
+        
         if(autoFillEverything) {
             for (const questionIndex in scrapedQuestions) {
                 //for some reason editing the question in the for of loop doesn't update it inside the
                 // actual scraped questions, so using the index and assigning it should work
                 let question = scrapedQuestions[questionIndex]
                 question = await GuessOrFillSpecificQuestion(question)
+                // I feel like I could do
+                //scrapedQuestions[questionIndex] = await GuessOrFillSpecificQuestion(scrapedQuestions[questoinIndex]) but idk
                 scrapedQuestions[questionIndex] = question
             }
         }
-        return scrapedQuestions;
-    }, scrapedQuestions, dbAnswers, autoFillEverything);
+        return scrapedQuestions
+    }
+    // return await page.evaluate(async (scrapedQuestions, dbAnswers, autoFillEverything) => {
+    //     //get all the questions on the current page
+    //     const questionDivs = document.querySelectorAll('form div[id*="question"] div.content > div');
+    //     // if it has answers is can set them correct, otherwise they will be null
+    //     const hasAnswers = dbAnswers != {};
+
+    //     //loop through each question
+    // // Here you can use few identifying methods like url(),name(),title()
+    //     for (const questionDivContent of questionDivs) {
+    //         //get the name, it has a nested p or many but this should work better!
+    //         const questionName = questionDivContent.querySelector('div.qtext').textContent;
+            
+    //         const currentdbAnswer = hasAnswers ? dbAnswers[questionName] : undefined
+
+    //         //usually it's like Select One: or Choose Multiple: (that way the user knows what to do)
+    //         const questionPrompt = questionDivContent.querySelector('div.prompt')?.textContent;
+
+    //         //check if it is undefined before using it :/, not all have
+    //         const questionImgs = questionDivContent.querySelectorAll('img')?.src;
+
+    //         let textAnswer = questionDivContent.querySelector('span.answer input')
+    //         let essayResponse = questionDivContent.querySelector('div.qtype_essay_response')
+    //         let answerData = []
+    //         let questionType = '';
+    //         if(textAnswer){
+    //             questionType = 'text'
+    //             answerData = [{
+    //                 answerNumber: 0,
+    //                 correct: null,
+    //                 correctStrings: currentdbAnswer?.correct || [], 
+    //                 label: questionDivContent.querySelector('label').textContent,
+    //                 type: 'text',
+    //                 value: questionDivContent.querySelector('span.answer input').value // "erganomic design"
+    //                 //returns 1 for some weird reason but oh well
+    //             }];
+    //         }
+    //         else if(essayResponse) {
+    //             //TODO maybe the frame doesn't load? not sure why this doesn't work
+    //             //* frame doesn't event work for getting nested elems dumb...
+    //             // const frame = essayResponse.querySelector('iframe')
+    //             //TODO find out if they have other elements than just <p>!
+    //             questionType = 'essay'
+    //             answerData = Array.from(questionDivContent.querySelectorAll('body#tinymce p'), (essayLine, index) => {
+    //                 return {
+    //                     //not sure what this means
+    //                     answerNumber: index,
+    //                     //correct is the correct line
+    //                     correct: null,
+    //                     correctStrings: currentdbAnswer?.correct || [], 
+    //                     //* The label will be the value!!!
+    //                     // label: questionDivContent.querySelector('label')?.textContent,
+    //                     type: 'essay',
+    //                     //* if textcontent doesn't exist then I need to fix that error, not gonna shortcircuit on purpose
+    //                     value: essayLine.textContent
+    //                 }
+    //             })
+    //         }
+    //         else {
+    //             answerData = Array.from(questionDivContent.querySelectorAll('div.answer div'), (answerDiv, answerNumber) => {
+    //                 const label = answerDiv.querySelector('label').childNodes[1]?.textContent || answerDiv.querySelector('label')?.textContent // only get the label and don't include the answer number
+    //                 const clickableButton = answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"] )')
+    //                 // the new answer will be correct if in correct strings, false if in false strings, or null not in any
+    //                 const newAnswerCorrect = currentdbAnswer?.correct.some(correctString => correctString == label) ? true : currentdbAnswer?.incorrect.some(incorrectString => incorrectString == label) ? false : null;
+                    
+    //                 return {
+    //                     //use array instead of answer number but it says A. and stuff with isn't even a number
+    //                     answerNumber: answerDiv.querySelector('span.answernumber')?.textContent || answerNumber.toString(),
+    //                     correct: newAnswerCorrect,
+    //                     label,
+    //                     type: clickableButton.type,
+    //                     value: clickableButton.checked // boolean
+    //                 };
+
+    //             });
+    //             //all the buttons should be the same type so only need the first to determine what type it is
+    //             questionType = answerData[0].type;
+    //         }
+
+
+    //         scrapedQuestions.push({
+    //             questionName: questionName,
+    //             questionType: questionType,
+    //             questionPrompt: questionPrompt,
+    //             questionImgs: questionImgs,
+    //             answerData: answerData
+    //         });
+    //     }
+    //     if(autoFillEverything) {
+    //         for (const questionIndex in scrapedQuestions) {
+    //             //for some reason editing the question in the for of loop doesn't update it inside the
+    //             // actual scraped questions, so using the index and assigning it should work
+    //             let question = scrapedQuestions[questionIndex]
+    //             question = await GuessOrFillSpecificQuestion(question)
+    //             scrapedQuestions[questionIndex] = question
+    //         }
+    //     }
+    //     return scrapedQuestions;
+    // }, scrapedQuestions, dbAnswers, autoFillEverything);
 }
 
 const GoBackToStart = async (page) => {
@@ -937,6 +1092,14 @@ async function GuessOrFillSpecificQuestion(question) {
         }
         else { // set it to true if it was in the correct strings
             question.answerData[0].correct = true;
+        }
+    }
+    else if(question.questionType == 'essay') {
+        for (const line of question.answerData) {
+            const curCorrectAnswer = line.correctStrings[0]
+            // change it to the correct answer, or otherwise just guess
+            line.value = curCorrectAnswer ?? line.value.replace('...', (Math.random() > 0.5).toString().toUpperCase());
+            line.correct = curCorrectAnswer != null
         }
     }
     else {

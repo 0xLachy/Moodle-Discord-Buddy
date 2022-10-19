@@ -84,7 +84,7 @@ module.exports = {
 //     }
 // ]
         //normal, cause 3 seconds isn't fast enough
-        // await loginToMoodleReq(50); 
+        // return await loginToMoodleReq(interaction.options.getInteger('times'), interaction.options.getString('message'));
         await interaction.deferReply({ephemeral: config?.settings.messages.Ephemeral ?? false});
         // const browser = await puppeteer.launch({ headless: false }) //slowMo:100
         const browser = await puppeteer.launch();
@@ -304,7 +304,7 @@ const SendMessageToUser = async (interaction, page, config, recipientName, recip
     interaction.editReply({content: ' ', embeds: [messageSendEmbed], components: []})
 }
 
-const loginToMoodleReq = async (messageAmount) => {
+const loginToMoodleReq = async (messageAmount, messageText="<button>Superagent speed test</button>") => {
     let dataObj =  [{
         "index": 0,
         "methodname": "core_message_send_messages_to_conversation",
@@ -312,20 +312,25 @@ const loginToMoodleReq = async (messageAmount) => {
             "conversationid": 329,
             "messages": [
                 {
-                    "text": "<button>Superagent speed test</button>"
-                }
+                    "text": messageText
+                },
             ]
         }
     }];
 
+    for (let index = 0; index < 9; index++) {
+        dataObj[0].args.messages.push({"text": messageText})
+        
+    }
     let loginurl = "https://login.lism.catholic.edu.au/idp/profile/cas/login?execution=e1s1"
     let msgSendUrlFix = 'https://moodle.oeclism.catholic.edu.au/lib/ajax/service.php'
 
-    let loginObj = {'j_username': process.env.LISMNAME, 'j_password': process.env.PASSWORD, '_eventId_proceed': 'Login'}
+    let loginObj = {'j_username': process.env.MOODLENAME, 'j_password': process.env.PASSWORD, '_eventId_proceed': 'Login'}
 
     let moodlhting = await superagent.get('https://moodle.oeclism.catholic.edu.au/course/view.php?id=898')
 
     let dashboard = await superagent.post(loginurl).send(loginObj).type('form').accept('json')
+    console.log(dashboard)
 
     let sesskey = dashboard.text.split('sesskey":', 2)[1].split('"')[1]
 
