@@ -170,7 +170,7 @@ const DoQuiz = async (page, interaction, chosenQuiz, dataBaseAnswers, autoFillEv
         autoFillEverything = false;
     }
 
-    let scrapedQuestions = await GetQuizQuestions(page, chosenQuiz.url, dataBaseAnswers, autoFillEverything)
+    const scrapedQuestions = await GetQuizQuestions(page, chosenQuiz.url, dataBaseAnswers, autoFillEverything)
 
     if(scrapedQuestions == null) {
         await interaction.editReply({ content: `You have no more attempts left at ${chosenQuiz.name}`, embeds: [], components: []})
@@ -179,7 +179,7 @@ const DoQuiz = async (page, interaction, chosenQuiz, dataBaseAnswers, autoFillEv
     }
 
     //* returning what was const correctedAnswers
-    return autoFillEverything ? await DisplayQuizSummary(interaction, page, chosenQuiz, scrapedQuestions, true): await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz, 0)
+    return autoFillEverything ? await DisplayQuizSummary(interaction, page, chosenQuiz, scrapedQuestions, true) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz, 0)
 }
 const AutoFillAnswers = async (interaction, page, quiz, scrapedQuestions, lastI) => {
     // update all the questions, will do this all at once, so wait for that to finish
@@ -386,8 +386,10 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
     }
 }
 
+//! if imgLine then skip ahead to next or back one
 //back applies -1 to question Index, whilst next adds 1, simple
-const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  questionIndex=0) => {
+const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  questionIndex=0, essayIndex=0) => {
+    //TODO when moving into the next question embed, check before moving if that will contain an img line and if so move to the next (in while loop probs)
     return new Promise(async (resolve, reject) => {
         // await interaction.editReply({components: []})
         const questionData = scrapedQuestions[questionIndex]
@@ -456,9 +458,43 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         }
         else if(questionData.questionType == 'essay') {
             quizStartEmbed.setDescription('Essay Response, click the buttons to cycle through each line, copy the selected line (Don\'t copy the【 SELECTED 】part), paste it back in but edit it so it\'s correct and enter')
+            if(questionData?.questionImgs?.length > 0) {
+                quizStartEmbed.addFields({ name: `Image Links (because discord only allows one image in embed (+ 4 outside))`, value: questionData.questionImgs.join(' , ')})
+            }
+            const essayResonseEmbeds = [ quizStartEmbed ]
+            for (const line of questionData.answerData) {
+                // using javascript boolean 1 0 thing to push
+                const embedIndex = Math.floor(line.answerNumber / (24 + (line.answerNumber > 24)))
+                if(essayResonseEmbeds.length == embedIndex) {
+                    // .setTitle(questionData.questionName.length <= 256 ? questionData.questionName : `Question ${questionIndex}`)
+                    //? does it need a title?
+                    essayResonseEmbeds.push(new EmbedBuilder().setColor(primaryColour))
+                }
+
+                if(line.imgLine && line.value.length > 1024) {
+                    essayResonseEmbeds[embedIndex].addFields({ name: `Line ${line.answerNumber}${line.answerNumber == essayIndex ? '【 SELECTED 】' : ''}`, value: 'img url too long for discord'})
+                }
+                else {
+                    essayResonseEmbeds[embedIndex].addFields({ name: `Line ${line.answerNumber}${line.answerNumber == essayIndex ? '【 SELECTED 】' : ''}`, value: line.value})
+                }
+            }
+            // so the user can cycle through the lines
+            // using line++ -- because idk it's funny
+            buttonAnswerRow.addComponents(
+                new ButtonBuilder()
+                .setCustomId('Line--')
+                .setLabel('Back Line')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(essayIndex == 0),
+                new ButtonBuilder()
+                .setCustomId('Line++')
+                .setLabel('Next Line')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(essayIndex == questionData.answerData.length - 1),
+            )
+
             // cycle through the fields, if it is the selected line, Display the selected part to the user
-            quizStartEmbed.addFields(questionData.answerData.map((line, index) => `${line}${index == questionIndex ? '【 SELECTED 】' : ''}`))
-            reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
+            reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: essayResonseEmbeds, components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
         }
         else if(questionData.questionType == 'text'){
             // when referring to the correct answers use answers[0].value because this will be the text
@@ -480,11 +516,17 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         const msgCollector = await channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, time: 180 * 1000 });
         msgCollector.on('collect', m => {
             if(questionData.questionType == 'text' || questionData.questionType == 'essay') {
-                questionData.answerData[questionIndex].value = m.content;
-                // both text and essay use correctSTrings
-                if(questionData.answerData[0].correctStrings.includes(m.content.toLowerCase())) m.content += ' ✓';
-                quizStartEmbed.setFields({ name: 'Answer', value: m.content })
-                interaction.editReply({embeds: [quizStartEmbed]})
+                const editingIndex = questionData.questionType == 'essay' ? essayIndex : questionIndex;
+                if(questionData.answerdata[editingIndex]?.imgLine) {
+                    UtilFunctions.TemporaryResponse(interaction, `Can't edit this line because it is just an image, click next or back!!!`)
+                }
+                else {
+                    questionData.answerData[editingIndex].value = m.content;
+                    // both text and essay use correctSTrings
+                    if(questionData.answerData[0].correctStrings.includes(m.content.toLowerCase())) m.content += ' ✓';
+                    quizStartEmbed.setFields({ name: 'Answer', value: m.content })
+                    interaction.editReply({embeds: [quizStartEmbed]})
+                }
             }
         });
         const filter = i => i.user.id === interaction.user.id;
@@ -510,6 +552,19 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 await msgCollector.stop();
                 await i.deferUpdate();
                 return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex - 1));
+            }
+            // there has got to be a better way of doing this
+            else if (i.customId == 'Line++') {
+                await collector.stop();
+                await msgCollector.stop();
+                await i.deferUpdate();
+                return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex, essayIndex + 1));
+            }
+            else if (i.customId == 'Line--') {
+                await collector.stop();
+                await msgCollector.stop();
+                await i.deferUpdate();
+                return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex, essayIndex - 1));
             }
             else if (i.customId == 'Quit') {
                 await collector.stop();
@@ -770,6 +825,7 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
 //This one is checking whether or not our answers were correct or not
 const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
+    //TODO update for essay response
     //I think they just need page
     return await page.evaluate((updatedQuizResponses) => {
         let questionDivs = document.querySelectorAll('form div[id*="question"] div.content');
@@ -828,32 +884,35 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
     const questionDivs = await page.$$('form div[id*="question"] div.content > div')
     for (const questionDivContent of questionDivs) {
         //qtext contains only the title of the question
-        const questionName = await questionDivContent.$('div.qtext').textContent;
+        const questionName = await questionDivContent.$eval('div.qtext', e => e.textContent);
         
         // if it has answers is can set them correct, otherwise they will be null
         // I have to do this because it gives error if null
         const currentdbAnswer = dbAnswers != {} ? dbAnswers[questionName] : undefined
 
         //usually it's like Select One: or Choose Multiple: (that way the user knows what to do)
-        const questionPrompt = await questionDivContent.$('div.prompt')?.textContent;
+        const questionPrompt = await(await questionDivContent.$('div.prompt'))?.evaluate(node => node.textContent);
 
         //check if it is undefined before using it :/, not all have
-        const questionImgs = await questionDivContent.$$eval('img', img => img?.src)
+        let questionImgs = await questionDivContent.$$eval('img', img => img?.src)
 
         const essayResponse = await questionDivContent.$('div.qtype_essay_response')
         const textAnswer = await questionDivContent.$('span.answer input');
         let answerData = []
         let questionType = '';
         if(essayResponse) {
+            await page.waitForSelector('div.qtype_essay_response iframe')
             //* get the element handle, and then get the actual frame document
-            const frameHandle = await page.waitForSelector(`div#${await (await essayResponse.getProperty('id')).jsonValue()} iframe`)
+            const frameHandle = await essayResponse.evaluateHandle(node => node.querySelector('iframe'))
             const frame = await frameHandle.contentFrame();
             //TODO fix this waitforselector
             // await frame.waitForSelector('body#tinymce p')
             // await frame.contentWindow.document.waitForSelector('body#tinymce p')
             //? don't know if they have other elements than just <p>!
             questionType = 'essay'
-            answerData = await frame.$$eval('body#tinymce p', (essayLines, currentdbAnswer) => essayLines.map((line, index) => {
+            //*This imgLinks stuff needs a lot of testing
+            answerData = await frame.$$eval('body#tinymce p', (essayLines, currentdbAnswer, questionImgs) => essayLines.map((line, index) => {
+                const imageLinks = Array.from(line.querySelectorAll('img'), img => img.src).join(' , ');
                 return {
                     answerNumber: index,
                     correct: null,
@@ -862,10 +921,13 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
                     // label: questionDivContent.querySelector('label')?.textContent,
                     type: 'essay',
                     //* if textcontent doesn't exist then I need to fix that error, not gonna shortcircuit on purpose
-                    value: line.textContent
+                    value: line.textContent || imageLinks,
+                    imgLine: imageLinks.length > 0
                 }
             }), currentdbAnswer)
-            console.log(answerData)
+            if(answerData?.imgLine) {
+                questionImgs.concat(answerData.value.split(' , '))
+            }
         }
         // only text answer contains this
         else if(textAnswer){
@@ -921,6 +983,7 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             scrapedQuestions[questionIndex] = question
         }
     }
+    console.log(scrapedQuestions)
     return scrapedQuestions
     // return await page.evaluate(async (scrapedQuestions, dbAnswers, autoFillEverything) => {
     //     //get all the questions on the current page
@@ -1023,36 +1086,33 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
 }
 
 const GoBackToStart = async (page) => {
-    backButtonWasClicked = await page.evaluate(() => {
-        let backButton = document.querySelector('form div.submitbtns > input[name="previous"]');
-        if (backButton != undefined) {
-            backButton.click();
-            return true;
-        }
-        else {
-            return false;
-        }
-    })
-    if(backButtonWasClicked) {
-        await page.waitForNavigation();
-        //recursion, keep going back until the start
-        await GoBackToStart(page);
+    const backButton = await page.$('form div.submitbtns > input[name="previous"]');
+    if(backButton) {
+        await Promise.all([backButton.click(), page.waitForNavigation()])
+        await GoBackToStart(page)
     }
+
+    // backButtonWasClicked = await page.evaluate(() => {
+    //     let backButton = document.querySelector('form div.submitbtns > input[name="previous"]');
+    //     if (backButton != undefined) {
+    //         backButton.click();
+    //         return true;
+    //     }
+    //     else {
+    //         return false;
+    //     }
+    // })
+    // if(backButtonWasClicked) {
+    //     await page.waitForNavigation();
+    //     //recursion, keep going back until the start
+    //     await GoBackToStart(page);
+    // }
 
 }
 const GoToNextPageScrape = async (page, scrapedQuestions, updateDivs, dbAnswers={}, autoFillEverything=false) => {
     //*FINISH IS ALSO A NEXT BUTTON
-    nextButtonExists = await page.evaluate(() => {
-        let nextButton = document.querySelector('form div.submitbtns > input[name="next"]');
-        if (nextButton != null) {
-            // don't click the next button in here, because we need to scrape first!
-            return true;
-        }
-        else {
-            return false;
-        }
-    });
-    if(nextButtonExists) {
+    const nextButton = await page.$('form div.submitbtns > input[name="next"]')
+    if(nextButton) {
         //if we aren't updating the divs, just get the questions, if we aren't updating the divs, the dbAnswers will be passed usually
         if(!updateDivs || dbAnswers) {
             // if we are autofilling it will set the values of answers inside the question object, but won't directly update the buttons
@@ -1065,14 +1125,13 @@ const GoToNextPageScrape = async (page, scrapedQuestions, updateDivs, dbAnswers=
         //wait for the page to load and click the next button at the same time
         await Promise.all([
             page.waitForNavigation(),
-            page.evaluate(() => document.querySelector('form div.submitbtns > input[name="next"]').click()),
+            nextButton.click()
         ])
         //it needs to wait for navigation otherwise the click is undefined
         return await GoToNextPageScrape(page, scrapedQuestions, updateDivs, dbAnswers, autoFillEverything)
     }
     else {
-        //otherwise just return the scraped questions
-        return scrapedQuestions;
+        return scrapedQuestions
     }
 }
 
