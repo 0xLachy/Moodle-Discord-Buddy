@@ -207,8 +207,8 @@ const GetCorrectAnswersFromResultsPage = async (page, updatedQuestions) => {
 
 const UpdateQuizzesWithInputValues = async (page, updatedQuestions) => {
     await Promise.all([
-        page.evaluate(() => document.querySelector('button[type="submit"]').click()),
-        page.waitForNavigation()
+        page.waitForNavigation(),
+        page.evaluate(() => document.querySelector('button[type="submit"]').click())
     ])
     await GoBackToStart(page);
     await GoToNextPageScrape(page, updatedQuestions, true)
@@ -408,15 +408,13 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         if (questionData.questionImgs != undefined) {
             for (const questionImgIndex in questionData.questionImgs) {
                 // 4 means 5 done which I think is the limit discord allows
-                if(i > 4) break;
-                if (Object.hasOwnProperty.call(questionData.questionImgs, questionImgIndex)) {
-                    const questionImg = questionData.questionImgs[questionImgIndex];
-                    const imgSrc = await page.goto(questionImg)
-                    const imgBuffer = await imgSrc.buffer();
-                    quizImgAttachments.push(new AttachmentBuilder(imgBuffer).setName(`questionImg${questionImgIndex}.png`).setDescription('Img for the current question'));
-                    if(questionImgIndex == 0) quizStartEmbed.setImage(`attachment://questionImg${questionImgIndex}.png`);
-                    await page.goBack()
-                }
+                if(questionImgIndex > 4) break;
+                const questionImg = questionData.questionImgs[questionImgIndex];
+                const imgSrc = await page.goto(questionImg)
+                const imgBuffer = await imgSrc.buffer();
+                quizImgAttachments.push(new AttachmentBuilder(imgBuffer).setName(`questionImg${questionImgIndex}.png`).setDescription('Img for the current question'));
+                if(questionImgIndex == 0) quizStartEmbed.setImage(`attachment://questionImg${questionImgIndex}.png`);
+                await page.goBack()
             }
             // make the first image the main one, if there are others just add them to the message
             quizStartEmbed.setImage(`attachment://questionImg0.png`);
@@ -458,13 +456,15 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         }
         else if(questionData.questionType == 'essay') {
             quizStartEmbed.setDescription('Essay Response, click the buttons to cycle through each line, copy the selected line (Don\'t copy the【 SELECTED 】part), paste it back in but edit it so it\'s correct and enter')
-            if(questionData?.questionImgs?.length > 0) {
-                quizStartEmbed.addFields({ name: `Image Links (because discord only allows one image in embed (+ 4 outside))`, value: questionData.questionImgs.join(' , ')})
+            if(questionData?.questionImgs?.length > 5) {
+                //? probably should fix this because it deffo doesn't work at all! links url way too long (over 1024 characters each!)
+                // quizStartEmbed.addFields({ name: `Image Links (because discord only allows one image in embed (+ 4 outside))`, value: questionData.questionImgs.join(' , ')})
+                quizStartEmbed.addFields({ name: `Not all images could be displayed`, value: `(${questionData.questionImgs.length - 5} weren't shown)`})
             }
             const essayResonseEmbeds = [ quizStartEmbed ]
             for (const line of questionData.answerData) {
                 // using javascript boolean 1 0 thing to push
-                const embedIndex = Math.floor(line.answerNumber / (24 + (line.answerNumber > 24)))
+                const embedIndex = Math.floor(line.answerNumber / (23 + (line.answerNumber > 23)))
                 if(essayResonseEmbeds.length == embedIndex) {
                     // .setTitle(questionData.questionName.length <= 256 ? questionData.questionName : `Question ${questionIndex}`)
                     //? does it need a title?
@@ -658,10 +658,10 @@ const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFill
     if(quizDisabled) return null;
     
     await Promise.all([
+        page.waitForNavigation(),
         page.evaluate(() => document.querySelector('button[type="submit"]').click()),
         //on end querySelectorAll[1] because the second one is the actual full sumbit, that first one is like a retry button
         //but first I have to go back and click
-        page.waitForNavigation()
     ])
 
     await GoBackToStart(page);
@@ -894,7 +894,8 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
         const questionPrompt = await(await questionDivContent.$('div.prompt'))?.evaluate(node => node.textContent);
 
         //check if it is undefined before using it :/, not all have
-        let questionImgs = await questionDivContent.$$eval('img', img => img?.src)
+        let questionImgs = await questionDivContent.$$eval('img', imgs => imgs.filter(img => !img.classList.contains('mceIcon') && img?.src).map(img => img.src));
+        // console.log(await questionDivContent.evaluate(node => node.querySelector('img')?.src))
 
         const essayResponse = await questionDivContent.$('div.qtype_essay_response')
         const textAnswer = await questionDivContent.$('span.answer input');
@@ -911,7 +912,7 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             //? don't know if they have other elements than just <p>!
             questionType = 'essay'
             //*This imgLinks stuff needs a lot of testing
-            answerData = await frame.$$eval('body#tinymce p', (essayLines, currentdbAnswer, questionImgs) => essayLines.map((line, index) => {
+            answerData = await frame.$$eval('body#tinymce p', (essayLines, currentdbAnswer) => essayLines.map((line, index) => {
                 const imageLinks = Array.from(line.querySelectorAll('img'), img => img.src).join(' , ');
                 return {
                     answerNumber: index,
@@ -921,12 +922,17 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
                     // label: questionDivContent.querySelector('label')?.textContent,
                     type: 'essay',
                     //* if textcontent doesn't exist then I need to fix that error, not gonna shortcircuit on purpose
-                    value: line.textContent || imageLinks,
+                    value: imageLinks || line.textContent,
                     imgLine: imageLinks.length > 0
                 }
             }), currentdbAnswer)
-            if(answerData?.imgLine) {
-                questionImgs.concat(answerData.value.split(' , '))
+            // add the imgs to the main stuff
+            for (const line of answerData) {
+                if(line?.imgLine) {
+                    // if(questionImgs == undefined) questionImgs = [];
+                    //forgot to do the equals and I had been confused on why this hadn't worked for so long... f
+                    questionImgs = questionImgs.concat(line.value.split(' , '))
+                }
             }
         }
         // only text answer contains this
@@ -983,113 +989,24 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             scrapedQuestions[questionIndex] = question
         }
     }
-    console.log(scrapedQuestions)
     return scrapedQuestions
-    // return await page.evaluate(async (scrapedQuestions, dbAnswers, autoFillEverything) => {
-    //     //get all the questions on the current page
-    //     const questionDivs = document.querySelectorAll('form div[id*="question"] div.content > div');
-    //     // if it has answers is can set them correct, otherwise they will be null
-    //     const hasAnswers = dbAnswers != {};
-
-    //     //loop through each question
-    // // Here you can use few identifying methods like url(),name(),title()
-    //     for (const questionDivContent of questionDivs) {
-    //         //get the name, it has a nested p or many but this should work better!
-    //         const questionName = questionDivContent.querySelector('div.qtext').textContent;
-            
-    //         const currentdbAnswer = hasAnswers ? dbAnswers[questionName] : undefined
-
-    //         //usually it's like Select One: or Choose Multiple: (that way the user knows what to do)
-    //         const questionPrompt = questionDivContent.querySelector('div.prompt')?.textContent;
-
-    //         //check if it is undefined before using it :/, not all have
-    //         const questionImgs = questionDivContent.querySelectorAll('img')?.src;
-
-    //         let textAnswer = questionDivContent.querySelector('span.answer input')
-    //         let essayResponse = questionDivContent.querySelector('div.qtype_essay_response')
-    //         let answerData = []
-    //         let questionType = '';
-    //         if(textAnswer){
-    //             questionType = 'text'
-    //             answerData = [{
-    //                 answerNumber: 0,
-    //                 correct: null,
-    //                 correctStrings: currentdbAnswer?.correct || [], 
-    //                 label: questionDivContent.querySelector('label').textContent,
-    //                 type: 'text',
-    //                 value: questionDivContent.querySelector('span.answer input').value // "erganomic design"
-    //                 //returns 1 for some weird reason but oh well
-    //             }];
-    //         }
-    //         else if(essayResponse) {
-    //             //TODO maybe the frame doesn't load? not sure why this doesn't work
-    //             //* frame doesn't event work for getting nested elems dumb...
-    //             // const frame = essayResponse.querySelector('iframe')
-    //             //TODO find out if they have other elements than just <p>!
-    //             questionType = 'essay'
-    //             answerData = Array.from(questionDivContent.querySelectorAll('body#tinymce p'), (essayLine, index) => {
-    //                 return {
-    //                     //not sure what this means
-    //                     answerNumber: index,
-    //                     //correct is the correct line
-    //                     correct: null,
-    //                     correctStrings: currentdbAnswer?.correct || [], 
-    //                     //* The label will be the value!!!
-    //                     // label: questionDivContent.querySelector('label')?.textContent,
-    //                     type: 'essay',
-    //                     //* if textcontent doesn't exist then I need to fix that error, not gonna shortcircuit on purpose
-    //                     value: essayLine.textContent
-    //                 }
-    //             })
-    //         }
-    //         else {
-    //             answerData = Array.from(questionDivContent.querySelectorAll('div.answer div'), (answerDiv, answerNumber) => {
-    //                 const label = answerDiv.querySelector('label').childNodes[1]?.textContent || answerDiv.querySelector('label')?.textContent // only get the label and don't include the answer number
-    //                 const clickableButton = answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"] )')
-    //                 // the new answer will be correct if in correct strings, false if in false strings, or null not in any
-    //                 const newAnswerCorrect = currentdbAnswer?.correct.some(correctString => correctString == label) ? true : currentdbAnswer?.incorrect.some(incorrectString => incorrectString == label) ? false : null;
-                    
-    //                 return {
-    //                     //use array instead of answer number but it says A. and stuff with isn't even a number
-    //                     answerNumber: answerDiv.querySelector('span.answernumber')?.textContent || answerNumber.toString(),
-    //                     correct: newAnswerCorrect,
-    //                     label,
-    //                     type: clickableButton.type,
-    //                     value: clickableButton.checked // boolean
-    //                 };
-
-    //             });
-    //             //all the buttons should be the same type so only need the first to determine what type it is
-    //             questionType = answerData[0].type;
-    //         }
-
-
-    //         scrapedQuestions.push({
-    //             questionName: questionName,
-    //             questionType: questionType,
-    //             questionPrompt: questionPrompt,
-    //             questionImgs: questionImgs,
-    //             answerData: answerData
-    //         });
-    //     }
-    //     if(autoFillEverything) {
-    //         for (const questionIndex in scrapedQuestions) {
-    //             //for some reason editing the question in the for of loop doesn't update it inside the
-    //             // actual scraped questions, so using the index and assigning it should work
-    //             let question = scrapedQuestions[questionIndex]
-    //             question = await GuessOrFillSpecificQuestion(question)
-    //             scrapedQuestions[questionIndex] = question
-    //         }
-    //     }
-    //     return scrapedQuestions;
-    // }, scrapedQuestions, dbAnswers, autoFillEverything);
 }
 
 const GoBackToStart = async (page) => {
     const backButton = await page.$('form div.submitbtns > input[name="previous"]');
     if(backButton) {
-        await Promise.all([backButton.click(), page.waitForNavigation()])
-        await GoBackToStart(page)
+        // await backButton.click() 
+        await Promise.all([
+            page.waitForNavigation(),
+            backButton.click()
+        ])
+        // await Promise.all([
+        //     page.waitForNavigation(),
+        //     GoBackToStart(page)
+        // ])
+        // await page.waitForNavigation();
+        //recursion, keep going back until the start
+        await GoBackToStart(page);
     }
 
     // backButtonWasClicked = await page.evaluate(() => {
