@@ -695,6 +695,28 @@ const GetSelectMenuNextButtons = (page, optionLength) => {
     return buttonActionRow;
 }
 
+const splitIntoCharSections = async (inpStr, amount=1024) => {
+    const splitStringsNewLines = inpStr.match(/.{1,1024}(\s|$)/g);
+
+    let tempStr = '';
+    const chunks = [];
+    for (const stringChunk of splitStringsNewLines) {
+        if(tempStr.length < (amount - stringChunk.length)) {
+            tempStr += assignChunk
+        }
+        else {
+            chunks.push(tempStr)
+            tempStr = '';
+        }
+    }
+    // last string might not be added in loop so do that
+    if(tempStr != '') {
+        chunks.push(tempStr)
+    }
+
+    return chunks;
+}
+
 module.exports = {
     getFiles,
     LoginToMoodle,
@@ -708,6 +730,7 @@ module.exports = {
     TemporaryResponse,
     SendConfirmationMessage,
     GetSelectMenuOverflowActionRows,
+    splitIntoCharSections,
     loginGroups,
     mainStaticUrl,
 }
