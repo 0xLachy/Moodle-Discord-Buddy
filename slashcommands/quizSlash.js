@@ -598,11 +598,16 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 }
                 else if(questionData.questionType == 'essay') {
                     // there can be more than one correct line
-                    const curCorrectAnswer = questionData.answerData[questionIndex]?.correct[0];
-                    questionData.answerData[questionIndex].value = curCorrectAnswer ?? questionData.answerData[questionIndex].value.replace('...', (Math.random() > 0.5).toString());
+                    const curCorrectAnswer = questionData.answerData[essayIndex]?.correctStrings[0];
+                    questionData.answerData[essayIndex].value = curCorrectAnswer ?? questionData.answerData[essayIndex].value.replace('...', (Math.random() > 0.5).toString());
                     
-                    quizStartEmbed.setFields({ name: 'Answer', value: `${questionData.answerData[questionIndex].value}${curCorrectAnswer != null ? ' ✓' : ''}` })
-                    interaction.editReply({embeds: [quizStartEmbed]})
+                    //this won't work for the set fields :/
+                    // quizStartEmbed.setFields({ name: 'Answer', value: `${questionData.answerData[essayIndex].value}${curCorrectAnswer != null ? ' ✓' : ''}` })
+                    // interaction.editReply({embeds: [quizStartEmbed]})
+                    await collector.stop();
+                    await msgCollector.stop();
+                    await i.deferUpdate();
+                    return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex, essayIndex));
                 }
                 else {
                     let checkedAnswer = true;
@@ -1070,15 +1075,20 @@ async function GuessOrFillSpecificQuestion(question) {
         }
     }
     else if(question.questionType == 'essay') {
-        const curCorrectAnswer = question.answerData.correctStrings.length > 0 && question.answerData.correctStrings[0];
-        if(curCorrectAnswer) {
-            question.answerData.value = curCorrectAnswer
-            question.answerData.correct = true;
-        }
-        else {
-            //you can't really replace random stuff idk
-            const replaceString = question.answerData.value.contains('...') ? '...' : (Math.random() > 0.5).toString().toUpperCase();
-            question.answerData.value = question.answerData.value.replace(replaceString, (Math.random() > 0.5).toString().toUpperCase());
+        for (const section of question.answerData) {
+            const curCorrectAnswer = section.correctStrings.length > 0 && section.correctStrings[0];
+
+            if(curCorrectAnswer) {
+                section.value = curCorrectAnswer;
+                section.correct = true;
+            }
+            else {
+                //you can't really replace random stuff idk
+                const replaceString = section.value.contains('...') ? '...' : (Math.random() > 0.5).toString().toUpperCase();
+                section.value = section.value.replace(replaceString, (Math.random() > 0.5).toString().toUpperCase());
+                //just in case it was set to true or whatever idk
+                section.correct = null;
+            }
         }
     }
     else {
