@@ -10,6 +10,7 @@ let showHints = true;
 
 // TODO fix term4, good way to get top level of each question inside form document.querySelectorAll('form div[id*="question"]')
 // TODO create your own quiz option, provides a link for images, + and - button for the options, they can click on it to make it true or false
+// TODO for essay full display for the question input, divide it up into 500 or 600 character sections so there is enough room to edit responses
 const data = new SlashCommandBuilder()
 	.setName('quiz')
 	.setDescription('Slash command to handle moodle users, to get their profile data')
@@ -243,7 +244,7 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
         }
         else if(question.questionType == 'essay') {
             // I'm not sure if I have to filter out all the correct ones like text but I don't see the point
-            newQuiz.questions[question.questionName] = { correct: question.answerData.map(a => a.correctStrings) }
+            newQuiz.questions[question.questionName] = { correct: question.answerData.correctStrings }
         }
         else {
             const correct = question.answerData.filter(answer => answer.correct === true).map(answer => answer.label);
@@ -319,7 +320,9 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
                 const answer = question.answerData[answerIndex];
                 //that way if it doesn't know or it is incorrect it won't show
                 if(question.questionType == 'text' || question.questionType == 'essay'){
-                    questionAnswersString += answer.value
+                    if(question.questionType == 'text') {
+                        questionAnswersString += answer.value
+                    }
                     questionAnswersString += answer.correct === true ? ' ✓ ' : answer.correct === false ? ' X ' : ' ';
                 }
                 if(preSubmission) {
@@ -331,6 +334,7 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
                     }
                 }
                 else {
+                    //TODO add essay reason to this response, but code it for responses that are larger than 1024 lines (so to have part 2's and shii)
                     if(question.questionType == 'text' && answer.reason) {
                         questionAnswersString += answer.reason.trim();
                     }
@@ -409,9 +413,10 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
             for (const questionImgIndex in questionData.questionImgs) {
                 // 4 means 5 done which I think is the limit discord allows
                 if(questionImgIndex > 4) break;
-                const questionImg = questionData.questionImgs[questionImgIndex];
-                const imgSrc = await page.goto(questionImg)
-                const imgBuffer = await imgSrc.buffer();
+                // const questionImg = questionData.questionImgs[questionImgIndex];
+                // const imgSrc = await page.goto(questionImg)
+                // const imgBuffer = await imgSrc.buffer();
+                const imgBuffer = questionData.questionImgs[questionImgIndex];
                 quizImgAttachments.push(new AttachmentBuilder(imgBuffer).setName(`questionImg${questionImgIndex}.png`).setDescription('Img for the current question'));
                 if(questionImgIndex == 0) quizStartEmbed.setImage(`attachment://questionImg${questionImgIndex}.png`);
                 await page.goBack()
@@ -455,46 +460,48 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 
         }
         else if(questionData.questionType == 'essay') {
-            quizStartEmbed.setDescription('Essay Response, click the buttons to cycle through each line, copy the selected line (Don\'t copy the【 SELECTED 】part), paste it back in but edit it so it\'s correct and enter')
+            quizStartEmbed.setDescription('Essay Response, click the buttons to cycle through each line, copy the selected line (Don\'t copy the【 SELECTED 】part), paste it back in but edit it so it\'s correct and enter. **First Image is probably nested inside the embed but not part of the inside questions so don\'t get confused')
             if(questionData?.questionImgs?.length > 5) {
                 //? probably should fix this because it deffo doesn't work at all! links url way too long (over 1024 characters each!)
                 // quizStartEmbed.addFields({ name: `Image Links (because discord only allows one image in embed (+ 4 outside))`, value: questionData.questionImgs.join(' , ')})
                 quizStartEmbed.addFields({ name: `Not all images could be displayed`, value: `(${questionData.questionImgs.length - 5} weren't shown)`})
             }
             const essayResonseEmbeds = [ quizStartEmbed ]
-            for (const line of questionData.answerData) {
-                // using javascript boolean 1 0 thing to push
-                const embedIndex = Math.floor(line.answerNumber / (23 + (line.answerNumber > 23)))
+            //? CURRENTLY SPLITTING AT 600 CHARS, MAYBE CHANGE?
+            const linesSplit = await UtilFunctions.splitIntoCharSections(questionData.answerData.value, 600);
+            for (const lineSection in linesSplit) {
+                // const stringItself = linesSplit[lineSection];
+                
+                //* using javascript boolean 1 0 thing to push, so if it is the first one it won't have the extra
+                const embedIndex = Math.floor(lineSection / (23 + (lineSection > 23)))
+
                 if(essayResonseEmbeds.length == embedIndex) {
                     // .setTitle(questionData.questionName.length <= 256 ? questionData.questionName : `Question ${questionIndex}`)
                     //? does it need a title?
                     essayResonseEmbeds.push(new EmbedBuilder().setColor(primaryColour))
                 }
-
-                if(line.imgLine && line.value.length > 1024) {
-                    essayResonseEmbeds[embedIndex].addFields({ name: `Line ${line.answerNumber}${line.answerNumber == essayIndex ? '【 SELECTED 】' : ''}`, value: 'img url too long for discord'})
-                }
-                else {
-                    essayResonseEmbeds[embedIndex].addFields({ name: `Line ${line.answerNumber}${line.answerNumber == essayIndex ? '【 SELECTED 】' : ''}`, value: line.value})
-                }
+                //* because the lines are only at 600 sections, there is enough room for people to edit and send back so no need to check > 1024
+                // adding the line, if the line isn't first add the part number (+ 1 because of zero indexing)
+                essayResonseEmbeds[embedIndex].addFields({ name: `Answer to edit${lineSection > 0 ? ' part ' + lineSection + 1 : ''}`, value: linesSplit[lineSection]})
             }
             // so the user can cycle through the lines
-            // using line++ -- because idk it's funny
+            // using section++ -- because idk it's funny
             buttonAnswerRow.addComponents(
                 new ButtonBuilder()
-                .setCustomId('Line--')
-                .setLabel('Back Line')
+                .setCustomId('Section--')
+                .setLabel('Back Section')
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(essayIndex == 0),
                 new ButtonBuilder()
-                .setCustomId('Line++')
-                .setLabel('Next Line')
+                .setCustomId('Section++')
+                .setLabel('Next Section')
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(essayIndex == questionData.answerData.length - 1),
+                .setDisabled(essayIndex == linesSplit.length - 1),
             )
 
+            reply = await interaction.editReply({ content: ' ', embeds: essayResonseEmbeds, components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments});
             // cycle through the fields, if it is the selected line, Display the selected part to the user
-            reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: essayResonseEmbeds, components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
+            // reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: essayResonseEmbeds, components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: essayResonseEmbeds, components: [buttonMoveRow, buttonAnswerRow]})
         }
         else if(questionData.questionType == 'text'){
             // when referring to the correct answers use answers[0].value because this will be the text
@@ -516,6 +523,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         const msgCollector = await channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, time: 180 * 1000 });
         msgCollector.on('collect', m => {
             if(questionData.questionType == 'text' || questionData.questionType == 'essay') {
+                questionData.correct = null;
                 const editingIndex = questionData.questionType == 'essay' ? essayIndex : questionIndex;
                 if(questionData.answerdata[editingIndex]?.imgLine) {
                     UtilFunctions.TemporaryResponse(interaction, `Can't edit this line because it is just an image, click next or back!!!`)
@@ -554,13 +562,13 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex - 1));
             }
             // there has got to be a better way of doing this
-            else if (i.customId == 'Line++') {
+            else if (i.customId == 'Section++') {
                 await collector.stop();
                 await msgCollector.stop();
                 await i.deferUpdate();
                 return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex, essayIndex + 1));
             }
-            else if (i.customId == 'Line--') {
+            else if (i.customId == 'Section--') {
                 await collector.stop();
                 await msgCollector.stop();
                 await i.deferUpdate();
@@ -907,32 +915,19 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             const frameHandle = await essayResponse.evaluateHandle(node => node.querySelector('iframe'))
             const frame = await frameHandle.contentFrame();
             //TODO fix this waitforselector
-            // await frame.waitForSelector('body#tinymce p')
+            await frame.waitForSelector('body#tinymce p')
             // await frame.contentWindow.document.waitForSelector('body#tinymce p')
             //? don't know if they have other elements than just <p>!
             questionType = 'essay'
-            //*This imgLinks stuff needs a lot of testing
-            answerData = await frame.$$eval('body#tinymce p', (essayLines, currentdbAnswer) => essayLines.map((line, index) => {
-                const imageLinks = Array.from(line.querySelectorAll('img'), img => img.src).join(' , ');
-                return {
-                    answerNumber: index,
-                    correct: null,
-                    correctStrings: currentdbAnswer?.correctStrings || [], 
-                    //* The label will be the value!!!
-                    // label: questionDivContent.querySelector('label')?.textContent,
-                    type: 'essay',
-                    //* if textcontent doesn't exist then I need to fix that error, not gonna shortcircuit on purpose
-                    value: imageLinks || line.textContent,
-                    imgLine: imageLinks.length > 0
-                }
-            }), currentdbAnswer)
-            // add the imgs to the main stuff
-            for (const line of answerData) {
-                if(line?.imgLine) {
-                    // if(questionImgs == undefined) questionImgs = [];
-                    //forgot to do the equals and I had been confused on why this hadn't worked for so long... f
-                    questionImgs = questionImgs.concat(line.value.split(' , '))
-                }
+            questionImgs.push(...await frame.$$eval('body img', images => images.map(img => img.src)))
+            answerData = {
+                //answer number prolly not needed
+                answerNumber: 0,
+                correct: null,
+                correctStrings: currentdbAnswer?.correctStrings || [],
+                // get all of the text inside the box and join them with like new lines so they can be put in the embed with the lines seperated how it is on the site
+                value: await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n')),
+                type: 'essay'
             }
         }
         // only text answer contains this
@@ -989,6 +984,17 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             scrapedQuestions[questionIndex] = question
         }
     }
+    //TURN THE IMAGES URLS INTO ACTUAL BUFFERS TO SPEED UP STUFF
+    for (const questionIndex in scrapedQuestions) {
+        const question = scrapedQuestions[questionIndex];
+        for (const imgUrlIndex in question.questionImgs) {
+            const imgSrc = await page.goto(question.questionImgs[imgUrlIndex])
+            //setting the thing to a buffer, I wanted to use for of statement but it doesn't mutate the question
+            scrapedQuestions[questionIndex][imgUrlIndex] = await imgSrc.buffer();
+        }
+    }
+    //make sure to return to the question page
+    await page.goBack()
     return scrapedQuestions
 }
 
@@ -1065,11 +1071,15 @@ async function GuessOrFillSpecificQuestion(question) {
         }
     }
     else if(question.questionType == 'essay') {
-        for (const line of question.answerData) {
-            const curCorrectAnswer = line.correctStrings[0]
-            // change it to the correct answer, or otherwise just guess
-            line.value = curCorrectAnswer ?? line.value.replace('...', (Math.random() > 0.5).toString().toUpperCase());
-            line.correct = curCorrectAnswer != null
+        const curCorrectAnswer = question.answerData.correctStrings.length > 0 && question.answerData.correctStrings[0];
+        if(curCorrectAnswer) {
+            question.answerData.value = curCorrectAnswer
+            question.answerData.correct = true;
+        }
+        else {
+            //you can't really replace random stuff idk
+            const replaceString = question.answerData.value.contains('...') ? '...' : (Math.random() > 0.5).toString().toUpperCase();
+            question.answerData.value = question.answerData.value.replace(replaceString, (Math.random() > 0.5).toString().toUpperCase());
         }
     }
     else {
@@ -1215,4 +1225,3 @@ async function UpdateActionRowButtonsQuiz(i, inputButtonIds, answerResult, hasAn
     });
     return await i.update({components: newActionRowEmbeds});
 }
-
