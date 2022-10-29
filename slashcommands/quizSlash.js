@@ -390,10 +390,8 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
     }
 }
 
-//! if imgLine then skip ahead to next or back one
 //back applies -1 to question Index, whilst next adds 1, simple
 const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  questionIndex=0, essayIndex=0) => {
-    //TODO when moving into the next question embed, check before moving if that will contain an img line and if so move to the next (in while loop probs)
     return new Promise(async (resolve, reject) => {
         // await interaction.editReply({components: []})
         const questionData = scrapedQuestions[questionIndex]
@@ -429,6 +427,8 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         const buttonAnswerRow = new ActionRowBuilder();
 
         let reply;
+        //only cause I don't wanna regen, not the best way I guess but idk
+        let essayLinesSplit;
 
         if(questionData.questionType == 'radio' || questionData.questionType == 'checkbox'){
             answerTooLong = questionData.answerData.some(answer => answer.label.length > 80)
@@ -456,21 +456,19 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 )
             }
 
-            reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: []}) 
+            reply = await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments});
                 
         }
         else if(questionData.questionType == 'essay') {
-            quizStartEmbed.setDescription('Essay Response, click the buttons to cycle through each line, copy the selected line (Don\'t copy the【 SELECTED 】part), paste it back in but edit it so it\'s correct and enter. **First Image is probably nested inside the embed but not part of the inside questions so don\'t get confused')
+            quizStartEmbed.setDescription('Essay Response, click the buttons to cycle through each section, copy the selected section (Don\'t copy the x or tick if it has that part), paste it back in but edit it so it\'s correct and enter. (The bot will read your message and enter it) **First Image is probably nested inside the embed but not part of the inside questions so don\'t get confused')
             if(questionData?.questionImgs?.length > 5) {
                 //? probably should fix this because it deffo doesn't work at all! links url way too long (over 1024 characters each!)
                 // quizStartEmbed.addFields({ name: `Image Links (because discord only allows one image in embed (+ 4 outside))`, value: questionData.questionImgs.join(' , ')})
-                quizStartEmbed.addFields({ name: `Not all images could be displayed`, value: `(${questionData.questionImgs.length - 5} weren't shown)`})
+                quizStartEmbed.addFields({ name: `Not all images could be displayed`, value: `(${questionData.questionImgs.length - 5} weren't shown). because the url is too long, it also means that it can't be sent on discord!`})
             }
             const essayResonseEmbeds = [ quizStartEmbed ]
-            //? CURRENTLY SPLITTING AT 600 CHARS, MAYBE CHANGE?
-            const linesSplit = await UtilFunctions.splitIntoCharSections(questionData.answerData.value, 600);
-            for (const lineSection in linesSplit) {
-                // const stringItself = linesSplit[lineSection];
+            for (const lineSection in questionData.answerData) {
+                // const stringItself = essayLinesSplit[lineSection];
                 
                 //* using javascript boolean 1 0 thing to push, so if it is the first one it won't have the extra
                 const embedIndex = Math.floor(lineSection / (23 + (lineSection > 23)))
@@ -482,7 +480,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 }
                 //* because the lines are only at 600 sections, there is enough room for people to edit and send back so no need to check > 1024
                 // adding the line, if the line isn't first add the part number (+ 1 because of zero indexing)
-                essayResonseEmbeds[embedIndex].addFields({ name: `Answer to edit${lineSection > 0 ? ' part ' + lineSection + 1 : ''}`, value: linesSplit[lineSection]})
+                essayResonseEmbeds[embedIndex].addFields({ name: `Answer to edit${lineSection > 0 ? ' part ' + lineSection + 1 : ''}${lineSection == essayIndex ? '【 SELECTED 】' : ''}`, value: questionData.answerData[lineSection].value })
             }
             // so the user can cycle through the lines
             // using section++ -- because idk it's funny
@@ -496,7 +494,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 .setCustomId('Section++')
                 .setLabel('Next Section')
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(essayIndex == linesSplit.length - 1),
+                .setDisabled(essayIndex == essayLinesSplit.length - 1),
             )
 
             reply = await interaction.editReply({ content: ' ', embeds: essayResonseEmbeds, components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments});
@@ -511,7 +509,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
             quizStartEmbed.addFields({ name: 'Answer', value: answer})
 
             // if(lastI) await lastI.deferUpdate();
-            reply = quizImgAttachments != null ? await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: quizImgAttachments}) : await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow]})
+            reply = await interaction.editReply({ content: ' ', embeds: [quizStartEmbed], components: [buttonMoveRow], files: quizImgAttachments});
         }
         else {
             console.error('Invalid Question Type ' + questionData.questionType);
@@ -524,17 +522,13 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         msgCollector.on('collect', m => {
             if(questionData.questionType == 'text' || questionData.questionType == 'essay') {
                 questionData.correct = null;
-                const editingIndex = questionData.questionType == 'essay' ? essayIndex : questionIndex;
-                if(questionData.answerdata[editingIndex]?.imgLine) {
-                    UtilFunctions.TemporaryResponse(interaction, `Can't edit this line because it is just an image, click next or back!!!`)
-                }
-                else {
-                    questionData.answerData[editingIndex].value = m.content;
-                    // both text and essay use correctSTrings
-                    if(questionData.answerData[0].correctStrings.includes(m.content.toLowerCase())) m.content += ' ✓';
-                    quizStartEmbed.setFields({ name: 'Answer', value: m.content })
-                    interaction.editReply({embeds: [quizStartEmbed]})
-                }
+                const editingIndex = questionData.questionType == 'essay' ? essayIndex : 0;
+                questionData.answerData[editingIndex].value = m.content;
+                // both text and essay use correctSTrings
+                //! TODO need to actually disable this if showing hints 
+                if(questionData.answerData[essayIndex].correctStrings.includes(m.content.toLowerCase())) m.content += ' ✓';
+                quizStartEmbed.setFields({ name: 'Answer', value: m.content })
+                interaction.editReply({embeds: [quizStartEmbed]})
             }
         });
         const filter = i => i.user.id === interaction.user.id;
@@ -920,14 +914,19 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             //? don't know if they have other elements than just <p>!
             questionType = 'essay'
             questionImgs.push(...await frame.$$eval('body img', images => images.map(img => img.src)))
-            answerData = {
-                //answer number prolly not needed
-                answerNumber: 0,
-                correct: null,
-                correctStrings: currentdbAnswer?.correctStrings || [],
-                // get all of the text inside the box and join them with like new lines so they can be put in the embed with the lines seperated how it is on the site
-                value: await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n')),
-                type: 'essay'
+            // get all of the text inside the box and join them with like new lines so they can be put in the embed with the lines seperated how it is on the site
+            //* so yeah this means that it will be saved in sections in the db which is probably fine, can always  join them together, but it's quicker anyways to leave it like this
+            const essaySections = UtilFunctions.SplitIntoCharSections(await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n')), 600);
+            //the db will also have the thing
+            for (const index in essaySections) {
+                answerData.push({
+                    //more like section number
+                    answerNumber: index,
+                    correct: null,
+                    correctStrings: currentdbAnswer?.correctStrings[index] || [],
+                    value: essaySections[index],
+                    type: 'essay',
+                })
             }
         }
         // only text answer contains this
