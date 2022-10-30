@@ -180,7 +180,7 @@ const DoQuiz = async (page, interaction, chosenQuiz, dataBaseAnswers, autoFillEv
     }
 
     //* returning what was const correctedAnswers
-    return autoFillEverything ? await DisplayQuizSummary(interaction, page, chosenQuiz, scrapedQuestions, true) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz, 0)
+    return autoFillEverything ? await DisplayQuizSummary(interaction, page, chosenQuiz, scrapedQuestions, true) : await DisplayQuestionEmbed(interaction, page, scrapedQuestions, chosenQuiz)
 }
 const AutoFillAnswers = async (interaction, page, quiz, scrapedQuestions, lastI) => {
     // update all the questions, will do this all at once, so wait for that to finish
@@ -408,17 +408,22 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         const quizImgAttachments = [];
         // do the image if the question has one
         if (questionData.questionImgs != undefined) {
-            for (const questionImgIndex in questionData.questionImgs) {
-                // 4 means 5 done which I think is the limit discord allows
-                if(questionImgIndex > 4) break;
-                // const questionImg = questionData.questionImgs[questionImgIndex];
-                // const imgSrc = await page.goto(questionImg)
-                // const imgBuffer = await imgSrc.buffer();
-                const imgBuffer = questionData.questionImgs[questionImgIndex];
-                quizImgAttachments.push(new AttachmentBuilder(imgBuffer).setName(`questionImg${questionImgIndex}.png`).setDescription('Img for the current question'));
-                if(questionImgIndex == 0) quizStartEmbed.setImage(`attachment://questionImg${questionImgIndex}.png`);
-                await page.goBack()
+            // five is the max
+            for (let i = 0; i < questionData.questionImgs.length && i < 5; i++) {
+                const imgBuffer = questionData.questionImgs[i];
+                quizImgAttachments.push(new AttachmentBuilder(imgBuffer).setName(`questionImg${i}.png`).setDescription('Img for the current question'));
             }
+            // for (const questionImgIndex in questionData.questionImgs) {
+            //     // 4 means 5 done which I think is the limit discord allows
+            //     if(questionImgIndex > 4) break;
+            //     // const questionImg = questionData.questionImgs[questionImgIndex];
+            //     // const imgSrc = await page.goto(questionImg)
+            //     // const imgBuffer = await imgSrc.buffer();
+            //     // const imgBuffer = questionData.questionImgs[questionImgIndex];
+            //     quizImgAttachments.push(new AttachmentBuilder(imgBuffer).setName(`questionImg${questionImgIndex}.png`).setDescription('Img for the current question'));
+            //     // if(questionImgIndex == 0) quizStartEmbed.setImage(`attachment://questionImg${questionImgIndex}.png`);
+            //     // await page.goBack()
+            // }
             // make the first image the main one, if there are others just add them to the message
             quizStartEmbed.setImage(`attachment://questionImg0.png`);
         }
@@ -991,27 +996,25 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
         }
     }
     //TURN THE IMAGES URLS INTO ACTUAL BUFFERS TO SPEED UP STUFF
-    //* get a new page so the outer function doesn't lose execution context
     if(questionContainsImgs) {
-        //!newPage is not defined, fuuuuuuu
+        //* get a new page so the outer function doesn't lose execution context
         const newPage = await (await page.browser()).newPage();
         for (const questionIndex in scrapedQuestions) {
             const question = scrapedQuestions[questionIndex];
             for (const imgUrlIndex in question.questionImgs) {
                 const imgSrc = await newPage.goto(question.questionImgs[imgUrlIndex])
                 //setting the thing to a buffer, I wanted to use for of statement but it doesn't mutate the question
-                scrapedQuestions[questionIndex][imgUrlIndex] = await imgSrc.buffer();
-                console.log(scrapedQuestions[questionIndex][imgUrlIndex])
+                scrapedQuestions[questionIndex].questionImgs[imgUrlIndex] = await imgSrc.buffer();
             }
         }
+        //make sure to return to the question page
+        // await Promise.all([
+        //     page.waitForNavigation(),
+        //     page.goBack(),
+        // ])
+        //don't need to wait for the new page to close
+        newPage.close()
     }
-    //make sure to return to the question page
-    // await Promise.all([
-    //     page.waitForNavigation(),
-    //     page.goBack(),
-    // ])
-    //don't need to wait for the new page to close
-    newPage.close()
     return scrapedQuestions
 }
 
