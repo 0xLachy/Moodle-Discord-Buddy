@@ -695,14 +695,14 @@ const GetSelectMenuNextButtons = (page, optionLength) => {
     return buttonActionRow;
 }
 
-const splitIntoCharSections = async (inpStr, amount=1024) => {
+const SplitIntoCharSections = async (inpStr, amount=1024) => {
     const splitStringsNewLines = inpStr.match(/.{1,1024}(\s|$)/g);
 
     let tempStr = '';
     const chunks = [];
     for (const stringChunk of splitStringsNewLines) {
         if(tempStr.length < (amount - stringChunk.length)) {
-            tempStr += assignChunk
+            tempStr += stringChunk
         }
         else {
             chunks.push(tempStr)
@@ -730,7 +730,7 @@ module.exports = {
     TemporaryResponse,
     SendConfirmationMessage,
     GetSelectMenuOverflowActionRows,
-    splitIntoCharSections,
+    SplitIntoCharSections,
     loginGroups,
     mainStaticUrl,
 }

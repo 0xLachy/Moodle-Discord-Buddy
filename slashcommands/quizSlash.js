@@ -428,7 +428,6 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
 
         let reply;
         //only cause I don't wanna regen, not the best way I guess but idk
-        let essayLinesSplit;
 
         if(questionData.questionType == 'radio' || questionData.questionType == 'checkbox'){
             answerTooLong = questionData.answerData.some(answer => answer.label.length > 80)
@@ -494,7 +493,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 .setCustomId('Section++')
                 .setLabel('Next Section')
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(essayIndex == essayLinesSplit.length - 1),
+                .setDisabled(essayIndex == questionData.answerData.length - 1),
             )
 
             reply = await interaction.editReply({ content: ' ', embeds: essayResonseEmbeds, components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments});
@@ -888,6 +887,7 @@ const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
 const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, autoFillEverything=false) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
     
+    let questionContainsImgs = false;
     const questionDivs = await page.$$('form div[id*="question"] div.content > div')
     for (const questionDivContent of questionDivs) {
         //qtext contains only the title of the question
@@ -914,14 +914,14 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             const frameHandle = await essayResponse.evaluateHandle(node => node.querySelector('iframe'))
             const frame = await frameHandle.contentFrame();
             //TODO fix this waitforselector
-            await frame.waitForSelector('body#tinymce p')
+            // await frame.waitForSelector('body#tinymce p')
             // await frame.contentWindow.document.waitForSelector('body#tinymce p')
             //? don't know if they have other elements than just <p>!
             questionType = 'essay'
             questionImgs.push(...await frame.$$eval('body img', images => images.map(img => img.src)))
             // get all of the text inside the box and join them with like new lines so they can be put in the embed with the lines seperated how it is on the site
             //* so yeah this means that it will be saved in sections in the db which is probably fine, can always  join them together, but it's quicker anyways to leave it like this
-            const essaySections = UtilFunctions.SplitIntoCharSections(await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n')), 600);
+            const essaySections = await UtilFunctions.SplitIntoCharSections(await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n')), 600);
             //the db will also have the thing
             for (const index in essaySections) {
                 answerData.push({
@@ -976,6 +976,8 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             answerData
         });
         
+        //basically once this is true, it stays true
+        questionContainsImgs = questionImgs.length > 0 || questionContainsImgs;
     }
     if(autoFillEverything) {
         for (const questionIndex in scrapedQuestions) {
@@ -989,16 +991,27 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
         }
     }
     //TURN THE IMAGES URLS INTO ACTUAL BUFFERS TO SPEED UP STUFF
-    for (const questionIndex in scrapedQuestions) {
-        const question = scrapedQuestions[questionIndex];
-        for (const imgUrlIndex in question.questionImgs) {
-            const imgSrc = await page.goto(question.questionImgs[imgUrlIndex])
-            //setting the thing to a buffer, I wanted to use for of statement but it doesn't mutate the question
-            scrapedQuestions[questionIndex][imgUrlIndex] = await imgSrc.buffer();
+    //* get a new page so the outer function doesn't lose execution context
+    if(questionContainsImgs) {
+        //!newPage is not defined, fuuuuuuu
+        const newPage = await (await page.browser()).newPage();
+        for (const questionIndex in scrapedQuestions) {
+            const question = scrapedQuestions[questionIndex];
+            for (const imgUrlIndex in question.questionImgs) {
+                const imgSrc = await newPage.goto(question.questionImgs[imgUrlIndex])
+                //setting the thing to a buffer, I wanted to use for of statement but it doesn't mutate the question
+                scrapedQuestions[questionIndex][imgUrlIndex] = await imgSrc.buffer();
+                console.log(scrapedQuestions[questionIndex][imgUrlIndex])
+            }
         }
     }
     //make sure to return to the question page
-    await page.goBack()
+    // await Promise.all([
+    //     page.waitForNavigation(),
+    //     page.goBack(),
+    // ])
+    //don't need to wait for the new page to close
+    newPage.close()
     return scrapedQuestions
 }
 
@@ -1052,7 +1065,7 @@ const GoToNextPageScrape = async (page, scrapedQuestions, updateDivs, dbAnswers=
         //wait for the page to load and click the next button at the same time
         await Promise.all([
             page.waitForNavigation(),
-            nextButton.click()
+            nextButton.click(),
         ])
         //it needs to wait for navigation otherwise the click is undefined
         return await GoToNextPageScrape(page, scrapedQuestions, updateDivs, dbAnswers, autoFillEverything)
