@@ -1,6 +1,6 @@
 {
   "name": "moodle-discord-buddy",
-  "version": "1.0.0",
+  "version": "2.0.5",
   "description": "Discord bot that scrapes lismore moodle data",
   "main": "index.js",
   "scripts": {

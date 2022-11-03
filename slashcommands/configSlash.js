@@ -971,7 +971,7 @@ const ResetSettingsOverview = async (interaction, oldUserConfig, resettingTopic,
         collector.on('end', collected => {
             if (collected?.size == 0 && !channelResponse) {
                 // If they ran out of time to choose just return nothing
-                interaction.editReply({ content: "Interaction Timed Out (You didn't choose anything for 180 seconds), re-run the command again", embeds: [], components: [] });
+                interaction.editReply({ content: "Interaction Timed Out (You didn't choose anything for 180 seconds), re-run the command again", embeds: [], components: [], files: [] });
                 return resolve(userConfig);
             }
         });
