@@ -70,7 +70,10 @@ module.exports = {
         const browser = await puppeteer.launch({ headless: false })
         // const browser = await puppeteer.launch();
         const page = await browser.newPage();
-        
+
+        //? Testing out adding config to interaction because that is used everywhere
+        interaction.userConfig = config;
+
         const quizConfig = config?.settings['quiz']
         //Add the autofill function to the page at the start of the script, 
         await page.exposeFunction("GuessOrFillSpecificQuestion", GuessOrFillSpecificQuestion);
@@ -391,10 +394,13 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
 }
 
 //back applies -1 to question Index, whilst next adds 1, simple
+//! todo set the question index back to 0 when finished debugging
 const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  questionIndex=0, essayIndex=0) => {
     return new Promise(async (resolve, reject) => {
         // await interaction.editReply({components: []})
         const questionData = scrapedQuestions[questionIndex]
+        let channelResponse = false;
+
         let quizStartEmbed = new EmbedBuilder()
             .setColor(primaryColour)
             .setTitle(questionData.questionName.length <= 256 ? questionData.questionName : `Question ${questionIndex}`)
@@ -484,7 +490,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 }
                 //* because the lines are only at 600 sections, there is enough room for people to edit and send back so no need to check > 1024
                 // adding the line, if the line isn't first add the part number (+ 1 because of zero indexing)
-                essayResonseEmbeds[embedIndex].addFields({ name: `Answer to edit${lineSection > 0 ? ' part ' + lineSection + 1 : ''}${lineSection == essayIndex ? '【 SELECTED 】' : ''}`, value: questionData.answerData[lineSection].value })
+                essayResonseEmbeds[embedIndex].addFields({ name: `Answer to edit${lineSection > 0 ? ' part ' + Number(lineSection) + 1 : ''}${lineSection == essayIndex ? '【 SELECTED 】' : ''}`, value: questionData.answerData[lineSection].value })
             }
             // so the user can cycle through the lines
             // using section++ -- because idk it's funny
@@ -499,6 +505,12 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 .setLabel('Next Section')
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(essayIndex == questionData.answerData.length - 1),
+                //TODO add the reset button if someone makes a mistake editing
+                new ButtonBuilder()
+                .setCustomId('Reset Essay')
+                .setLabel('Reset Essay')
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(true),
             )
 
             reply = await interaction.editReply({ content: ' ', embeds: essayResonseEmbeds, components: [buttonMoveRow, buttonAnswerRow], files: quizImgAttachments});
@@ -523,16 +535,20 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
         //TODO maybe it can collect if you type in !save to the channel it will save, or other stuff!
         const msgCollector = await channel.createMessageCollector({ filter: m => m.author.id === interaction.user.id, time: 180 * 1000 });
-        msgCollector.on('collect', m => {
+        msgCollector.on('collect', async m => {
             if(questionData.questionType == 'text' || questionData.questionType == 'essay') {
                 questionData.correct = null;
                 const editingIndex = questionData.questionType == 'essay' ? essayIndex : 0;
                 questionData.answerData[editingIndex].value = m.content;
+                if(questionData.questionType == 'essay') {
+                    StopCollecting();
+                    return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex, essayIndex));
+                }
                 // both text and essay use correctSTrings
                 //! TODO need to actually disable this if showing hints 
                 if(questionData.answerData[essayIndex].correctStrings.includes(m.content.toLowerCase())) m.content += ' ✓';
                 quizStartEmbed.setFields({ name: 'Answer', value: m.content })
-                interaction.editReply({embeds: [quizStartEmbed]})
+                await interaction.editReply({embeds: [quizStartEmbed]})
             }
         });
         const filter = i => i.user.id === interaction.user.id;
@@ -542,8 +558,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
         //todo maybe don't await the defer updates? that way they can update while stuff is happening
         collector.on('collect', async (i) => {
             if (i.customId == 'Next') {
-                await collector.stop();
-                await msgCollector.stop();
+                StopCollecting();
                 if (scrapedQuestions.length != questionIndex + 1) {
                     await i.deferUpdate();
                     return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex + 1));
@@ -554,35 +569,30 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 }
             }
             else if (i.customId == 'Back') {
-                await collector.stop();
-                await msgCollector.stop();
+                StopCollecting();
                 await i.deferUpdate();
                 return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex - 1));
             }
             // there has got to be a better way of doing this
             else if (i.customId == 'Section++') {
-                await collector.stop();
-                await msgCollector.stop();
+                StopCollecting();
                 await i.deferUpdate();
                 return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex, essayIndex + 1));
             }
             else if (i.customId == 'Section--') {
-                await collector.stop();
-                await msgCollector.stop();
+                StopCollecting();
                 await i.deferUpdate();
                 return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex, essayIndex - 1));
             }
             else if (i.customId == 'Quit') {
-                await collector.stop();
-                await msgCollector.stop()
+                StopCollecting();
                 await interaction.editReply({content: 'Quit Successfully', embeds: [], components: [], files: []})
                 return resolve([scrapedQuestions]);
             }
             else if (i.customId == 'Overview') {
                 // await i.update({ content: ' '});
                 // await i.deferUpdate(); 
-                await collector.stop();
-                await msgCollector.stop();
+                StopCollecting();
                 await UpdateQuizzesWithInputValues(page, scrapedQuestions)
                 return resolve(await DisplayQuizSummary(interaction, page, quiz, scrapedQuestions, true, i))
             }
@@ -608,8 +618,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                     //this won't work for the set fields :/
                     // quizStartEmbed.setFields({ name: 'Answer', value: `${questionData.answerData[essayIndex].value}${curCorrectAnswer != null ? ' ✓' : ''}` })
                     // interaction.editReply({embeds: [quizStartEmbed]})
-                    await collector.stop();
-                    await msgCollector.stop();
+                    StopCollecting();
                     await i.deferUpdate();
                     return resolve(await DisplayQuestionEmbed(interaction, page, scrapedQuestions, quiz, questionIndex, essayIndex));
                 }
@@ -636,7 +645,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
             }
         });
         collector.on('end', collected => {
-            if(collected.size == 0) {
+            if(collected.size == 0 && !channelResponse) {
                 console.log("Timed Out On Question")
                 return interaction.editReply({content: 'Timed out, answers not saved until you view the summary (overview)!', embeds: [], components: [], files: []})
             }
@@ -657,6 +666,13 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
 
             }
         });
+
+        function StopCollecting(m) {
+            channelResponse = true;
+            collector.stop();
+            msgCollector.stop();
+            if(interaction.inGuild() && m && interaction.userConfig.settings.config.DeleteSettingMessages) { m.delete() };
+        }
     })
 }
 
@@ -805,38 +821,95 @@ const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
     });
 }
 const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
+    // only gets one item
+    // const questionDivs = await page.waitForSelector('form div[id*="question"] div.content > div');
     await page.waitForSelector('form div[id*="question"] div.content > div');
 
-    //update all the questions on the website using the values from the questions object
-    await page.evaluate((updatedQuestionsData) => {
-        let questionDivs = Array.from(document.querySelectorAll('form div[id*="question"] div.content > div'));
-        for (const questionDivContent of questionDivs) { 
-            // const questionDivContent = questionDivs[questionDivContentIndex];
-            updatedQuestion = updatedQuestionsData.find(question => question.questionName == questionDivContent.querySelector('div.qtext').textContent)
-            let textAnswer = questionDivContent.querySelector('span.answer input')
-            if(textAnswer){
-                //set the text value to be the text answer that was given
-                textAnswer.value = updatedQuestion.answerData[0].value
-            }
-            else {
-                const answerDivs = Array.from(questionDivContent.querySelectorAll('div.answer div'));
-                for (const answerDivIndex in answerDivs) {
-                    const answerDiv = answerDivs[answerDivIndex];
-                    //set the checked value of the input to be what the discord bot changed it too
-                    answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"]').checked = updatedQuestion.answerData[answerDivIndex].value
+    const questionDivs = await page.$$('form div[id*="question"] div.content > div')
+    
+    console.log(updatedQuestionsData)
+    for (const questionDivContent of questionDivs) {
+
+        
+        const curQuestionPromptText = await questionDivContent.$eval('div.qtext', e => e.textContent);
+        console.log(curQuestionPromptText)
+        const updatedQuestion = updatedQuestionsData.find(question => question.questionName == curQuestionPromptText)
+        const textAnswer = await questionDivContent.$('span.answer input')
+        //TODO with essay response, click on the box and use puppeteer typing function to type everything into the box
+        if(textAnswer){
+            //set the text value to be the text answer that was given
+            textAnswer.value = updatedQuestion.answerData[0].value
+        }
+        else if(updatedQuestion.questionType == 'essay') {
+            const essayResponse = await questionDivContent.$('div.qtype_essay_response');
+            const frameHandle = await essayResponse.evaluateHandle(node => node.querySelector('iframe'));
+            const frame = await frameHandle.contentFrame();
+            
+
+            const bodyElem = await frame.$('body#tinymce');
+            
+            await bodyElem.evaluate(body => {
+                //remove the p elems so that the text box is then cleared
+                for (const pElem of body.querySelectorAll('p')) {
+                    pElem.remove()
+                }
+            })
+            // Then click in the text box to type it out again
+            // await frame.click('body#tinymce p')
+            await bodyElem.focus();
+
+            //TODO actually test this out
+            await page.type(updatedQuestion.answerData.map(ad => ad.value).join(''))
+            // const essayText = await frame.$$eval
+            // questionImgs.push(...await frame.$$eval('body img', images => images.map(img => img.src)))
+        }
+        else {
+            //! error here where the answer data / updated question isn't being passed in
+            console.log(updatedQuestion.answerData)
+            questionDivContent.$$eval('div.answer div', (ansBtns, updatedQuestion) => {
+                for (let i = 0; i < ansBtns.length; i++) {
+                    ansBtns[i].checked = updatedQuestion.answerData[i].value;
                     
                 }
-            }
-
-
+            }, updatedQuestion)
+            // const answerDivs = Array.from(questionDivContent.$$('div.answer div'));
+            // for (const answerDivIndex in answerDivs) {
+            //     const answerDiv = answerDivs[answerDivIndex];
+            //     //set the checked value of the input to be what the discord bot changed it too
+            //     answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"]').checked = updatedQuestion.answerData[answerDivIndex].value
+                
+            // }
         }
-    }, updatedQuestionsData)
+    }
+    // //update all the questions on the website using the values from the questions object
+    // await page.evaluate((updatedQuestionsData) => {
+    //     let questionDivs = Array.from(document.querySelectorAll('form div[id*="question"] div.content > div'));
+    //     for (const questionDivContent of questionDivs) { 
+    //         // const questionDivContent = questionDivs[questionDivContentIndex];
+    //         const updatedQuestion = updatedQuestionsData.find(question => question.questionName == questionDivContent.querySelector('div.qtext').textContent)
+    //         let textAnswer = questionDivContent.querySelector('span.answer input')
+    //         //TODO with essay response, click on the box and use puppeteer typing function to type everything into the box
+    //         if(textAnswer){
+    //             //set the text value to be the text answer that was given
+    //             textAnswer.value = updatedQuestion.answerData[0].value
+    //         }
+    //         else {
+    //             const answerDivs = Array.from(questionDivContent.querySelectorAll('div.answer div'));
+    //             for (const answerDivIndex in answerDivs) {
+    //                 const answerDiv = answerDivs[answerDivIndex];
+    //                 //set the checked value of the input to be what the discord bot changed it too
+    //                 answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"]').checked = updatedQuestion.answerData[answerDivIndex].value
+                    
+    //             }
+    //         }
+    //     }
+    // }, updatedQuestionsData)
 }
 
 //This one is checking whether or not our answers were correct or not
 const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
-    //TODO update for essay response
+    //TODO update for essay response and use page.$ probably
     //I think they just need page
     return await page.evaluate((updatedQuizResponses) => {
         let questionDivs = document.querySelectorAll('form div[id*="question"] div.content');
