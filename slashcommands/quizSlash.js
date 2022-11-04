@@ -2,7 +2,8 @@ const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, 
 const puppeteer = require('puppeteer');
 const UtilFunctions = require("../util/functions");
 const { primaryColour, dailyQuizTokensPerQuestion } = require("../util/constants");
-const mongoose = require('mongoose')
+const mongoose = require('mongoose');
+const { off } = require('superagent');
 require("dotenv").config()
 
 let autoSubmit = false;
@@ -820,6 +821,7 @@ const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
         });
     });
 }
+
 const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
     // only gets one item
     // const questionDivs = await page.waitForSelector('form div[id*="question"] div.content > div');
@@ -827,12 +829,10 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
 
     const questionDivs = await page.$$('form div[id*="question"] div.content > div')
     
-    console.log(updatedQuestionsData)
     for (const questionDivContent of questionDivs) {
 
         
         const curQuestionPromptText = await questionDivContent.$eval('div.qtext', e => e.textContent);
-        console.log(curQuestionPromptText)
         const updatedQuestion = updatedQuestionsData.find(question => question.questionName == curQuestionPromptText)
         const textAnswer = await questionDivContent.$('span.answer input')
         //TODO with essay response, click on the box and use puppeteer typing function to type everything into the box
@@ -864,12 +864,10 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
             // questionImgs.push(...await frame.$$eval('body img', images => images.map(img => img.src)))
         }
         else {
-            //! error here where the answer data / updated question isn't being passed in
-            console.log(updatedQuestion.answerData)
-            questionDivContent.$$eval('div.answer div', (ansBtns, updatedQuestion) => {
-                for (let i = 0; i < ansBtns.length; i++) {
-                    ansBtns[i].checked = updatedQuestion.answerData[i].value;
-                    
+            
+            questionDivContent.$$eval('div.answer div', (answerDivs, updatedQuestion) => {
+                for (let i = 0; i < answerDivs.length; i++) {
+                    answerDivs[i].querySelector(':is( input[type="checkbox"], input[type="radio"]').checked = updatedQuestion.answerData[i].value
                 }
             }, updatedQuestion)
             // const answerDivs = Array.from(questionDivContent.$$('div.answer div'));
@@ -888,7 +886,6 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
     //         // const questionDivContent = questionDivs[questionDivContentIndex];
     //         const updatedQuestion = updatedQuestionsData.find(question => question.questionName == questionDivContent.querySelector('div.qtext').textContent)
     //         let textAnswer = questionDivContent.querySelector('span.answer input')
-    //         //TODO with essay response, click on the box and use puppeteer typing function to type everything into the box
     //         if(textAnswer){
     //             //set the text value to be the text answer that was given
     //             textAnswer.value = updatedQuestion.answerData[0].value
