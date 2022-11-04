@@ -196,11 +196,11 @@ const AutoFillAnswers = async (interaction, page, quiz, scrapedQuestions, lastI)
     // then show the summary of what has happened
     return await DisplayQuizSummary(interaction, page, quiz, scrapedQuestions, lastI)
 }
+
 const GetCorrectAnswersFromResultsPage = async (page, updatedQuestions) => {
     //Got an error from this but everything worked fine for some reason
     await page.waitForSelector('button[type="submit"]').catch(err => console.log(err))
-    await page.evaluate(() => document.querySelectorAll('button[type="submit"]')[1].click())
-    // the second submit is the final submit button, the first is to retry.
+    await page.evaluate(() => document.querySelectorAll('button[type="submit"]')[1].click())    // the second submit is the final submit button, the first is to retry.
     await page.waitForSelector('div.confirmation-buttons input.btn-primary');
     await Promise.all([
         page.evaluate(() => document.querySelector('div.confirmation-buttons input.btn-primary').click()),
@@ -614,7 +614,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
                 else if(questionData.questionType == 'essay') {
                     // there can be more than one correct line
                     const curCorrectAnswer = questionData.answerData[essayIndex]?.correctStrings[0];
-                    questionData.answerData[essayIndex].value = curCorrectAnswer ?? questionData.answerData[essayIndex].value.replace('...', (Math.random() > 0.5).toString());
+                    questionData.answerData[essayIndex].value = curCorrectAnswer ?? questionData.answerData[essayIndex].value.replace('...', (Math.random() > 0.5).toString()) + ' extra filler';
                     
                     //this won't work for the set fields :/
                     // quizStartEmbed.setFields({ name: 'Answer', value: `${questionData.answerData[essayIndex].value}${curCorrectAnswer != null ? ' ✓' : ''}` })
@@ -859,7 +859,8 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
             await bodyElem.focus();
 
             //TODO actually test this out
-            await page.type(updatedQuestion.answerData.map(ad => ad.value).join(''))
+            // await page.type(updatedQuestion.answerData.map(ad => ad.value).join(''))
+            await page.keyboard.type(updatedQuestion.answerData.map(ad => ad.value).join(''))
             // const essayText = await frame.$$eval
             // questionImgs.push(...await frame.$$eval('body img', images => images.map(img => img.src)))
         }
@@ -988,15 +989,17 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             //* get the element handle, and then get the actual frame document
             const frameHandle = await essayResponse.evaluateHandle(node => node.querySelector('iframe'))
             const frame = await frameHandle.contentFrame();
-            //TODO fix this waitforselector
+            //TODO fix this waitforselector, it is really weird though because according to the docs it should work, but others are having this error
             // await frame.waitForSelector('body#tinymce p')
             // await frame.contentWindow.document.waitForSelector('body#tinymce p')
             //? don't know if they have other elements than just <p>!
             questionType = 'essay'
             questionImgs.push(...await frame.$$eval('body img', images => images.map(img => img.src)))
+            //! doesn't work
+            const totalEssayText = await GetFrameText(frame);
             // get all of the text inside the box and join them with like new lines so they can be put in the embed with the lines seperated how it is on the site
             //* so yeah this means that it will be saved in sections in the db which is probably fine, can always  join them together, but it's quicker anyways to leave it like this
-            const essaySections = await UtilFunctions.SplitIntoCharSections(await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n')), 600);
+            const essaySections = await UtilFunctions.SplitIntoCharSections(totalEssayText, 600);
             //the db will also have the thing
             for (const index in essaySections) {
                 answerData.push({
@@ -1086,8 +1089,48 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
         newPage.close()
     }
     return scrapedQuestions
+
+    //doing it this way because waitForSelector() on frames don't work puppeteer
+    async function GetFrameText(frame) {
+        //TODO race promises
+//         const promise1 = new Promise((resolve, reject) => {
+        //   setTimeout(resolve, 500, 'one');
+        // });
+
+        // const promise2 = new Promise((resolve, reject) => {
+        //   setTimeout(resolve, 100, 'two');
+        // });
+
+        // Promise.race([promise1, promise2]).then((value) => {
+        //   console.log(value);
+        //   // Both resolve, but promise2 is faster
+        // });
+    //     return new Promise(async (resolve, reject) => {
+    //         let text;
+    //         // five seconds otherwise we ain't finding the iframe text
+    //         setTimeout(() => {
+    //             if(!text) {
+    //                 return reject(`Couldn't find iframe text`)
+    //             }
+    //         }, 5 * 1000)
+    //         while (!text) {
+    //             text = await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
+    //         }
+    //         // I think this only returns when the text gets something.... hopefully
+    //         return resolve(text);
+    //     });
+    // let text = await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
+    
+    // if(!text) {
+    //     await frame.waitForTimeout(2500)
+    //     return await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
+    // } else {
+    //     return text
+    // }
+    }
 }
 
+//! there is a problem where it waitf for navigation forever for some reason sometimes but not very often at all
 const GoBackToStart = async (page) => {
     const backButton = await page.$('form div.submitbtns > input[name="previous"]');
     if(backButton) {
@@ -1170,8 +1213,9 @@ async function GuessOrFillSpecificQuestion(question) {
             }
             else {
                 //you can't really replace random stuff idk
-                const replaceString = section.value.contains('...') ? '...' : (Math.random() > 0.5).toString().toUpperCase();
-                section.value = section.value.replace(replaceString, (Math.random() > 0.5).toString().toUpperCase());
+                const replaceString = section.value.includes('...') ? '...' : (Math.random() > 0.5).toString().toUpperCase();
+                // extra filler so that it can show the answers basically
+                section.value = section.value.replace(replaceString, (Math.random() > 0.5).toString().toUpperCase()) + '\n extra filla';
                 //just in case it was set to true or whatever idk
                 section.correct = null;
             }

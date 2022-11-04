@@ -696,6 +696,8 @@ const GetSelectMenuNextButtons = (page, optionLength) => {
 }
 
 const SplitIntoCharSections = async (inpStr, amount=1024) => {
+    //return nothing if the input string is nothing
+    if(!inpStr) return [];
     const splitStringsNewLines = inpStr.match(/.{1,1024}(\s|$)/g);
 
     let tempStr = '';
