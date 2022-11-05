@@ -749,6 +749,13 @@ const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
 
         let selectedOptions = quizzes['due']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz is still due', value: quiz.url }));
         if(showDone) selectedOptions = selectedOptions.concat(quizzes['done']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz has already been finished', value: quiz.url })));
+        //? '!selectedOptions.length' works too because of javascript but less readable
+        if(selectedOptions.length == 0) {
+           //there isn't any quizzes so yeah just tell them that
+            quizzesEmbed.setDescription(`Couldn't find any quizzes! re-run the command and choose a different course!${showDone ? '' : '\nYou have disabled showing quizzes already done, re-enable that with /config and you might see quizzes again!'}`)
+            await interaction.editReply({ content: '', embeds: [quizzesEmbed], components: []}) 
+            return resolve(null)
+        }
         const selectRow = new ActionRowBuilder()
             .addComponents(
                 new SelectMenuBuilder()
@@ -841,7 +848,6 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
             textAnswer.value = updatedQuestion.answerData[0].value
         }
         else if(updatedQuestion.questionType == 'essay') {
-            console.log(updatedQuestion)
             const essayResponse = await questionDivContent.$('div.qtype_essay_response');
             const frameHandle = await essayResponse.evaluateHandle(node => node.querySelector('iframe'));
             const frame = await frameHandle.contentFrame();
@@ -1044,7 +1050,6 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
 
         //check if it is undefined before using it :/, not all have
         let questionImgs = await questionDivContent.$$eval('img', imgs => imgs.filter(img => !img.classList.contains('mceIcon') && img?.src).map(img => img.src));
-        // console.log(await questionDivContent.evaluate(node => node.querySelector('img')?.src))
 
         const essayResponse = await questionDivContent.$('div.qtype_essay_response')
         const textAnswer = await questionDivContent.$('span.answer input');
