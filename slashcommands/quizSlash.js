@@ -68,8 +68,8 @@ module.exports = {
     ...data.toJSON(),
     run: async (client, interaction, config) => {
         await interaction.deferReply(/*{ephemeral: true}*/);
-        const browser = await puppeteer.launch({ headless: false })
-        // const browser = await puppeteer.launch();
+        // const browser = await puppeteer.launch({ headless: false })
+        const browser = await puppeteer.launch();
         const page = await browser.newPage();
 
         //? Testing out adding config to interaction because that is used everywhere
@@ -248,7 +248,7 @@ const AddQuizDataToDatabase = async (quiz_db, quizTitle, correctedQuestions) => 
         }
         else if(question.questionType == 'essay') {
             // I'm not sure if I have to filter out all the correct ones like text but I don't see the point
-            newQuiz.questions[question.questionName] = { correct: question.answerData.correctStrings }
+            newQuiz.questions[question.questionName] = { correct: question.answerData.map(ans => ans.correctStrings).filter(s=>s) }
         }
         else {
             const correct = question.answerData.filter(answer => answer.correct === true).map(answer => answer.label);
@@ -338,8 +338,8 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
                     }
                 }
                 else {
-                    //TODO add essay reason to this response, but code it for responses that are larger than 1024 lines (so to have part 2's and shii)
-                    if(question.questionType == 'text' && answer.reason) {
+                    //! this will cause errors if the reason is longer than 1024 or whatever
+                    if((question.questionType == 'text' || question.questionType == 'essay') && answer.reason) {
                         questionAnswersString += answer.reason.trim();
                     }
                     else if (answer.value && question.questionType != 'text' && question.questionType != 'essay') {
@@ -909,64 +909,121 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
 const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
     //TODO update for essay response and use page.$ probably
-    // const questionDivs = await page.$$('form div[id*="question"] div.content')
-    // // for (const questionDivContent of questionDivs) {
-    // //     //qtext contains only the title of the question
-    // //     const questionName = await questionDivContent.$eval('div.qtext', e => e.textContent);
-    // //I think they just need page
+    const questionDivs = await page.$$('form div[id*="question"] div.content')
     // for (const questionDivContent of questionDivs) {
+    //     //qtext contains only the title of the question
     //     const questionName = await questionDivContent.$eval('div.qtext', e => e.textContent);
-        
-    // }
-    return await page.evaluate((updatedQuizResponses) => {
-        let questionDivs = document.querySelectorAll('form div[id*="question"] div.content');
-        for (const questionDivContent of questionDivs) {
-            updatedQuestion = updatedQuizResponses.find(question => question.questionName == questionDivContent.querySelector('div.qtext').textContent)
-            let textAnswer = questionDivContent.querySelector('span.answer input')
-            if(textAnswer){
-                //set the text value to be the text answer that was given
-                if(questionDivContent.querySelector('i[title="Correct"]')){
-                    updatedQuestion.answerData[0].correct = true
-                    if(!updatedQuestion.answerData[0].correctStrings.includes(updatedQuestion.answerData[0].value)) updatedQuestion.answerData[0].correctStrings.push(updatedQuestion.answerData[0].value)
-                } 
-                else if(questionDivContent.querySelector('i[title="Incorrect"]')) {
-                    updatedQuestion.answerData[0].correct = false
+    //I think they just need page
+    for (const questionDivContent of questionDivs) {
+        // get the name to find the question in the question list if the order has changed
+        const questionName = await questionDivContent.$eval('div.qtext', e => e.textContent);
+        const updatedQuestion = updatedQuizResponses.find(q => q.questionName == questionName)
+
+        // they all have different ways of being stored so yeah as correct in db
+        if(updatedQuestion.questionType == 'text' || updatedQuestion.questionType == 'essay') {
+            // if it was correct add whatever the string that was correct to the db
+            if(await questionDivContent.$('i[title="Correct"]')){
+                for (const line of updatedQuestion.answerData) {
+                    line.correct = true;
+                    if(!line.correctStrings.includes(line.value)) line.correctStrings.push(line.value);
                 }
-                
-            }
-            else {
-                const answerDivs = Array.from(questionDivContent.querySelectorAll('div.answer div[class*="r"]'));
-                for (const answerDivIndex in answerDivs) {
-                    const answerDiv = answerDivs[answerDivIndex];
-                    let answerDivClass = answerDiv.getAttribute('class').toLowerCase()
-                    
-                    updatedQuestion.answerData[answerDivIndex].correct ??= answerDivClass.includes('incorrect') ? false : answerDivClass.includes('correct') ? true : null;
-                    if(updatedQuestion.answerData[answerDivIndex].correct != null) {
-                        //note that this is the specific feedback to the answer itself, not as a whole
-                        let answerOutcome = answerDiv.querySelector('div.specificfeedback')
-                        if(answerOutcome != null){
-                            updatedQuestion.answerData[answerDivIndex].reason = answerOutcome?.textContent
-                        }
-                    }    
-                }
-
-            }
-
-            // undefined if it doesn't exist :/ 
-            updatedQuestion.outcome = questionDivContent.querySelector('div.outcome.clearfix div.feedback')?.textContent;
-
-            if(updatedQuestion.outcome) {
-                if(updatedQuestion.outcome.includes('The correct answer is:')) {
-                    let answerFromOutcome = updatedQuestion.outcome.split('The correct answer is: ')[1]
-                    let foundAnswer = updatedQuestion.answerData.find(answer => answer.label == answerFromOutcome)
-                    if(foundAnswer) foundAnswer.correct = true
+            } 
+            else if(await questionDivContent.$('i[title="Incorrect"]')) {
+                for (const line of updatedQuestion.answerData) {
+                    line.correct = false;
                 }
             }
         }
+        else {
+            await questionDivContent.$$eval('div.answer div[class*="r"]', (answerDivs, updatedQuestion) => {
+                for (let i = 0; i < answerDivs.length; i++) {
+                    const answerDiv = answerDivs[i];
+                    let answerDivClass = answerDiv.getAttribute('class').toLowerCase()
+                    
+                    updatedQuestion.answerData[i].correct ??= answerDivClass.includes('incorrect') ? false : answerDivClass.includes('correct') ? true : null;
+                    if(updatedQuestion.answerData[i].correct != null) {
+                        //using query selector because inside eval
+                        //note that this is the specific feedback to the answer itself, not as a whole
+                        const answerOutcome = answerDiv.querySelector('div.specificfeedback')
+                        if(answerOutcome != null){
+                            updatedQuestion.answerData[i].reason = answerOutcome?.textContent
+                        }
+                    }    
+                }
+            }, updatedQuestion);
+        }
 
-        return updatedQuizResponses;
+        // undefined if it doesn't exist :/ 
+        // const questionName = await questionDivContent.$eval('div.qtext', e => e.textContent);
+        updatedQuestion.outcome = await questionDivContent.$eval('div.outcome.clearfix div.feedback', e => e?.textContent);
 
-    }, updatedQuizResponses)
+        //* I think I could check if it is div.rightanswer but this works anyways
+        if(updatedQuestion?.outcome?.includes('The correct answer is:')) {
+            const answerFromOutcome = updatedQuestion.outcome.split('The correct answer is: ')[1]
+            const foundAnswer = updatedQuestion.answerData.find(answer => answer.label == answerFromOutcome)
+            if(foundAnswer) foundAnswer.correct = true
+        }
+        //* if essay just assume that it gives you the answer
+        if(updatedQuestion.questionType == 'essay' && updatedQuestion.outcome) {
+            const essaySections = await UtilFunctions.SplitIntoCharSections(updatedQuestion.outcome, 600);
+            for (let i = 0; i < essaySections.length; i++) {
+                if(!updatedQuestion.answerData[i].correctStrings.includes(essaySections[i])) {
+                    updatedQuestion.answerData[i].correctStrings.push(essaySections[i])
+                }
+            }
+        }
+    }
+
+    return updatedQuizResponses;
+    // return await page.evaluate((updatedQuizResponses) => {
+    //     let questionDivs = document.querySelectorAll('form div[id*="question"] div.content');
+    //     for (const questionDivContent of questionDivs) {
+    //         updatedQuestion = updatedQuizResponses.find(question => question.questionName == questionDivContent.querySelector('div.qtext').textContent)
+    //         let textAnswer = questionDivContent.querySelector('span.answer input')
+    //         if(textAnswer){
+    //             //set the text value to be the text answer that was given
+    //             if(questionDivContent.querySelector('i[title="Correct"]')){
+    //                 updatedQuestion.answerData[0].correct = true
+    //                 if(!updatedQuestion.answerData[0].correctStrings.includes(updatedQuestion.answerData[0].value)) updatedQuestion.answerData[0].correctStrings.push(updatedQuestion.answerData[0].value)
+    //             } 
+    //             else if(questionDivContent.querySelector('i[title="Incorrect"]')) {
+    //                 updatedQuestion.answerData[0].correct = false
+    //             }
+                
+    //         }
+    //         else {
+    //             const answerDivs = Array.from(questionDivContent.querySelectorAll('div.answer div[class*="r"]'));
+    //             for (const answerDivIndex in answerDivs) {
+    //                 const answerDiv = answerDivs[answerDivIndex];
+    //                 let answerDivClass = answerDiv.getAttribute('class').toLowerCase()
+                    
+    //                 updatedQuestion.answerData[answerDivIndex].correct ??= answerDivClass.includes('incorrect') ? false : answerDivClass.includes('correct') ? true : null;
+    //                 if(updatedQuestion.answerData[answerDivIndex].correct != null) {
+    //                     //note that this is the specific feedback to the answer itself, not as a whole
+    //                     let answerOutcome = answerDiv.querySelector('div.specificfeedback')
+    //                     if(answerOutcome != null){
+    //                         updatedQuestion.answerData[answerDivIndex].reason = answerOutcome?.textContent
+    //                     }
+    //                 }    
+    //             }
+
+    //         }
+
+    //         // undefined if it doesn't exist :/ 
+    //         updatedQuestion.outcome = questionDivContent.querySelector('div.outcome.clearfix div.feedback')?.textContent;
+
+    //         if(updatedQuestion.outcome) {
+    //             if(updatedQuestion.outcome.includes('The correct answer is:')) {
+    //                 let answerFromOutcome = updatedQuestion.outcome.split('The correct answer is: ')[1]
+    //                 let foundAnswer = updatedQuestion.answerData.find(answer => answer.label == answerFromOutcome)
+    //                 if(foundAnswer) foundAnswer.correct = true
+    //             }
+    //         }
+    //     }
+
+    //     return updatedQuizResponses;
+
+    // }, updatedQuizResponses)
 }
 
 const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, autoFillEverything=false) => {
@@ -1016,7 +1073,7 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
                     //more like section number
                     answerNumber: index,
                     correct: null,
-                    correctStrings: currentdbAnswer?.correctStrings[index] || [],
+                    correctStrings: currentdbAnswer?.correct[index] || [],
                     value: essaySections[index],
                     type: 'essay',
                 })
@@ -1203,11 +1260,9 @@ async function GuessOrFillSpecificQuestion(question) {
         }
     }
     else if(question.questionType == 'essay') {
-        console.log(question)
         for (const section of question.answerData) {
             const curCorrectAnswer = section.correctStrings.length > 0 && section.correctStrings[0];
 
-            console.log(curCorrectAnswer)
             if(curCorrectAnswer) {
                 section.value = curCorrectAnswer;
                 section.correct = true;
@@ -1215,13 +1270,11 @@ async function GuessOrFillSpecificQuestion(question) {
             else {
                 //you can't really replace random stuff idk
                 // const replaceString = section.value.includes('…') ? '…' : (Math.random() > 0.5).toString().toUpperCase();
-                console.log(section.value)
                 if(section.value.includes('…')) {
                     section.value = section.value.replaceAll('…', (Math.random() > 0.5).toString().toUpperCase());
                 } else {
                     section.value += '\nextra filla'
                 }
-                console.log(section.value)
                 // console.log(replaceString)
                 // console.log(section.value)
                 // // extra filler so that it can show the answers basically
