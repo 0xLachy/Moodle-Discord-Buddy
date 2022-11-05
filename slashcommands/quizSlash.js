@@ -851,7 +851,7 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
             
             await bodyElem.evaluate(body => {
                 //remove the p elems so that the text box is then cleared
-                for (const pElem of body.querySelectorAll('p')) {
+                for (const pElem of body.querySelectorAll(':is( div[class="editor-indent"], p )')) {
                     pElem.remove()
                 }
             })
@@ -909,7 +909,15 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
 const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
     //TODO update for essay response and use page.$ probably
-    //I think they just need page
+    // const questionDivs = await page.$$('form div[id*="question"] div.content')
+    // // for (const questionDivContent of questionDivs) {
+    // //     //qtext contains only the title of the question
+    // //     const questionName = await questionDivContent.$eval('div.qtext', e => e.textContent);
+    // //I think they just need page
+    // for (const questionDivContent of questionDivs) {
+    //     const questionName = await questionDivContent.$eval('div.qtext', e => e.textContent);
+        
+    // }
     return await page.evaluate((updatedQuizResponses) => {
         let questionDivs = document.querySelectorAll('form div[id*="question"] div.content');
         for (const questionDivContent of questionDivs) {
@@ -1101,9 +1109,7 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
         const getTextWhile = new Promise(async (resolve, reject) => {
             let text;
             do {
-                console.log('working')
-                text = await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
-                console.log(text)
+                text = await frame.$$eval('body#tinymce :is( div[class="editor-indent"], p )', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
                 //basically waiting for a little if text is null
                 if(text == null) await new Promise((resolve, reject) => setTimeout(resolve, 100));
             }
@@ -1111,7 +1117,6 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             // while (!text) {
             //     text = await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
             // }
-            console.log('hi')
             resolve(text)
         })
 
@@ -1210,11 +1215,13 @@ async function GuessOrFillSpecificQuestion(question) {
             else {
                 //you can't really replace random stuff idk
                 // const replaceString = section.value.includes('…') ? '…' : (Math.random() > 0.5).toString().toUpperCase();
+                console.log(section.value)
                 if(section.value.includes('…')) {
-                    section.value = section.value.replace('…', (Math.random() > 0.5).toString().toUpperCase());
+                    section.value = section.value.replaceAll('…', (Math.random() > 0.5).toString().toUpperCase());
                 } else {
                     section.value += '\nextra filla'
                 }
+                console.log(section.value)
                 // console.log(replaceString)
                 // console.log(section.value)
                 // // extra filler so that it can show the answers basically
