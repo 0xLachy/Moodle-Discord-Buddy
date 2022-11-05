@@ -395,7 +395,6 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
 }
 
 //back applies -1 to question Index, whilst next adds 1, simple
-//! todo set the question index back to 0 when finished debugging
 const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  questionIndex=0, essayIndex=0) => {
     return new Promise(async (resolve, reject) => {
         // await interaction.editReply({components: []})
@@ -685,8 +684,9 @@ const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFill
     // if you cant access the quiz, don't bother getting questions, it will say the quiz is disabled in message
     if(quizDisabled) return null;
     
+    // doing network idle because error with go back to start scraping which is annoying
     await Promise.all([
-        page.waitForNavigation(),
+        page.waitForNavigation({ waitUntil: 'networkidle2' }),
         page.evaluate(() => document.querySelector('button[type="submit"]').click()),
         //on end querySelectorAll[1] because the second one is the actual full sumbit, that first one is like a retry button
         //but first I have to go back and click
@@ -841,6 +841,7 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
             textAnswer.value = updatedQuestion.answerData[0].value
         }
         else if(updatedQuestion.questionType == 'essay') {
+            console.log(updatedQuestion)
             const essayResponse = await questionDivContent.$('div.qtype_essay_response');
             const frameHandle = await essayResponse.evaluateHandle(node => node.querySelector('iframe'));
             const frame = await frameHandle.contentFrame();
@@ -995,7 +996,8 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             //? don't know if they have other elements than just <p>!
             questionType = 'essay'
             questionImgs.push(...await frame.$$eval('body img', images => images.map(img => img.src)))
-            //! doesn't work
+            
+            //? not sure if this works when the frame doesn't already have text and needs to wait
             const totalEssayText = await GetFrameText(frame);
             // get all of the text inside the box and join them with like new lines so they can be put in the embed with the lines seperated how it is on the site
             //* so yeah this means that it will be saved in sections in the db which is probably fine, can always  join them together, but it's quicker anyways to leave it like this
@@ -1092,61 +1094,53 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
 
     //doing it this way because waitForSelector() on frames don't work puppeteer
     async function GetFrameText(frame) {
-        //TODO race promises
-//         const promise1 = new Promise((resolve, reject) => {
-        //   setTimeout(resolve, 500, 'one');
-        // });
+        const tookTooLong = new Promise((resolve, reject) => {
+            setTimeout(reject, 10000, 'Took too long to load frame text')
+        })
+        
+        const getTextWhile = new Promise(async (resolve, reject) => {
+            let text;
+            do {
+                console.log('working')
+                text = await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
+                console.log(text)
+                //basically waiting for a little if text is null
+                if(text == null) await new Promise((resolve, reject) => setTimeout(resolve, 100));
+            }
+            while (text == null)
+            // while (!text) {
+            //     text = await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
+            // }
+            console.log('hi')
+            resolve(text)
+        })
 
-        // const promise2 = new Promise((resolve, reject) => {
-        //   setTimeout(resolve, 100, 'two');
-        // });
-
-        // Promise.race([promise1, promise2]).then((value) => {
-        //   console.log(value);
-        //   // Both resolve, but promise2 is faster
-        // });
-    //     return new Promise(async (resolve, reject) => {
-    //         let text;
-    //         // five seconds otherwise we ain't finding the iframe text
-    //         setTimeout(() => {
-    //             if(!text) {
-    //                 return reject(`Couldn't find iframe text`)
-    //             }
-    //         }, 5 * 1000)
-    //         while (!text) {
-    //             text = await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
-    //         }
-    //         // I think this only returns when the text gets something.... hopefully
-    //         return resolve(text);
-    //     });
-    // let text = await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
-    
-    // if(!text) {
-    //     await frame.waitForTimeout(2500)
-    //     return await frame.$$eval('body#tinymce p', pElems => pElems.map(p => p.textContent).filter(p=>p).join('\n'));
-    // } else {
-    //     return text
-    // }
+        return await Promise.race([tookTooLong, getTextWhile]);
     }
 }
 
 //! there is a problem where it waitf for navigation forever for some reason sometimes but not very often at all
 const GoBackToStart = async (page) => {
-    const backButton = await page.$('form div.submitbtns > input[name="previous"]');
-    if(backButton) {
-        // await backButton.click() 
-        await Promise.all([
-            page.waitForNavigation(),
-            backButton.click()
-        ])
-        // await Promise.all([
-        //     page.waitForNavigation(),
-        //     GoBackToStart(page)
-        // ])
-        // await page.waitForNavigation();
-        //recursion, keep going back until the start
-        await GoBackToStart(page);
-    }
+    return new Promise(async (resolve, reject) => {
+        const backButton = await page.$('form div.submitbtns > input[name="previous"]');
+        if(backButton) {
+            // await backButton.click() 
+            await Promise.all([
+                page.waitForNavigation(),
+                backButton.click()
+            ])
+            // await Promise.all([
+            //     page.waitForNavigation(),
+            //     GoBackToStart(page)
+            // ])
+            // await page.waitForNavigation();
+            //recursion, keep going back until the start
+            resolve(await GoBackToStart(page));
+        }
+        else {
+            resolve();
+        }
+    })
 
     // backButtonWasClicked = await page.evaluate(() => {
     //     let backButton = document.querySelector('form div.submitbtns > input[name="previous"]');
@@ -1204,18 +1198,28 @@ async function GuessOrFillSpecificQuestion(question) {
         }
     }
     else if(question.questionType == 'essay') {
+        console.log(question)
         for (const section of question.answerData) {
             const curCorrectAnswer = section.correctStrings.length > 0 && section.correctStrings[0];
 
+            console.log(curCorrectAnswer)
             if(curCorrectAnswer) {
                 section.value = curCorrectAnswer;
                 section.correct = true;
             }
             else {
                 //you can't really replace random stuff idk
-                const replaceString = section.value.includes('...') ? '...' : (Math.random() > 0.5).toString().toUpperCase();
-                // extra filler so that it can show the answers basically
-                section.value = section.value.replace(replaceString, (Math.random() > 0.5).toString().toUpperCase()) + '\n extra filla';
+                // const replaceString = section.value.includes('…') ? '…' : (Math.random() > 0.5).toString().toUpperCase();
+                if(section.value.includes('…')) {
+                    section.value = section.value.replace('…', (Math.random() > 0.5).toString().toUpperCase());
+                } else {
+                    section.value += '\nextra filla'
+                }
+                // console.log(replaceString)
+                // console.log(section.value)
+                // // extra filler so that it can show the answers basically
+                // section.value = section.value.replace(replaceString, (Math.random() > 0.5).toString().toUpperCase());
+                // console.log(section.value)
                 //just in case it was set to true or whatever idk
                 section.correct = null;
             }
