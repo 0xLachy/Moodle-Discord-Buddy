@@ -32,7 +32,7 @@ const data = new SlashCommandBuilder()
             .addStringOption(option =>
                 option.setName('studentname')
                     .setDescription('The name of student (doesn\'t need to be full name) e.g rita')
-                    .setRequired(true)
+                    // .setRequired(true)
             )
         )
 	.addSubcommand(subcommand =>
@@ -136,7 +136,16 @@ module.exports = {
         let filteredAssignments;
         switch (await interaction.options.getSubcommand()) {
             case 'missing':
-                let studentName = ConvertName(await interaction.options.getString("studentname"))
+                //putting in me if they don't provide a person name
+                let studentName = ConvertName(await interaction.options.getString("studentname") ?? 'me')
+                if(studentName == 'me') {
+                    studentName = config.name;
+                    //todo test this
+                    if(studentName == null) {
+                        await interaction.editReply({ content: `You don't have a name in your config, either run /login or /config and put your name in manually`})
+                        return browser.close()
+                    }
+                }
                 filteredAssignments = await GetWantedAssignments(await GetAllAssignments(page, chosenTerms), studentName)
                 SendEmbedMessage(filteredAssignments, interaction, studentName);
 
@@ -197,9 +206,9 @@ module.exports = {
                 interaction.editReply(`Didn't code the use of ${interaction.options.getSubcommand()} yet, sorry`)
                 break;
         }
+        //TODO Once its done, close the browser to stop the browsers stacking up
+        // await browser.close();
     }
-    //TODO Once its done, close the browser to stop the browsers stacking up
-    // await browser.close();
 }
 
 async function GetAllAssignments(page, chosenTerms, pushPeople=true){
@@ -460,7 +469,8 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
     // .setThumbnail() IDK maybe there is an image on the website :/
 
     // if they are logged into the website themself, limit logins uses the owner for this function so thats why the check is here
-    if(submitting || (!config.settings.general.LimitLogins && loginGroups.hasOwnProperty(interaction.user.id))) {
+    // await interaction.options.getSubcommand()
+    if(submitting || (!config.settings.general.LimitLogins && loginGroups.hasOwnProperty(interaction.user.id) && interaction.options.getSubcommand() != 'missing')) {
         assignmentEmbed.addFields(...info.submissionData);
     }
     else {
@@ -1034,6 +1044,7 @@ const CheckToAddWorkAndGetNames = async (interaction, i, nestedConfirmationColle
     // workOnAssignInfo.value = workOnAssignInfo.value.trim().replace('none', '');
     // const splitUpSubmittedAssignments = workOnAssignInfo.value.split(`', '`);
 
+    //! page is not in here
     const splitUpSubmittedAssignments = await GetWorkOnAssignment(page);
 
     //? /////////////////////////////////////////////////////
