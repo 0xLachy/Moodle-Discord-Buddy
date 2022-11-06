@@ -401,7 +401,8 @@ const GetFullAssignmentInfo = async (page, getComments=true) => {
         return {
             title: mainDiv.querySelector('h2').textContent,
             description: mainDiv.querySelector('div.no-overflow').textContent,
-            attachments: Array.from(mainDiv.querySelectorAll('div.fileuploadsubmission a'), (elem) => {
+            attachments: Array.from(mainDiv.querySelectorAll('div[id*="intro"] div[id*="assign_files"] div.fileuploadsubmission a'), (elem) => {
+                if(elem.classList)
                 //returning the name of the file, and then the url to that file so that people can download it
                 return { 
                     title: elem.title || elem.textContent, // I think some have a title attribute idk
@@ -575,7 +576,6 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
 
         assignmentEmbed.addFields({ name: 'Current work on Assignment', value: curWorkOnAssignment.join(', ') || 'none' })
         
-        console.log(curWorkOnAssignment)
         //truthy falsy, anything greater than 0 is enabled
         removeButton.setDisabled(!curWorkOnAssignment.length)
 
