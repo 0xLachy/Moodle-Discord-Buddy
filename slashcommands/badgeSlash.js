@@ -7,18 +7,26 @@ const { primaryColour } = require("../util/constants");
 const badgeInfo = {
     quizzes: {
         info: 'Get these badges by completing quizzes (without autofill)',
-        dutiful: { description: 'completed 10 daily quizzes', test: 10, url: 'TODO'},
+        dutiful: { description: 'Completed 10 daily quizzes', test: 10, url: 'TODO'},
         dedicated: { description: 'Completed 50 daily quizzes!', test: 50, url: 'TODO'},
         devout: { description: 'Completed 100 daily quizzes', test: 100, url: 'TODO'},
         devoted: { description: 'Completed 365 daily quizzes!', test: 365, url: 'TODO'},
     },
     vip: { description: 'Part of vip group', url: 'VIP BADGE URL' },
     elder: { description: 'Account older than 6 months!', url: 'Meh'},
+    donations: {
+        info: 'Badges from donating and recieving donations from others. Run /donate to try get some of these!',
+        likeable: { description: 'People donated $250 (or more) to you!', url: 'TODO'},
+        kind: { description: 'Donated $30 moodle money to people', test: 30, url: 'TODO'},
+        generous: { description: 'Donated at least $100', test: 100, url: 'TODO'},
+        charitable: { description: 'Donated at least $250', test: 250, url: 'TODO'},
+        simp: { description: 'Donated at least $1000', test: 1000, url: 'TODO'},
+    },
     shop: { 
         info: 'Badges that you bought from the shop',
         collector: { description: 'Spend moodle money just to get a badge??', url: 'Something fancy'},
-        opportunist: { description: 'Limited time badge, sometimes put in the shop'},
-    }
+        opportunist: { description: 'Limited time badge, sometimes put in the shop', url: 'TODO'},
+    },
 }
 
 const CheckForNewBadges = async (config) => {
@@ -30,31 +38,47 @@ const CheckForNewBadges = async (config) => {
         const d = new Date(); // today date
         d.setMonth(d.getMonth() - 6);  //subtract 6 month from current date 
         if(stats.CreationDate < d) {
-            config.badges.push('elder')
-            newBadges.push('elder')
+            AddBadge('elder')
         }
     }
 
-    if(!config.badges.includes('vip')) {
-        if(config.vip) {
-            config.badges.push('vip')
-            newBadges.push('vip')
-        }
+    if(!config.badges.includes('vip') && config.vip) {
+        AddBadge('vip')
     }
 
+    //quiz section
     for (const quizBadgeName of Object.keys(badgeInfo.quizzes)) {
         if(quizBadgeName != 'info' && !config.badges.includes(quizBadgeName)) {
             if(stats.DailyQuizzesCompleted >= badgeInfo.quizzes[quizBadgeName].test) {
-                config.badges.push(quizBadgeName)
-                newBadges.push(quizBadgeName)
+                AddBadge(quizBadgeName)
             }
         }
     }
 
+    //donation section
+    if(!config.badges.includes('likeable') && stats.TokensRecieved > 250) {
+        AddBadge('likeable')
+    }
+    for (const quizBadgeName of Object.keys(badgeInfo.donations)) {
+        if(quizBadgeName == 'info' || quizBadgeName == 'likeable') continue;
+        
+        if(!config.badges.includes(quizBadgeName)) {
+            if(stats.TokensDonated >= badgeInfo.donations[quizBadgeName].test) {
+                AddBadge(quizBadgeName)
+            }
+        }
+    }
+
+    // only have to save once this way
     if(newBadges.length > 0) {
         await config.save();
     }
     return newBadges;
+
+    function AddBadge(badgeName) {
+        config.badges.push(badgeName)
+        newBadges.push(badgeName)
+    }
 }
 
 //TODO add an option to view all people with <badgeName> 

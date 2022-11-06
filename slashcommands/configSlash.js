@@ -308,10 +308,10 @@ module.exports = {
 
         if(userConfig.settings.general.AutoSave) {
             //save to database, this is all you have to do :)
-            userConfig.save();
+            await userConfig.save();
         }
         // update the configs in the cache
-        UpdateConfigs(userConfig);
+        await UpdateConfigs(userConfig);
     }
 }
 
