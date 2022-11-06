@@ -1,5 +1,6 @@
-const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
-const { GetConfigById } = require("./configSlash")
+const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder, resolveColor} = require('discord.js');
+const { GetConfigById, GetConfigs } = require("./configSlash")
+const { GetSelectMenuOverflowActionRows } = require("../util/functions");
 const { primaryColour } = require("../util/constants");
 
 //PUT THE BADGES HERE, URL is the icon for the badge (reccomended)
@@ -81,8 +82,6 @@ const CheckForNewBadges = async (config) => {
     }
 }
 
-//TODO add an option to view all people with <badgeName> 
-//TODO add a see all button to see all the badges that you can possibly get
 const data = new SlashCommandBuilder()
 	.setName('badges')
 	.setDescription('View your badges or somebody elses')
@@ -119,7 +118,7 @@ module.exports = {
     }
 }
 
-const DisplayBadgeOverviewEmbed = async (interaction, config, target, displayAll=false) => {
+const DisplayBadgeOverviewEmbed = async (interaction, config, target, displayAll=false, pageNum=0) => {
     const badgeOverviewEmbed = new EmbedBuilder()
         .setColor(primaryColour)
         .setTitle(displayAll ? `All available badges` : `Badges for ${config.name ?? target?.username ?? config.nicknames[0]}`)
@@ -141,15 +140,36 @@ const DisplayBadgeOverviewEmbed = async (interaction, config, target, displayAll
             }).filter(n=>n)
             // { name: 'Vip Status', value: `${userConfig.vip ? 'true :partying_face:' : 'false'}`, inline: true},
         );
+    
+    const componentRows = []
     const buttonRow = new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('BackBadge') // doesn't matter
-                .setLabel(displayAll ? 'back' : 'more info')
-                .setStyle(ButtonStyle.Secondary) // red back 
-        );
+    .addComponents(
+        new ButtonBuilder()
+            .setCustomId('BackBadge') // doesn't matter
+            .setLabel(displayAll ? 'back' : 'more info')
+            .setStyle(ButtonStyle.Secondary) // red back 
+    );
+    componentRows.push(buttonRow)
+    if(displayAll) {
+            // peopleOptions = guildMembers.map(member => { return { label: `${member?.nickname ?? member.user.username}`, value: `${member.id}`, description:`They currently hold $${allConfigs.find(uConfig => uConfig.discordId == member.id)?.tokens || defaultTokens}` } });
+        const badgeOptions = Object.entries(badgeInfo).map(([topLevelName, topLevelData]) => {
+            //this means that it has no children but also needs to have info :/
+            if(!topLevelData?.info) {
+                return { label: topLevelName, value: topLevelName, description: 'badge to choose'}
+            }
+            else {
+                return Object.entries(topLevelData).map(([lowerLevelBadge, lowerLevelData]) => {
+                    if(lowerLevelBadge != 'info') {
+                        return { label: lowerLevelBadge, value: lowerLevelBadge, description: 'badge to choose'}
+                    }
+                }).filter(b=>b)
+            }
+        }).flat()
+        componentRows.push(...GetSelectMenuOverflowActionRows(pageNum, badgeOptions, 'Choose a badge to find other people that have it!'))
+    }
+    
 
-    const reply = await interaction.editReply({ embeds: [badgeOverviewEmbed], components: [buttonRow] })
+    const reply = await interaction.editReply({ embeds: [badgeOverviewEmbed], components: componentRows })
 
     const filter = i => i.user.id === interaction.user.id;
     // create collector to handle when button is clicked using the reply
@@ -157,7 +177,21 @@ const DisplayBadgeOverviewEmbed = async (interaction, config, target, displayAll
 
     collector.on('collect', async (i) => {
         i.deferUpdate();
-        return await DisplayBadgeOverviewEmbed(interaction, config, target, !displayAll)
+        if(i.customId == 'select') {
+            await collector.stop();
+            return await DisplayPeopleWithBadge(interaction, i.values[0])
+        }
+        else if(i.customId == 'next_page') {
+            pageNum++;
+            await interaction.editReply({ components: [ buttonRow, ...GetSelectMenuOverflowActionRows(page, peopleOptions, 'Choose a person to donate to!') ]})
+        }
+        else if(i.customId == 'previous_page') {
+            pageNum--;
+            await interaction.editReply({ components: [ buttonRow, ...GetSelectMenuOverflowActionRows(page, peopleOptions, 'Choose a person to donate to!') ]})
+        }
+        else {
+            return await DisplayBadgeOverviewEmbed(interaction, config, target, !displayAll)
+        }
     })
     collector.on('end', collected => {
         if (collected.size == 0) {
@@ -165,4 +199,18 @@ const DisplayBadgeOverviewEmbed = async (interaction, config, target, displayAll
             interaction.editReply({ components: [] });
         }
     });
+}
+
+const DisplayPeopleWithBadge = async (interaction, badgeName) => {
+    const peopleWithBadges = GetConfigs().filter(config => config.badges.includes(badgeName))
+    const badgeOverviewEmbed = new EmbedBuilder()
+    .setColor(primaryColour)
+    .setTitle(`People with the badge ${badgeName}`)
+    // .setThumbnail(interaction.user.displayAvatarURL())
+    .setDescription('Get badges through purchasing them through the shop or getting the right stats.')
+    // .addFields({name: 'People:', value: peopleWithBadges.map(person => person.name ?? person.nicknames[0] ?? `<@${person.discordId}>`).join('\n') || 'Nobody with badge!'})
+    // yeah this is better this way
+    .addFields({name: 'People:', value: peopleWithBadges.map(person => `<@${person.discordId}>`).join('\n') || 'Nobody with badge!'})
+        
+    await interaction.editReply({content: '', embeds: [badgeOverviewEmbed], components: []})
 }
