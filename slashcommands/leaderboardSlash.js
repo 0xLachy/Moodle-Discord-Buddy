@@ -249,7 +249,8 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
 
         for(person of sortedLeaderboardResults){
             // let [studentName, score] = studentAndScore;
-            msgString += `${person.name} : ${person.tally}\n`
+            // if they are vip give them a little shield, //TODO in the future make this custom emoji
+            msgString += `${person?.config?.vip ? ':shield: ' : ''}${person.name} : ${person.tally}\n`
         }
 
         if (msgString == ""){
