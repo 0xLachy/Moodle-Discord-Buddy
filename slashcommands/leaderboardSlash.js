@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const { EmbedBuilder, SlashCommandBuilder, PermissionsBitField } = require('discord.js');
 const UtilFunctions = require("../util/functions");
 const { primaryColour } = require("../util/constants");
-const { ConvertName } = require('./configSlash')
+const { ConvertName, GetConfigs } = require('./configSlash')
 
 //TODO implement code for the role options and also todo, when those roles are added make sure not in dm
 //.setRequired(true));
@@ -47,7 +47,6 @@ const leaderBoardRoles = [
 // taken from the end, in this case only sdd slacker will be the last place role
 const lastPlaceRolesCount = 2;
 
-//TODO when doing add roles, check that interaction.InGuild()
 module.exports = {
     category: "info",
     permissions: [],
@@ -187,6 +186,9 @@ async function FasterLeaderboard(page, chosenTerms, rigPerson=null, mergeResults
 function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, title, colour=primaryColour) {
     // Create the Message Embed to send to the channel
     let embedMsg = new EmbedBuilder();
+    // used to display that people with configs
+    const allConfigs = GetConfigs()
+
     title ? embedMsg.setTitle(title) : embedMsg.setTitle(`Leaderboard Results:`);
     // if(title != "default"){
     //     embedMsg.setTitle(title)
@@ -221,14 +223,33 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
     function AddToLeaderboardResultToEmbed(leaderboardResults, fieldName) {
         let msgString = "";
 
-        sortedLeaderboardResults = Object.entries(leaderboardResults).sort((a,b) => b[1]-a[1])
-        // for(studentAndScore of Object.entries(leaderboardResults)){
-        //     let [studentName, score] = studentAndScore;
-        //     msgString += `${studentName} : ${score}\n`
-        // }
-        for(studentAndScore of sortedLeaderboardResults){
-            let [studentName, score] = studentAndScore;
-            msgString += `${studentName} : ${score}\n`
+        //* This is how sorting array, putting people logged in above everyone else because they are better
+        // sortedLeaderboardResults = Object.entries(leaderboardResults).sort((a,b) => b[1]-a[1])
+        // Set it up so the people with configs have priority
+        let sortedLeaderboardResults = Object.entries(leaderboardResults).map(([name, tally]) => {
+            return {
+                name,
+                tally,
+                config: allConfigs.find(fig => fig.name == name.toLowerCase()) // prolly null
+            }
+        })
+        //now properly sorting it
+        sortedLeaderboardResults = sortedLeaderboardResults.sort((a, b) => {
+            // sorting in reverse order kinda if they have a config
+            if(a.config && !b.config) {
+                return -1;
+            }
+            else if(b.config && !a.config) {
+                return 1;
+            }
+            else {
+                return b.tally - a.tally;
+            }
+        })
+
+        for(person of sortedLeaderboardResults){
+            // let [studentName, score] = studentAndScore;
+            msgString += `${person.name} : ${person.tally}\n`
         }
 
         if (msgString == ""){
