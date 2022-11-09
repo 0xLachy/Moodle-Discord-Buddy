@@ -534,8 +534,8 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
         ].filter(w=>w)//get rid of the null / undefined ones (truthy statement)
         
         //this is what the max file size is: Maximum file size: 64MB, maximum number of files: 1
-        //!even though the docs basically say that this works, it doesn't, it should....
-        // const restrictionsString = page.$('div.fp-restrictions span').textContent;
+        //? this other method might work too, not sure which is nicer
+        // const restrictionsString = (await page.$('div.fp-restrictions span')).textContent;
         const restrictionsString = await page.evaluate(() => document.querySelector('div.fp-restrictions span').textContent)
 
         //returns numbers or null I guess, if it isn't in mb then I'm just gonna set then max to be the discord limit of 100mb (but discord does it for me!)
@@ -554,12 +554,15 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
         //* owner is used for person identification
         const dbWork = await AssignmentModel.find({ name: info.title })
 
+        //* the current work is in the submission info, but like yeah I guess this can be for when it isn't saved yet
+        const curWorkOnAssignment = await GetWorkOnAssignment(page);
+
         // the configs of everyone that owns work and has added it to the shared list
         const submitterConfigs = dbWork.map(work => GetConfigById(work.owner))
-        const submitFullyDisabled = Boolean(personalOnlyCheckBox) || dbWork.length == 0;
+        const sharedFullyDisabled = Boolean(personalOnlyCheckBox) || dbWork.length == 0;
 
         // create action row, disable work list, disable add work are args
-        const buttonRow = CreateSubmitButtonsRow(submitFullyDisabled, userWork.length == 0);
+        const buttonRow = CreateSubmitButtonsRow(sharedFullyDisabled, (userWork.length == 0 || CheckForMaxFilesIfAdding(userWork, curWorkOnAssignment, maxNumberOfFiles)));
 
         //get these out so I can modify them at times when needed, like the remove button right now!
         const addWorkButton = buttonRow.components.find(btn => btn.data.label == 'Add Work');
@@ -568,11 +571,9 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
 
         //set the shared work button to have extra info because that way it is known if its fully disabled cause yeah
         //! this might cause discordAPI issues
-        sharedWorkButton.data.fullyDisabled = submitFullyDisabled;
+        sharedWorkButton.data.fullyDisabled = sharedFullyDisabled;
         // then just check if user work is different to other work and viola. thats how you know
         assignmentEmbed.addFields({ name: 'Work to Add', value: userWork.map(work => `[${work.name}](${work.attachment})`).join(', ') || 'none'})
-        //* the current work is in the submission info, but like yeah I guess this can be for when it isn't saved yet
-        const curWorkOnAssignment = await GetWorkOnAssignment(page);
 
         assignmentEmbed.addFields({ name: 'Current work on Assignment', value: curWorkOnAssignment.join(', ') || 'none' })
         
@@ -596,6 +597,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                     await page.evaluate(() => document.querySelector('input[type="submit"][value="Cancel"]').click())
                 }
                 //just remove the components instead of disabling cause I'm lazy
+                //todo make them disabled instead
                 return resolve(await interaction.editReply({ components: []}))
             }
             else if(i.customId == 'Remove') {
@@ -604,50 +606,53 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 // await i.deferUpdate();
                 const removeCompRow = CreateSubmitButtonsRow(true, true, false, true,);
                 
-                // console.log(i.message.components[0], removeCompRow)
-                // if currently in the removing work stage, close the adding work window
-                // i.message.components[0].components.for
-                if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == removeCompRow.components[index].data.disabled)) {
-                    // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
-                    await nestedConfirmationCollector.collector.stop();
-                    i.deferUpdate();
-                    return await interaction.editReply({ components: [buttonRow]})
-                    // return await i.deferUpdate({ components: [buttonRow] });
-                }
+                // calling this function but instead of adding we are removing stuff
+                CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, userWork, assignmentEmbed, 
+                    removeCompRow, addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles, true)
+                // // console.log(i.message.components[0], removeCompRow)
+                // // if currently in the removing work stage, close the adding work window
+                // // i.message.components[0].components.for
+                // if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == removeCompRow.components[index].data.disabled)) {
+                //     // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
+                //     await nestedConfirmationCollector.collector.stop();
+                //     i.deferUpdate();
+                //     return await interaction.editReply({ components: [buttonRow]})
+                //     // return await i.deferUpdate({ components: [buttonRow] });
+                // }
 
-                //* can't edit components in defer update because they vanish back to normal in seconds, I swear that used to work
-                await i.deferUpdate();
-                await interaction.editReply({components: [removeCompRow]})
-                // await i.deferUpdate({components: [removeCompRow]});
+                // //* can't edit components in defer update because they vanish back to normal in seconds, I swear that used to work
+                // await i.deferUpdate();
+                // await interaction.editReply({components: [removeCompRow]})
+                // // await i.deferUpdate({components: [removeCompRow]});
                 
-                //this button should be disabled if the thing says none
+                // //this button should be disabled if the thing says none
 
-                // let workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
-                // const splitUpSubmittedAssignments = workOnAssignInfo.value.trim().split(', ');
+                // // let workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
+                // // const splitUpSubmittedAssignments = workOnAssignInfo.value.trim().split(', ');
 
-                const splitUpSubmittedAssignments = await GetWorkOnAssignment(page);
+                // const splitUpSubmittedAssignments = await GetWorkOnAssignment(page);
 
-                const filesToRemoveNames = await AmountConfirmationInput(interaction, nestedConfirmationCollector, splitUpSubmittedAssignments, 'Choose whether or not to remove all or just a certain file from the assignment', ButtonStyle.Danger)
+                // const filesToRemoveNames = await AmountConfirmationInput(interaction, nestedConfirmationCollector, splitUpSubmittedAssignments, 'Choose whether or not to remove all or just a certain file from the assignment', ButtonStyle.Danger)
 
-                // await interaction.editReply({ components: [buttonRow]})
-                for await (const submFile of await page.$$('div.fp-thumbnail')) {
-                    const submFileName = await submFile.evaluate((node) => node.querySelector('img').title);
-                    if(filesToRemoveNames.includes(submFileName)) {
-                        //* for some reason when a thing is deleted, sometimes it stays on the page unfortunately
-                        await submFile.click().catch();
-                        await DeleteFileFromPage(page);
+                // // await interaction.editReply({ components: [buttonRow]})
+                // for await (const submFile of await page.$$('div.fp-thumbnail')) {
+                //     const submFileName = await submFile.evaluate((node) => node.querySelector('img').title);
+                //     if(filesToRemoveNames.includes(submFileName)) {
+                //         //* for some reason when a thing is deleted, sometimes it stays on the page unfortunately
+                //         await submFile.click().catch();
+                //         await DeleteFileFromPage(page);
 
-                        // remove it from the submitted assignments thing
-                        splitUpSubmittedAssignments.splice(splitUpSubmittedAssignments.indexOf(submFileName), 1)
-                    }
-                }
+                //         // remove it from the submitted assignments thing
+                //         splitUpSubmittedAssignments.splice(splitUpSubmittedAssignments.indexOf(submFileName), 1)
+                //     }
+                // }
 
-                // const oldWorkOnAssign = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment');
-                //!!!! IF THERE IS A COMMA LIKE THAT, IT THINKS IT IS MORE THAN ONE ASSIGNMENT!
-                // oldWorkOnAssign.value = oldWorkOnAssign.value.split(', ').filter(olWork => !filesToRemoveNames.includes(olWork)).join(', ') || 'none';
-                assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ? `'${splitUpSubmittedAssignments.join(`', '`)}'` : 'none';
+                // // const oldWorkOnAssign = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment');
+                // //!!!! IF THERE IS A COMMA LIKE THAT, IT THINKS IT IS MORE THAN ONE ASSIGNMENT!
+                // // oldWorkOnAssign.value = oldWorkOnAssign.value.split(', ').filter(olWork => !filesToRemoveNames.includes(olWork)).join(', ') || 'none';
+                // assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ? `'${splitUpSubmittedAssignments.join(`', '`)}'` : 'none';
 
-                await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
+                // await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
             }
             else if(i.customId == 'Add Work') {
                 //* it should be disabled if they have no work, but just a precausion
@@ -658,10 +663,10 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
 
                 const addWorkOnlyRow = CreateSubmitButtonsRow(true, false, true, true);
                 
-                await CheckToAddWorkAndGetNames(interaction, i, nestedConfirmationCollector, chosenWork, userWork, assignmentEmbed, 
+                await CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, userWork, assignmentEmbed, 
                     addWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, maxNumberOfFiles)
 
-                await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
+                // await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
 
             }
             else if(i.customId == 'Save') {
@@ -799,7 +804,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
 const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork, dbWork, userWork, submitterConfigs, assignmentName) => {
     //If this function is being called dbWork.length > 0 is true so iteration works
     //*now I doubt 25 people will submit assignments, but I should probably code for that
-    // todo if admin, allow them to delete submissions, or if validy is false auto delete I guess
+    // todo if admin, allow them to delete submissions, or if validity is false auto delete I guess
 
     // get all the configs of the people submitting 
     // I don't want to refresh this function heaps because yeah
@@ -1029,9 +1034,9 @@ const CreateTmpAndUpload = async (page, work) => {
 
 }
 
-const CheckToAddWorkAndGetNames = async (interaction, i, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, addWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles, deleting=false) => {
+const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, modifyWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles, deleting=false) => {
     // if currently in the adding work stage, close the adding work window
-    if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == addWorkOnlyRow.components[index].data.disabled)) {
+    if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == modifyWorkOnlyRow.components[index].data.disabled)) {
         // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
         await nestedConfirmationCollector.collector.stop();
         i.deferUpdate();
@@ -1039,34 +1044,33 @@ const CheckToAddWorkAndGetNames = async (interaction, i, nestedConfirmationColle
         // return await i.deferUpdate({ components: [buttonRow] });
     }
 
-    //?BOTH OF THESE METHODS ARE VIABLE, WHATS BETTER, IDK... //////////////
+    //?BOTH OF THESE METHODS ARE VIABLE, WHATS BETTER, WHICH IS CHEAPER AND FASTER I WOULD LOVE TO KNOW IDK... //////////////
     // let workOnAssignInfo = mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
     // workOnAssignInfo.value = workOnAssignInfo.value.trim().replace('none', '');
     // const splitUpSubmittedAssignments = workOnAssignInfo.value.split(`', '`);
 
-    //! page is not in here
     const splitUpSubmittedAssignments = await GetWorkOnAssignment(page);
 
     //? /////////////////////////////////////////////////////
     
+    console.log(deleting)
     //basically check if added the max amount of assignments by getting the total and checking against limit
-    const AddAllButtonDisabled = workToAdd.reduce((total, work) => {
-        // if the name isn't in the submission already, then that is a new file so add it to the total
-        if(!splitUpSubmittedAssignments.includes(work.name)) {
-            total++;
-        }
-        return total
-    }, 0) + splitUpSubmittedAssignments.length > maxNumberOfFiles;
+    const AddAllButtonDisabled = !deleting && CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles);
 
-    const workToChangeNames = AmountConfirmationInput(interaction, nestedConfirmationCollector, workToAdd.map(work => work.name), 'Choose a choice of work that you want to add, or all at once!', ButtonStyle.Primary, AddAllButtonDisabled)
-    
     // await interaction.editReply({components: [addWorkOnlyRow]})
-    await i.deferUpdate({components: [addWorkOnlyRow]});
+    await i.deferUpdate({components: [modifyWorkOnlyRow]});
+
+    // might be better to do a tertary deleting thing at the start idk what's better to be honest
+    // tried out red for remove buttons but it looks really ugly
+    const workToChangeNames = await AmountConfirmationInput(interaction, nestedConfirmationCollector, 
+        deleting ? splitUpSubmittedAssignments : workToAdd.map(work => work.name), `Choose a choice of work that you want to ${deleting ? 'remove' : 'add'}, or all at once!`, 
+        ButtonStyle.Primary, AddAllButtonDisabled)
+    
     
     if(deleting) {
         for await (const submFile of await page.$$('div.fp-thumbnail')) {
             const submFileName = await submFile.evaluate((node) => node.querySelector('img').title);
-            if(filesToRemoveNames.includes(submFileName)) {
+            if(workToChangeNames.includes(submFileName)) {
                 //* for some reason when a thing is deleted, sometimes it stays on the page unfortunately
                 await submFile.click().catch();
                 await DeleteFileFromPage(page);
@@ -1081,10 +1085,12 @@ const CheckToAddWorkAndGetNames = async (interaction, i, nestedConfirmationColle
                 splitUpSubmittedAssignments.splice(splitUpSubmittedAssignments.indexOf(submFileName), 1)
             }
         }
+        // disabled if there isn't any work
+        removeButton.setDisabled(!splitUpSubmittedAssignments.length)
     }
     else {
-        for (const work of userWork) {
-            if(!clearButton.data.disabled && workToChangeNames.includes(work.name)) {
+        for (const work of workToAdd) {
+            if(!removeButton.data.disabled && workToChangeNames.includes(work.name)) {
                 const alreadySubmittedFile = await page.$(`div.fp-thumbnail img[title="${work.name}"]`)
                 
                 //* deleting the old file, cause they are uploading a new one
@@ -1103,8 +1109,8 @@ const CheckToAddWorkAndGetNames = async (interaction, i, nestedConfirmationColle
             }
         }
 
-        //now work has been added we can re-enabled the remove button if it was ever disabled
-        removeButton.setDisabled(false);
+        // if they actually added work enable the remove button, otherwise leave how it was
+        if(workToChangeNames.length > 0) removeButton.setDisabled(false)
     }
 
     
@@ -1118,12 +1124,13 @@ const CheckToAddWorkAndGetNames = async (interaction, i, nestedConfirmationColle
 
     // doing greater than, just incase they added an extra one then they are supposed to!
     // const addingWorkDisabled = workOnAssignInfo.value.split(', ').length >= maxNumberOfFiles;
-    const addingWorkDisabled = splitUpSubmittedAssignments.length >= maxNumberOfFiles;
-    addWorkButton.setDisabled(addingWorkDisabled);
+    // const addingWorkDisabled = splitUpSubmittedAssignments.length >= maxNumberOfFiles;
+    addWorkButton.setDisabled(workToAdd.length > 0 && CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles));
     //If shared work isn't already disabled change the disabled of this, 
     //! dosen't work if removing files and re - enabling!!!
     // if(!sharedWorkButton.data.disabled) sharedWorkButton.setDisabled(addingWorkDisabled);
-    if(!sharedWorkButton.data.fullyDisabled) sharedWorkButton.setDisabled(addingWorkDisabled);
+    //If the shared work isn't fully disabled, they might be able to still add more work
+    if(!sharedWorkButton.data.fullyDisabled) sharedWorkButton.setDisabled(splitUpSubmittedAssignments.length >= maxNumberOfFiles);
 
     await interaction.editReply({ embeds: [mainEmbed], components: [buttonRow]})
 }
@@ -1160,8 +1167,8 @@ const AmountConfirmationInput = async (interaction, nestedConfirmationCollector,
         nestedConfirmationCollector.collector = await reply.createMessageComponentCollector({ filter, time });
 
         nestedConfirmationCollector.collector.on('collect', async (i) => {
-            await nestedConfirmationCollector.collector.stop();
             await i.deferUpdate();
+            await nestedConfirmationCollector.collector.stop();
             if(i.customId == 'All') {
                 //resolve every choice, so just return the choices!
                 return resolve(btnChoices)
@@ -1226,3 +1233,14 @@ const CreateSubmitButtonsRow = (sharedWorkDisabled=false, addWorkDisabled=false,
 const GetWorkOnAssignment = async (page) => {
     return await page.evaluate(() => Array.from(document.querySelectorAll('div.fp-thumbnail img'), elem => elem.title));
 }
+
+function CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles) {
+    return workToAdd.reduce((total, work) => {
+        // if the name isn't in the submission already, then that is a new file so add it to the total
+        if (!splitUpSubmittedAssignments.includes(work.name)) {
+            total++;
+        }
+        return total;
+    }, 0) + splitUpSubmittedAssignments.length > maxNumberOfFiles;
+}
+
