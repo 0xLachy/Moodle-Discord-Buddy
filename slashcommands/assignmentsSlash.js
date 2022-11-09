@@ -41,7 +41,7 @@ const data = new SlashCommandBuilder()
 			.setDescription('submit an assignment')
             .addStringOption(option =>
                 option.setName('assignment-name')
-                    .setDescription('The assignment that you are submitting to, if null select menu shown')
+                    .setDescription('The assignment that you are submitting to, if null select menu shown (you can use url if you want)')
                     .setRequired(false)
             )
             .addAttachmentOption(option =>
@@ -1036,7 +1036,15 @@ const CreateTmpAndUpload = async (page, work) => {
 
 const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, modifyWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles, deleting=false) => {
     // if currently in the adding work stage, close the adding work window
-    if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == modifyWorkOnlyRow.components[index].data.disabled)) {
+    // console.log(i.message.components[0], modifyWorkOnlyRow)
+    // for (let i = 0; i < i.message.components[0].length; i++) {
+    //     const element = i.message.components[0][i].data;
+    //     console.log(element)
+    //     console.log(modifyWorkOnlyRow.components[i].data)
+        
+    // }
+    // if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == modifyWorkOnlyRow.components[index].data.disabled)) {
+    if(nestedConfirmationCollector.collector) {
         // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
         await nestedConfirmationCollector.collector.stop();
         i.deferUpdate();
@@ -1053,7 +1061,6 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
 
     //? /////////////////////////////////////////////////////
     
-    console.log(deleting)
     //basically check if added the max amount of assignments by getting the total and checking against limit
     const AddAllButtonDisabled = !deleting && CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles);
 
