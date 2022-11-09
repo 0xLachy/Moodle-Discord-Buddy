@@ -248,7 +248,6 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
         })
 
         for(person of sortedLeaderboardResults){
-            // let [studentName, score] = studentAndScore;
             // if they are vip give them a little shield, //TODO in the future make this custom emoji
             msgString += `${person?.config?.vip ? ':shield: ' : ''}${person.name} : ${person.tally}\n`
         }
@@ -256,9 +255,14 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
         if (msgString == ""){
             msgString = "Uhhhhh Nobody is here?? :face_with_raised_eyebrow:"  
         }
+
         if(msgString.length > 1024){
 
-            const assignmentStrings = msgString.match(/.{1,1024}(\s|$)/g);
+            const assignmentStrings = msgString.match(/.{1,1023}(\s|$)/g);
+            // gotta be less that 1025 or whatever... the only problem with this is that if it doesn't complete the \n then it cuts off stuff hmm
+            // ? in the future figure out a way to do with with regex so it can go back to last \n if it goes over (?=...) lookahead might be handy
+            // const assignmentStrings = msgString.match(/.{1,1023}(\s|$)/gms);
+            // console.log(msgString.match(/.{1,1024}(\s|$)/gms))
 
             let chunks = []
             let tempStr = ""
@@ -275,7 +279,7 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
                 chunks.push(tempStr)
             }
 
-            chunks.forEach((biggerChunk, index) => embedMsg.addFields({ name: `${fieldName} part ${index + 1}`, value: biggerChunk }))
+           chunks.forEach((biggerChunk, index) => embedMsg.addFields({ name: `${fieldName} part ${index + 1}`, value: biggerChunk }))
         }
         else{
             //Add the assignments that were done to the message

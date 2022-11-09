@@ -604,7 +604,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 //TODO make it prompt for all, or specific files
                 // await interaction.editReply({components: [CreateSubmitButtonsRow(true, true, true, true,)]})
                 // await i.deferUpdate();
-                const removeCompRow = CreateSubmitButtonsRow(true, true, false, true,);
+                const removeCompRow = CreateSubmitButtonsRow(true, true, false, true);
                 
                 // calling this function but instead of adding we are removing stuff
                 CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, userWork, assignmentEmbed, 
@@ -664,7 +664,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 const addWorkOnlyRow = CreateSubmitButtonsRow(true, false, true, true);
                 
                 await CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, userWork, assignmentEmbed, 
-                    addWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, maxNumberOfFiles)
+                    addWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles)
 
                 // await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
 
@@ -1043,15 +1043,25 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     //     console.log(modifyWorkOnlyRow.components[i].data)
         
     // }
-    // if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == modifyWorkOnlyRow.components[index].data.disabled)) {
-    if(nestedConfirmationCollector.collector) {
+    //* if all the other buttons are in disabled mode than remove this old message thing
+    if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == modifyWorkOnlyRow.components[index].data.disabled)) {
+        // old method, but if they spam click the modify buttons it causes problems, 
+    // if(nestedConfirmationCollector.collector) {
         // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
         await nestedConfirmationCollector.collector.stop();
         i.deferUpdate();
         return await interaction.editReply({ components: [buttonRow]})
         // return await i.deferUpdate({ components: [buttonRow] });
     }
+    
 
+    await Promise.all([
+        interaction.editReply({components: [modifyWorkOnlyRow]}),
+        i.deferUpdate()
+    ]);
+    // await i.deferUpdate();
+    // await interaction.editReply({components: [modifyWorkOnlyRow]})
+    // await i.deferUpdate({components: [modifyWorkOnlyRow]});
     //?BOTH OF THESE METHODS ARE VIABLE, WHATS BETTER, WHICH IS CHEAPER AND FASTER I WOULD LOVE TO KNOW IDK... //////////////
     // let workOnAssignInfo = mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
     // workOnAssignInfo.value = workOnAssignInfo.value.trim().replace('none', '');
@@ -1064,8 +1074,6 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     //basically check if added the max amount of assignments by getting the total and checking against limit
     const AddAllButtonDisabled = !deleting && CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles);
 
-    // await interaction.editReply({components: [addWorkOnlyRow]})
-    await i.deferUpdate({components: [modifyWorkOnlyRow]});
 
     // might be better to do a tertary deleting thing at the start idk what's better to be honest
     // tried out red for remove buttons but it looks really ugly
@@ -1127,12 +1135,12 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     //     }
     // }
 
-    mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ? `'${splitUpSubmittedAssignments.join(`', '`)}'` : 'none';
+    mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ?splitUpSubmittedAssignments.join(', ') : 'none';
 
     // doing greater than, just incase they added an extra one then they are supposed to!
     // const addingWorkDisabled = workOnAssignInfo.value.split(', ').length >= maxNumberOfFiles;
     // const addingWorkDisabled = splitUpSubmittedAssignments.length >= maxNumberOfFiles;
-    addWorkButton.setDisabled(workToAdd.length > 0 && CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles));
+    addWorkButton.setDisabled(workToAdd.length == 0 || CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles));
     //If shared work isn't already disabled change the disabled of this, 
     //! dosen't work if removing files and re - enabling!!!
     // if(!sharedWorkButton.data.disabled) sharedWorkButton.setDisabled(addingWorkDisabled);
