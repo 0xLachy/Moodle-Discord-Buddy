@@ -1027,7 +1027,7 @@ const CreateTmpAndUpload = async (page, work) => {
     await page.waitForSelector(`div.fp-thumbnail img[title="${work.name}"]`)
 
     //Delete the old file
-    fs.unlink(tmpfilePath, (err) => {
+    fs.unlinkSync(tmpfilePath, (err) => {
         if (err) throw err;
         console.log(`${tmpfilePath} was deleted`);
     })
@@ -1065,8 +1065,9 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     //?BOTH OF THESE METHODS ARE VIABLE, WHATS BETTER, WHICH IS CHEAPER AND FASTER I WOULD LOVE TO KNOW IDK... //////////////
     // let workOnAssignInfo = mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
     // workOnAssignInfo.value = workOnAssignInfo.value.trim().replace('none', '');
-    // const splitUpSubmittedAssignments = workOnAssignInfo.value.split(`', '`);
+    // const splitUpSubmittedAssignments = workOnAssignInfo.value.split(`, `).filter(a=>a);
 
+    //* this one doesn't work though if you removed stuff from the page because the page doesn't actually remove them!!!!
     const splitUpSubmittedAssignments = await GetWorkOnAssignment(page);
 
     //? /////////////////////////////////////////////////////
@@ -1089,7 +1090,10 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
                 //* for some reason when a thing is deleted, sometimes it stays on the page unfortunately
                 await submFile.click().catch();
                 await DeleteFileFromPage(page);
-
+                //if submfile wasn't removed, I'll have to do it myself ffs
+                submFile.evaluate(file => {
+                    if(file) file?.remove();
+                })
                 //remove it from chosen work, if it was on chosen work
                 const chosenWorkIndex = chosenWork.map(work => work.name).indexOf(submFileName);
                 //-1 if it doesn't exist
@@ -1100,6 +1104,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
                 splitUpSubmittedAssignments.splice(splitUpSubmittedAssignments.indexOf(submFileName), 1)
             }
         }
+
         // disabled if there isn't any work
         removeButton.setDisabled(!splitUpSubmittedAssignments.length)
     }
@@ -1115,12 +1120,17 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
                         //all the buttons are already loaded in the dom for some reason (before popup), so just click the delete, but waiting just in case
                         await DeleteFileFromPage(page)
                     }).catch();
+                    // if not deleted from page fully
+                    alreadySubmittedFile.evaluate(file => {
+                        if(file) file?.remove();
+                    })
+                }
+                else {
+                    //add to the work information thing
+                    chosenWork.push(work)
+                    splitUpSubmittedAssignments.push(work.name)
                 }
                 await CreateTmpAndUpload(page, work)          
-    
-                //add to the work information thing
-                chosenWork.push(work)
-                splitUpSubmittedAssignments.push(work.name)
             }
         }
 
@@ -1135,7 +1145,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     //     }
     // }
 
-    mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ?splitUpSubmittedAssignments.join(', ') : 'none';
+    mainEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ? splitUpSubmittedAssignments.join(', ') : 'none';
 
     // doing greater than, just incase they added an extra one then they are supposed to!
     // const addingWorkDisabled = workOnAssignInfo.value.split(', ').length >= maxNumberOfFiles;
