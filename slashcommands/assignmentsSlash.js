@@ -543,6 +543,9 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
         const maxFileSize = restrictionsString.match(/Maximum file size: (\d+)mb/i)[1]
         const maxNumberOfFiles = restrictionsString.match(/maximum number of files: (\d+)/i)[1]
 
+        //click on the file format icon so it is like the same for everyone
+        await page.evaluate(() => document.querySelector('div.filemanager-toolbar a[title="Display folder with file icons"]').click())
+
         //returns in format of: '.pdf' , '.exe' etc
         const fileTypeAllowedStrings = await page.evaluate(() => Array.from(document.querySelectorAll('div.form-filetypes-descriptions li small'), elem => elem.textContent))
         
@@ -562,7 +565,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
         const sharedFullyDisabled = Boolean(personalOnlyCheckBox) || dbWork.length == 0;
 
         // create action row, disable work list, disable add work are args
-        const buttonRow = CreateSubmitButtonsRow(sharedFullyDisabled, (userWork.length == 0 || CheckForMaxFilesIfAdding(userWork, curWorkOnAssignment, maxNumberOfFiles)));
+        const buttonRow = CreateSubmitButtonsRow(sharedFullyDisabled, (userWork.length == 0 || curWorkOnAssignment.length >= maxNumberOfFiles));
 
         //get these out so I can modify them at times when needed, like the remove button right now!
         const addWorkButton = buttonRow.components.find(btn => btn.data.label == 'Add Work');
@@ -725,14 +728,14 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                         // return resolve(await DisplayFullInfo(interaction, updatedInfo, config, page, false));
                     }
                 }
-                // await Promise.all([
-                //     page.waitForNavigation(),
-                //     page.evaluate(() => document.querySelector('input[type="submit"][value="Save changes"]').click()),
-                // ])
+                await Promise.all([
+                    page.waitForNavigation(),
+                    page.evaluate(() => document.querySelector('input[type="submit"][value="Save changes"]').click()),
+                ])
                 
                 //TODO fix the comment here after testing and enable the save button again
-                const updatedInfo = info;
-                // const updatedInfo = await GetFullAssignmentInfo(page)
+                // const updatedInfo = info;
+                const updatedInfo = await GetFullAssignmentInfo(page)
 
                 // if they have donating set to true and it isn't personal only and they aren't using borrowed work
                 if(!UsingBorrowedWork && userWork.length > 0 && config.settings.assignments.Donating && !personalOnlyCheckBox) {
@@ -1022,6 +1025,8 @@ const CreateTmpAndUpload = async (page, work) => {
     ])
 
     await filechooser.accept([tmpfilePath])
+    // so the page actually accepts it wait for a little
+    await page.waitForTimeout(50)
     await page.click('button.fp-upload-btn')
     //* need to wait for the upload button to finish before deleting the file, file thumbnail would have loaded
     await page.waitForSelector(`div.fp-thumbnail img[title="${work.name}"]`)
@@ -1036,13 +1041,6 @@ const CreateTmpAndUpload = async (page, work) => {
 
 const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, modifyWorkOnlyRow, addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles, deleting=false) => {
     // if currently in the adding work stage, close the adding work window
-    // console.log(i.message.components[0], modifyWorkOnlyRow)
-    // for (let i = 0; i < i.message.components[0].length; i++) {
-    //     const element = i.message.components[0][i].data;
-    //     console.log(element)
-    //     console.log(modifyWorkOnlyRow.components[i].data)
-        
-    // }
     //* if all the other buttons are in disabled mode than remove this old message thing
     if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == modifyWorkOnlyRow.components[index].data.disabled)) {
         // old method, but if they spam click the modify buttons it causes problems, 
@@ -1110,7 +1108,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     }
     else {
         for (const work of workToAdd) {
-            if(!removeButton.data.disabled && workToChangeNames.includes(work.name)) {
+            if(workToChangeNames.includes(work.name)) {
                 const alreadySubmittedFile = await page.$(`div.fp-thumbnail img[title="${work.name}"]`)
                 
                 //* deleting the old file, cause they are uploading a new one
@@ -1150,7 +1148,8 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     // doing greater than, just incase they added an extra one then they are supposed to!
     // const addingWorkDisabled = workOnAssignInfo.value.split(', ').length >= maxNumberOfFiles;
     // const addingWorkDisabled = splitUpSubmittedAssignments.length >= maxNumberOfFiles;
-    addWorkButton.setDisabled(workToAdd.length == 0 || CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles));
+    // addWorkButton.setDisabled(workToAdd.length == 0 || CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles));
+    addWorkButton.setDisabled(workToAdd.length == 0 || splitUpSubmittedAssignments.length >= maxNumberOfFiles);
     //If shared work isn't already disabled change the disabled of this, 
     //! dosen't work if removing files and re - enabling!!!
     // if(!sharedWorkButton.data.disabled) sharedWorkButton.setDisabled(addingWorkDisabled);
