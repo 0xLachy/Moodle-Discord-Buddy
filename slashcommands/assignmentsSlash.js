@@ -776,25 +776,18 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 collector.resetTimer({ time: 185 * 1000 })
                 // await TemporaryResponse(interaction, 'Sorry Currently in development, feel free to PR on github!');
                 // chosenWork = await CreateSubmissionListEmbedAndButtons(interaction, page, chosenWork, dbWork, submitterConfigs, info.title, maxNumberOfFiles)
-                await CreateSubmissionListEmbedAndButtons(interaction, page, chosenWork, dbWork, submitterConfigs, info.title, maxNumberOfFiles)
+                const quitEarly = await CreateSubmissionListEmbedAndButtons(interaction, page, chosenWork, dbWork, submitterConfigs, info.title, maxNumberOfFiles)
 
-                if(chosenWork?.length > 0) {
-                    //TODO update the embed to show that they are using the new work edit the chosen word field not this
-                // assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = 'none'
-        // assignmentEmbed.addFields({ name: 'Work to Add', value: userWork.map(work => `[${work.name}](${work.attachment})`).join(', ') || 'none'})
-                    //TODO add if its their or someone elses work to this section of the thing
-                    assignmentEmbed.data.fields.find(field => field.name == 'Work to Add').value = chosenWork.map(work => `${work.name} ${work?.owner != interaction.user.id ? `(<@${work.owner}>'s work)` : ''}`) || 'none';
-        //TODo and then edit the interaction embed to have the proper buttons and stuff
-        // const clearButton = buttonRow.components.find(btn => btn.data.la/bel == 'Clear')
-                    buttonRow.components.find(btn => btn.data.label == 'Add Work').setDisabled(chosenWork.length == 0)
-                    // addWorkButton.setDisabled(chosenWork.attachments.length == 0)
-                    // console.log(addWorkButton)
-                    await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
-                }
-                else {
-                    //TODO close the browser if they quit out of this early
-                    return resolve(interaction.editReply({components: [CreateSubmitButtonsRow(true, true, true, true,)]}))
-                }
+                if(quitEarly) return resolve(interaction.editReply({components: [CreateSubmitButtonsRow(true, true, true, true,)]}));
+
+                assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = (await GetWorkOnAssignment(page)).map(workName => {
+                    const workFound = chosenWork.find(cWork => cWork.name == workName)
+                    if(workFound) {
+                        return workName + ` (<@${workFound.owner}>'s work)`
+                    }
+                    return workName
+                }).join(', ') || 'none';
+                await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
             }
         })
         
@@ -839,7 +832,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
             // await collector.stop();
             if(i.customId == 'Return') {
                 await i.deferUpdate()
-                return resolve(chosenWork);
+                await collector.stop()
+                return resolve(false);
                 // await interaction.editReply({ components: GetWorkButtonRows(false, false, false) });
                 // return resolve(true);
             }
@@ -929,7 +923,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
             if (collected.size == 0) {
                 // If they ran out of time to choose just return nothing
                 interaction.editReply({ content: "Interaction Timed Out (You didn't choose anything for 180 seconds), re-run the command again", components: GetWorkButtonRows(false, false, false) });
-                return resolve(false);
+                return resolve(true);
             }
         });
     })
@@ -948,7 +942,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 value: `Grade: ${work.grade}\nSubmitted on ${work.modifyDate}\nAttachments: ${work.attachments.map(att => att.name).join(', ')}`
             }
         }),
-        { name: 'Current Chosen Work: ', value: chosenWork.map(work => `${work.name} ${work?.owner != interaction.user.id ? `(<@${work.owner}>'s work` : ''}`).join(', ') || 'none'},
+        { name: 'Current Chosen Work: ', value: chosenWork.map(work => `${work.name} ${work?.owner != interaction.user.id ? `(<@${work.owner}>'s work)` : ''}`).join(', ') || 'none'},
         { name: 'Current Work on Assignment', value: (await GetWorkOnAssignment(page)).join(', ') || 'none'},
 // Current work on Assignment
     ]
