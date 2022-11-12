@@ -878,7 +878,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 // go to the non editing version of the page to get the info
                 // await verifyingPage.goto(page.url().replace('&action=editsubmission', ''))
                 //login to moodle through new page, it automatically waits for navigation
-                LoginToMoodle(verifyingPage, dbWork[workIndex].owner, page.url().replace('&action=editsubmission', '')).catch((err) => {
+                await LoginToMoodle(verifyingPage, dbWork[workIndex].owner, page.url().replace('&action=editsubmission', '')).catch((err) => {
                     console.log(err)
                     interaction.followUp({ content: 'An error occured while signing into moodle, they might have changed their password but not logged out and back in'})
                     interaction.editReply({components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1)})
@@ -887,6 +887,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 const veryPersonInfo = await GetFullAssignmentInfo(verifyingPage, false);
                 await verifyingBrowser.close();
 
+                // set their grade to the verified thing if it was marked
                 dbWork[workIndex].grade = personToVerify.settings.assignments.HideSelfGrade ? 'disabled' : veryPersonInfo.submissionData['Grading status']
 
                 if(dbWork[workIndex].modifyDate != veryPersonInfo.submissionData.find(subm => subm.name == 'Last modified').value) {
@@ -903,11 +904,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                     dbWork.splice(workIndex, 1);
                 }
                 else {
-                    TemporaryResponse(interaction, 'They have not modified the assignment without the bot, you are good to go!')
+                    TemporaryResponse(interaction, 'They last modified it with the bot which means this is valid, you are good to go!')
                 }
-                // don't need these as it is run for every function that doesn't return
-                // listEmbed.setFields(GetWorkFields())
-                // await interaction.editReply({ components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1) });
             }
             else if(i.customId == 'Add Borrowed Work') {
                 const shareStuffRow = GetWorkButtonRows(true, true, true, false);
@@ -956,7 +954,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 new ButtonBuilder()
                     .setCustomId('Delete Shared')
                     .setLabel('Delete')
-                    .setStyle(ButtonStyle.Danger),  
+                    .setStyle(ButtonStyle.Danger)  
+                    .setDisabled(disableAll),
             )
         }
         return [ 
