@@ -612,7 +612,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 
                 // calling this function but instead of adding we are removing stuff
                 CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, userWork, assignmentEmbed, 
-                    [removeCompRow], addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles, true)
+                    [removeCompRow], addWorkButton, sharedWorkButton, removeButton, [buttonRow], maxNumberOfFiles, true)
                 // // console.log(i.message.components[0], removeCompRow)
                 // // if currently in the removing work stage, close the adding work window
                 // // i.message.components[0].components.for
@@ -668,7 +668,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 const addWorkOnlyRow = CreateSubmitButtonsRow(true, false, true, true);
                 
                 await CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, { owner: interaction.user.id, attachments: userWork }, assignmentEmbed, 
-                    [addWorkOnlyRow], addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles)
+                    [addWorkOnlyRow], addWorkButton, sharedWorkButton, removeButton, [buttonRow], maxNumberOfFiles)
 
                 // await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
 
@@ -775,22 +775,24 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 // if there was a way to pause it that would be nice :P
                 collector.resetTimer({ time: 185 * 1000 })
                 // await TemporaryResponse(interaction, 'Sorry Currently in development, feel free to PR on github!');
-                chosenWork = await CreateSubmissionListEmbedAndButtons(interaction, page, chosenWork, dbWork, submitterConfigs, info.title)
+                // chosenWork = await CreateSubmissionListEmbedAndButtons(interaction, page, chosenWork, dbWork, submitterConfigs, info.title, maxNumberOfFiles)
+                await CreateSubmissionListEmbedAndButtons(interaction, page, chosenWork, dbWork, submitterConfigs, info.title, maxNumberOfFiles)
 
-                if(chosenWork) {
+                if(chosenWork?.length > 0) {
                     //TODO update the embed to show that they are using the new work edit the chosen word field not this
                 // assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = 'none'
         // assignmentEmbed.addFields({ name: 'Work to Add', value: userWork.map(work => `[${work.name}](${work.attachment})`).join(', ') || 'none'})
                     //TODO add if its their or someone elses work to this section of the thing
-                    assignmentEmbed.data.fields.find(field => field.name == 'Work to Add').value =`${chosenWork?.owner ? `(<@${chosenWork.owner}>'s work)` : '(Your work)'} ${chosenWork.attachments.map(work => `[${work.name}](${work.attachment})`).join(', ') || 'none'}`;
-                    //TODo and then edit the interaction embed to have the proper buttons and stuff
+                    assignmentEmbed.data.fields.find(field => field.name == 'Work to Add').value = chosenWork.map(work => `${work.name} ${work?.owner != interaction.user.id ? `(<@${work.owner}>'s work)` : ''}`) || 'none';
+        //TODo and then edit the interaction embed to have the proper buttons and stuff
         // const clearButton = buttonRow.components.find(btn => btn.data.la/bel == 'Clear')
-                    buttonRow.components.find(btn => btn.data.label == 'Add Work').setDisabled(chosenWork.attachments.length == 0)
+                    buttonRow.components.find(btn => btn.data.label == 'Add Work').setDisabled(chosenWork.length == 0)
                     // addWorkButton.setDisabled(chosenWork.attachments.length == 0)
                     // console.log(addWorkButton)
                     await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
                 }
                 else {
+                    //TODO close the browser if they quit out of this early
                     return resolve(interaction.editReply({components: [CreateSubmitButtonsRow(true, true, true, true,)]}))
                 }
             }
@@ -805,7 +807,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
     });
 }
 
-const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork, dbWork, submitterConfigs, assignmentName) => {
+const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork, dbWork, submitterConfigs, assignmentName, maxNumberOfFiles) => {
     //If this function is being called dbWork.length > 0 is true so iteration works
     //*now I doubt 25 people will submit assignments, but I should probably code for that
     // todo if admin, allow them to delete submissions, or if validity is false auto delete I guess
@@ -819,10 +821,11 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
     .setTitle(`List of Donated Assignments for ${assignmentName.length <= 224 ? assignmentName : assignmentName.slice(0, 224)}`)
     .setDescription(`${assignmentName.length > 224 ? assignmentName.slice(224) + '\n' : ''}Rotate through the submissions to use the buttons for that submission, like check validity (make sure they haven't unsubmitted and check for grade)` +
     `or set as work to submit. If you choose to borrow work you will have to pay the user ${assignmentBorrowCost} when you click save`)
-    .setFields(GetWorkFields());
+    .setFields(await GetWorkFields());
 
     const buttonRow = GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1);
-    const addBorrowedButton = buttonRow.components.find(btn => btn.data.label == 'Add Borrowed Work')
+    // in the second row
+    const addBorrowedButton = buttonRow[1].components.find(btn => btn.data.label == 'Add Work')
 
     const reply = await interaction.editReply({ content: '', embeds: [listEmbed], components: buttonRow, fetchReply: true});
 
@@ -870,7 +873,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 // if the person isn't logged in, we can't check!
                 if(!loginGroups.hasOwnProperty(dbWork[workIndex].owner)) {
                     await i.deferUpdate();
-                    return await interaction.followUp(`The user is logged out! I don't recommend using this work, but it's an option`)
+                    return await interaction.followUp(`The user is logged out! I don't recommend using this work, but it *is* an option`)
                 }
                 await interaction.editReply({ components: GetWorkButtonRows(true, true, true)});
                 await i.deferUpdate();
@@ -915,10 +918,10 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
             else if(i.customId == 'Add Borrowed Work') {
                 const shareStuffRow = GetWorkButtonRows(true, true, true, false);
 
-                CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, dbWork[workIndex], listEmbed, 
-                    shareStuffRow, addBorrowedButton, undefined, undefined, buttonRow, maxNumberOfFiles, true)
+                await CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, dbWork[workIndex], listEmbed, 
+                    shareStuffRow, addBorrowedButton, undefined, undefined, buttonRow, maxNumberOfFiles, false)
             }
-            listEmbed.setFields(GetWorkFields());
+            listEmbed.setFields(await GetWorkFields());
             await interaction.editReply({embeds: [listEmbed], components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1)})
         })
         
@@ -932,7 +935,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
     })
    
 
-    function GetWorkFields() {
+    async function GetWorkFields() {
+        //return all the work submissions, as well as show what work has been chosen
         return [ ...dbWork.map((work, index) => {
             currentPerson = submitterConfigs.find(subConf => subConf.discordId == work.owner)
             return {
@@ -943,7 +947,12 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 //Not using (name)[url] for attachments because they could submit for free (and without the bot)
                 value: `Grade: ${work.grade}\nSubmitted on ${work.modifyDate}\nAttachments: ${work.attachments.map(att => att.name).join(', ')}`
             }
-        }), { name: 'Current Chosen Work: ', value: chosenWork.map(work => `${work.name} ${work?.owner != interaction.user.id ? `(<@${work.owner}>'s work` : ''}`) || 'none'}]
+        }),
+        { name: 'Current Chosen Work: ', value: chosenWork.map(work => `${work.name} ${work?.owner != interaction.user.id ? `(<@${work.owner}>'s work` : ''}`).join(', ') || 'none'},
+        { name: 'Current Work on Assignment', value: (await GetWorkOnAssignment(page)).join(', ') || 'none'},
+// Current work on Assignment
+    ]
+
     }
 
     function GetWorkButtonRows(backDisabled=false, nextDisabled=false, disableAll=false, addWorkDisabled=false) {
@@ -1044,7 +1053,7 @@ const CreateTmpAndUpload = async (page, work) => {
 
 }
 
-const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, modifyWorkOnlyRows, addWorkButton, sharedWorkButton, removeButton, buttonRow, maxNumberOfFiles, deleting=false) => {
+const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, modifyWorkOnlyRows, addWorkButton, sharedWorkButton, removeButton, buttonRows, maxNumberOfFiles, deleting=false) => {
     // if currently in the adding work stage, close the adding work window
     //? could use a second every here instead of just using zero but I am being lazy :/
     //* if all the other buttons are in disabled mode than remove this old message thing
@@ -1054,7 +1063,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
         // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
         await nestedConfirmationCollector.collector.stop();
         i.deferUpdate();
-        return await interaction.editReply({ components: [buttonRow]})
+        return await interaction.editReply({ components: buttonRows})
         // return await i.deferUpdate({ components: [buttonRow] });
     }
     
@@ -1133,7 +1142,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
         }
 
         // if they actually added work enable the remove button, otherwise leave how it was
-        if(workToChangeNames.length > 0) removeButton.setDisabled(false)
+        if(workToChangeNames.length > 0) removeButton?.setDisabled(false)
     }
 
     
@@ -1156,7 +1165,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     //If the shared work isn't fully disabled, they might be able to still add more work
     if(sharedWorkButton && !sharedWorkButton.data.fullyDisabled) sharedWorkButton.setDisabled(splitUpSubmittedAssignments.length >= maxNumberOfFiles);
 
-    await interaction.editReply({ embeds: [mainEmbed], components: [buttonRow]})
+    await interaction.editReply({ embeds: [mainEmbed], components: buttonRows})
 }
 
 //todo max is probably like three for btnChoices, so maybe account for that later
