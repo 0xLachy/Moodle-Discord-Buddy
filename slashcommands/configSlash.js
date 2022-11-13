@@ -40,7 +40,7 @@ const settingsInfo = {
         title: 'Assignment Settings',
         info: 'Anything to do with submitting and borrowing assignments',
         ShowFileSubmissionInfo: { type: Boolean, default: true, info: `When viewing an assignments full info, edit submission to find more info (don't have to actually edit the submission)`},
-        HideSelfGrade: { type: Boolean, default: false, info: `Don't allow people to see your grade`},
+        HideFeedback: { type: Boolean, default: false, info: `Disable showing your feedback for assignments, it's not really a big deal`},
         Donating: { type: Boolean, default: true, info: `When assignments are shareable, share the assigment and get paid (mdl) and help out the boys at the same time!`},
     },
     messages: {

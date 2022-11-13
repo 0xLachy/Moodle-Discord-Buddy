@@ -79,6 +79,8 @@ const assignmentSchema = new mongoose.Schema({
     // array of discord attachments, (not storing all of the data that discord gives, just what is needed)
     attachments: [{
         name: { type: String }, // the name of the work, e.g 'functions.pdf'
+        owner: { type: String }, // so having a second owner if they borrowed work from other people too
+        price: { type: Number, default: 25 }, // for when other people borrow work and pay back
         contentType: { type: String}, // what kind of file is it (used for axios)
         attachment: { type: String}, // the url to the discord attachment
     }], 
@@ -416,7 +418,13 @@ const GetFullAssignmentInfo = async (page, getComments=true) => {
                     name, // can't get comments without clicking comment button
                     value: name == 'Submission comments' ? Array.from(tr.querySelectorAll('td ul div.text_to_html'), (elem) => elem.textContent).join('\n') || 'none' : tr.querySelector('td')?.textContent.trim() || 'n/a',
                 }
-            }).filter(obj => obj.name && obj.value) // truthy falsy stuff, make sure stuff isn't n/a
+            }).filter(obj => obj.name && obj.value), // truthy falsy stuff, make sure stuff isn't n/a
+            feedback: Array.from(document.querySelectorAll('div.feedback tbody tr'), (tr) => {
+                return {
+                    name: tr.querySelector('th')?.textContent.trim(),
+                    value: tr.querySelector('td')?.textContent.trim() || 'n/a'
+                }
+            })
         }
     })
 }
@@ -473,6 +481,10 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
     // await interaction.options.getSubcommand()
     if(submitting || (!config.settings.general.LimitLogins && loginGroups.hasOwnProperty(interaction.user.id) && interaction.options.getSubcommand() != 'missing')) {
         assignmentEmbed.addFields(...info.submissionData);
+        //if they aren't hiding feedback show that too!
+        if(!config.settings.assignments.HideFeedback) {
+           assignmentEmbed.addFields(...info.feedback) 
+        }
     }
     else {
         assignmentEmbed.addFields({ name: 'Submission and Comments', value: 'to see submission stuff and comments you must be logged in with limit logins off'})
@@ -685,10 +697,12 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 //* luckily that can be done by checking what they have submitted cause it shows what files are there so add or remove the files
                 // used to update work if they already have it (or delete it :/ )
                 const replacingSharedWork = dbWork.find(work => work.owner == interaction.user.id)
+                //So whilst the price thing is cool I don't know how I feel about it
+                //TODO fix the price stuff for work
                 if(UsingBorrowedWork) {
                     // basically ownerid: $100
                     const sharerCosts = chosenWork.reduce((sharerCosts, work) => {
-                        if(work?.owner) {
+                        if(work?.owner && work.owner != interaction.user.id) {
                             sharerCosts[work.owner] = (sharerCosts[work.owner] || 0) + work.price;
                         }
                     })
@@ -707,21 +721,26 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                             config.tokens -= cost; // take away amount that it costs
 
                             //getting the correct config by the id
-                            sharerConfigs[owner].tokens += cost; // paying the owner
+                            const ownerConfig = sharerConfigs.find(conf => conf.owner == owner);
+                            ownerConfig.tokens += cost; // paying the owner
     
                             // add to their stats so they can get achievements
                             config.stats.AssignmentsBorrowed++;
                             ownerConfig.stats.AssignmentsShared++;
+
+                            await ownerConfig.save();
                         }
 
                         // if they had got the earning already remove it, and remove their old work
-                        if(replacingSharedWork) {
-                            config.tokens -= assignmentSubmissionTokens;
-                            //delete the old work now no need to wait for it
-                            replacingSharedWork.delete();
-                        }
+                        //? see the thing with this is though, if they are adding someone elses pdf, then what happens, like that work belongs to x so I guess just add owner to work by defualt
+                        // if(replacingSharedWork) {
+                        //     config.tokens -= assignmentSubmissionTokens;
+                        //     //delete the old work now no need to wait for it
+                        //     replacingSharedWork.delete();
+                        // }
                         // save the db stuff
-                        await Promise.all([config.save(), ownerConfig.save()]);
+                        // await Promise.all([config.save(), ownerConfig.save()]);
+                        await config.save();
                     }
                     else {
                         //return early 
@@ -736,19 +755,22 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 
                 //TODO fix the comment here after testing and enable the save button again
                 // const updatedInfo = info;
+                const submittedFiles = await GetWorkOnAssignment(page)
                 const updatedInfo = await GetFullAssignmentInfo(page)
 
+                //TODO custom function to get the user to set the prices of all their newly submitted assignments default is just 25 per
                 // if they have donating set to true and it isn't personal only and they aren't using borrowed work
-                if(!UsingBorrowedWork && userWork.length > 0 && config.settings.assignments.Donating && !personalOnlyCheckBox) {
+                if(chosenWork.length > 0 && config.settings.assignments.Donating && !personalOnlyCheckBox) {
                     //send a confirmation message saying, do you want to donate this assignment?
                     console.log(updatedInfo)
+                    //replacing shared work as in replacing something they already shared
                     if(replacingSharedWork) {
                         replacingSharedWork.modifyDate = updatedInfo.submissionData.find(subm => subm.name == 'Last modified').value;
-                        //TODO this ins't right anymore, we already know what files are being submitted
-                        // const submittedFiles = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value.split(', ');
-                        //if they have updated files, remove the same ones before pushing (replacing them if they exist) and make sure it was actually part of the submit
-                        replacingSharedWork.attachments = replacingSharedWork.attachments.filter(attc => !userWork.attachments.some(userAttc => userAttc.name == attc.name) && submittedFiles.includes(attc.name))
-                        replacingSharedWork.attachments.push(...userWork);
+                        //* if they have updated files, remove the same (old) ones before pushing (replacing them if they exist) and make sure it was actually part of the submit
+                        // not all the user work may have been added so filter out the ones not added first
+                        //! not sure what to do if people submit stuff with the same name I hope it doesn't cause errors, I think because of the replaceSameName variable it's fine
+                        replacingSharedWork.attachments = replacingSharedWork.attachments.filter(attc => !userWork.filter(w => chosenWork.some(cw => cw.name == w)).some(userAttc => userAttc.name == attc.name) && submittedFiles.includes(attc.name))
+                        replacingSharedWork.attachments.push(...chosenWork);
                         replacingSharedWork.save();
                         console.log(`${interaction.user.username} updated their work for the assignment ${info.title}`)
                     }
@@ -757,7 +779,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                             name: updatedInfo.title, 
                             owner: interaction.user.id,
                             modifyDate: updatedInfo.submissionData.find(subm => subm.name == 'Last modified').value,
-                            attachments: userWork
+                            attachments: chosenWork
                         })
                         newAssignment.save();
                         config.stats.AssignmentNames.push(info.title);
@@ -766,6 +788,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                         console.log(`${interaction.user.username} donated their work to the assignment ${info.title}`)
                     }
                 }
+                //TODO do this last part but also ask if wanting to have submission comments
                 //finally update the embed to have the new submitted stats
                 return resolve(await DisplayFullInfo(interaction, updatedInfo, config, page, false));
             } // submission list
@@ -888,7 +911,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 await verifyingBrowser.close();
 
                 // set their grade to the verified thing if it was marked
-                dbWork[workIndex].grade = personToVerify.settings.assignments.HideSelfGrade ? 'disabled' : veryPersonInfo.submissionData['Grading status']
+                const workGraded = veryPersonInfo.submissionData.find(sd => sd.name == 'Grading status').value;
+                // dbWork[workIndex].grade = personToVerify.settings.assignments.HideSelfGrade ? 'disabled' : veryPersonInfo.submissionData.find(sd => sd.name == 'Grading status').value
 
                 if(dbWork[workIndex].modifyDate != veryPersonInfo.submissionData.find(subm => subm.name == 'Last modified').value) {
                     //THEY CHANGED THEIR WORK WITHOUT THE BOT!!! DELETE THEIR WORK AND TAKE AWAY THEIR MONEY
@@ -904,14 +928,27 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                     dbWork.splice(workIndex, 1);
                 }
                 else {
+                    //it means that they didn't try exploit so give them a reward if it was graded
+                    if(workGraded == 'Graded') {
+                        //check that they haven't gotten a new grade or whatever
+                        // basically, if the grade hasn't been changed then it means this is their first time and they can get the reward for verification
+                        if(dbWork[workIndex].grade == assignmentSchema.obj.grade.default) {
+                            recipient = submitterConfigs.find(subConf => subConf.discordId == work.owner)
+                            //TODO reward the owner and display a message to the user and message the user saying that their work has been verified and they have been paid moodle money
+                            //TODO maybe also tell them if their work has been caught for cheating too?
+                        }
+                        dbWork[workIndex].grade = veryPersonInfo.feedback.find(fb => fb.name == 'Grade');
+                        await dbWork[workIndex].save()
+                    }
                     TemporaryResponse(interaction, 'They last modified it with the bot which means this is valid, you are good to go!')
                 }
             }
             else if(i.customId == 'Add Borrowed Work') {
                 const shareStuffRow = GetWorkButtonRows(true, true, true, false);
 
+                // if someone has the same name file, it won't replace the file if it is already there idk if it is a good idea
                 await CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, dbWork[workIndex], listEmbed, 
-                    shareStuffRow, addBorrowedButton, undefined, undefined, buttonRow, maxNumberOfFiles, false)
+                    shareStuffRow, addBorrowedButton, undefined, undefined, buttonRow, maxNumberOfFiles, false, false)
             }
             listEmbed.setFields(await GetWorkFields());
             await interaction.editReply({embeds: [listEmbed], components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1)})
@@ -942,13 +979,13 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
         }),
         { name: 'Current Chosen Work: ', value: chosenWork.map(work => `${work.name} ${work?.owner != interaction.user.id ? `(<@${work.owner}>'s work)` : ''}`).join(', ') || 'none'},
         { name: 'Current Work on Assignment', value: (await GetWorkOnAssignment(page)).join(', ') || 'none'},
-// Current work on Assignment
     ]
 
     }
 
     function GetWorkButtonRows(backDisabled=false, nextDisabled=false, disableAll=false, addWorkDisabled=false) {
         const mainActionRow = new ActionRowBuilder();
+        //TODO if the work belongs to the user themself, then let them delete it :P
         if(botOwners.includes(interaction.user.id) || interaction?.memberPermissions.has(PermissionFlagsBits.Administrator)) {
             mainActionRow.addComponents(
                 new ButtonBuilder()
@@ -1046,7 +1083,7 @@ const CreateTmpAndUpload = async (page, work) => {
 
 }
 
-const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, modifyWorkOnlyRows, addWorkButton, sharedWorkButton, removeButton, buttonRows, maxNumberOfFiles, deleting=false) => {
+const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmationCollector, chosenWork, workToAdd, mainEmbed, modifyWorkOnlyRows, addWorkButton, sharedWorkButton, removeButton, buttonRows, maxNumberOfFiles, deleting=false, replaceSameName=true) => {
     // if currently in the adding work stage, close the adding work window
     //? could use a second every here instead of just using zero but I am being lazy :/
     //* if all the other buttons are in disabled mode than remove this old message thing
@@ -1072,7 +1109,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
     //? /////////////////////////////////////////////////////
     
     //basically check if added the max amount of assignments by getting the total and checking against limit
-    const AddAllButtonDisabled = !deleting && CheckForMaxFilesIfAdding(workToAdd.attachments, splitUpSubmittedAssignments, maxNumberOfFiles);
+    const AddAllButtonDisabled = !deleting && CheckForMaxFilesIfAdding(workToAdd.attachments, splitUpSubmittedAssignments, maxNumberOfFiles, replaceSameName);
 
 
     // might be better to do a tertary deleting thing at the start idk what's better to be honest
@@ -1113,7 +1150,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
                 const alreadySubmittedFile = await page.$(`div.fp-thumbnail img[title="${work.name}"]`)
                 
                 //* deleting the old file, cause they are uploading a new one
-                if(alreadySubmittedFile) {
+                if(alreadySubmittedFile && replaceSameName) {
                     //await needed because this has to be done before the delete button is clicked
                     await alreadySubmittedFile.click().then(async () => {
                         //all the buttons are already loaded in the dom for some reason (before popup), so just click the delete, but waiting just in case
@@ -1126,7 +1163,6 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
                 }
                 else {
                     //add to the work information thing
-                    work.owner = workToAdd.owner
                     chosenWork.push(work)
                     splitUpSubmittedAssignments.push(work.name)
                 }
@@ -1260,10 +1296,10 @@ const GetWorkOnAssignment = async (page) => {
     return await page.evaluate(() => Array.from(document.querySelectorAll('div.fp-thumbnail img'), elem => elem.title));
 }
 
-function CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles) {
+function CheckForMaxFilesIfAdding(workToAdd, splitUpSubmittedAssignments, maxNumberOfFiles, replaceSameName) {
     return workToAdd.reduce((total, work) => {
         // if the name isn't in the submission already, then that is a new file so add it to the total
-        if (!splitUpSubmittedAssignments.includes(work.name)) {
+        if (!splitUpSubmittedAssignments.includes(work.name) || !replaceSameName) {
             total++;
         }
         return total;
