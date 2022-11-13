@@ -422,7 +422,8 @@ const GetFullAssignmentInfo = async (page, getComments=true) => {
             feedback: Array.from(document.querySelectorAll('div.feedback tbody tr'), (tr) => {
                 return {
                     name: tr.querySelector('th')?.textContent.trim(),
-                    value: tr.querySelector('td')?.textContent.trim() || 'n/a'
+                    value: tr.querySelector('td')?.textContent.trim() || 'n/a',
+                    inline: true
                 }
             })
         }
