@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder, CommandInteractionOptionResolver } = require('discord.js');
 const puppeteer = require('puppeteer');
 const { GetSelectMenuOverflowActionRows, LoginToMoodle, AskForCourse, SendConfirmationMessage, TemporaryResponse, mainStaticUrl, loginGroups } = require("../util/functions")
-const { primaryColour, assignmentBorrowCost, assignmentSharedTokens, assignmentSubmissionTokens, fakeAssignmentPenalty, botOwners } = require("../util/constants");
+const { primaryColour, assignmentBorrowCost, assignmentSharedTokens, confirmationTokens, assignmentSubmissionTokens, fakeAssignmentPenalty, botOwners } = require("../util/constants");
 const { ConvertName, GetConfigById } = require('./configSlash')
 const mongoose = require('mongoose')
 const fs = require('fs')
@@ -933,10 +933,13 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                     if(workGraded == 'Graded') {
                         //check that they haven't gotten a new grade or whatever
                         // basically, if the grade hasn't been changed then it means this is their first time and they can get the reward for verification
+                        //TODO maybe send the recipient a direct message telling them that they have made the money and that can be a config setting
+                        //TODO maybe also tell them if their work has been caught for cheating too?
                         if(dbWork[workIndex].grade == assignmentSchema.obj.grade.default) {
                             recipient = submitterConfigs.find(subConf => subConf.discordId == work.owner)
-                            //TODO reward the owner and display a message to the user and message the user saying that their work has been verified and they have been paid moodle money
-                            //TODO maybe also tell them if their work has been caught for cheating too?
+                            recipient.tokens += confirmationTokens;
+                            await recipient.save()
+                            await interaction.followUp(`<@${recipient.discordId}> has just earned $${confirmationTokens} for having their work being confirmed and graded!`)
                         }
                         dbWork[workIndex].grade = veryPersonInfo.feedback.find(fb => fb.name == 'Grade');
                         await dbWork[workIndex].save()

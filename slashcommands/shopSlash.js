@@ -206,11 +206,14 @@ const CreateIconEmbed = async (interaction, userConfig, lastI) => {
 
         const filter = i => i.user.id === interaction.user.id;
 
-        const collector = await reply.createMessageComponentCollector({ filter, max: 1, time: 180 * 1000})
+        const collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000})
 
+        let stoppedOnPurpose = false;
         collector.on('collect', async (i) => {
             if(i.customId == 'back') {
                 await i.deferUpdate();
+                stoppedOnPurpose = true;
+                collector.stop();
                 return resolve(await CreateShopEmbed(interaction, userConfig))
             }
             else {
@@ -234,13 +237,16 @@ const CreateIconEmbed = async (interaction, userConfig, lastI) => {
                     }
                 }
                 await userConfig.save();
+                stoppedOnPurpose = true;
+                collector.stop()
                 return resolve(await CreateIconEmbed(interaction, userConfig))
             }
         })
 
         collector.on('end', async collected => {
-            if(collected.size == 0) {
-                return resolve(await interaction.editReply({content: 'timed out', components: [CreateBackButton(true), , ...CreatePurchaseComponents(icons, userConfig, true, true)]}))
+            // if it timed out just return this
+            if(!stoppedOnPurpose) {
+                return resolve(await interaction.editReply({content: 'timed out', components: [CreateBackButton(true), ...CreatePurchaseComponents(icons, userConfig, true, true)]}))
             }
         });
     });
