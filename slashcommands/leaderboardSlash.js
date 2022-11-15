@@ -27,6 +27,12 @@ const data = new SlashCommandBuilder()
             .setDescription("Removes all the ranking roles given to everyone")
             .setRequired(false)
     )
+    .addBooleanOption(option =>
+        option
+            .setName('config-priority')
+            .setDescription('Place people with configs (people who have used the bot) above everyone else')
+            .setRequired(false)
+    )
     .addStringOption(option => option.setName('rig').setDescription('rig the score for a person e.g Harrison Baird = 12'));
 
 
@@ -187,7 +193,8 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
     // Create the Message Embed to send to the channel
     let embedMsg = new EmbedBuilder();
     // used to display that people with configs
-    const allConfigs = GetConfigs()
+    const configPriority = interaction.options.getBoolean('config-priority') ?? false
+    const allConfigs = GetConfigs();
 
     title ? embedMsg.setTitle(title) : embedMsg.setTitle(`Leaderboard Results:`);
     // if(title != "default"){
@@ -230,16 +237,16 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
             return {
                 name,
                 tally,
-                config: allConfigs.find(fig => fig.name == name.toLowerCase()) // prolly null
+                config: allConfigs.find(fig => fig.name == name.toLowerCase()) // alot null but thats fine
             }
         })
         //now properly sorting it
         sortedLeaderboardResults = sortedLeaderboardResults.sort((a, b) => {
             // sorting in reverse order kinda if they have a config
-            if(a.config && !b.config) {
+            if(configPriority && a.config && !b.config) {
                 return -1;
             }
-            else if(b.config && !a.config) {
+            else if(configPriority && b.config && !a.config) {
                 return 1;
             }
             else {
@@ -248,8 +255,7 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
         })
 
         for(person of sortedLeaderboardResults){
-            // if they are vip give them a little shield, //TODO in the future make this custom emoji
-            msgString += `${person?.config?.vip ? ':shield: ' : ''}${person.name} : ${person.tally}\n`
+            msgString += `${person?.config?.icon ?? ''} ${person.name} : ${person.tally}\n`
         }
 
         if (msgString == ""){
