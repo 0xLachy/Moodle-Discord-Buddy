@@ -6,6 +6,19 @@ const data = new SlashCommandBuilder()
 	.setName('shop')
 	.setDescription('Open up a shop were you can buy stuff with your moodle tokens!');
 
+// icons are just discord emojis that appear before a persons name
+// if you have custom discord emojis you can actually use them!
+//TODO add the ultimate badge... with this power than can have any icon that they put as a string or whatever, like they send in an emoji and boom
+const icons = [ 
+    { name: 'vip', emoji: ':shield:', noPurchase: true }, // could call it purchaseable and set to false but using booleans this way is better imo
+    { name: 'party', emoji: ':partying_face:', price: 0 }, // they can get this one for free if they bother to look at icons
+    { name: 'salute', emoji: ':saluting_face:', price: 50 },
+    { name: 'skull', emoji: ':skull:', price: 100 },
+    { name: 'foot', emoji: ':foot:', price: 200 },
+    { name: 'fire', emoji: ':fire:', price: 500 },
+    
+]
+
 module.exports = {
     category: "config",
     permissions: [],
@@ -45,6 +58,7 @@ const CreateShopEmbed = (interaction, userConfig, lastI) => {
             .addFields(
                 { name: 'Vip Status', value: `${userConfig.vip ? 'true :partying_face:' : 'false'}`, inline: true},
                 { name: 'Moodle Money', value: `${userConfig.tokens}`, inline: true},
+                { name: 'Icon', value: `${userConfig.icon || 'none'}`, inline: true},
                 ...shopItems.map((itemObj, index) => { return { name: itemObj.name, value: `${itemObj.value}` }}), //* adds the rest of the items
             );
 
@@ -72,6 +86,10 @@ const CreateShopEmbed = (interaction, userConfig, lastI) => {
         collector.on('collect', async (i) => {
             await i.deferUpdate().catch(() => {}); // interaction acknowledge thing error
             if(i.customId == 'Vip Info') {
+                await collector.stop();
+                return resolve(await CreateVIPInfoEmbed(interaction, userConfig));
+            }
+            if(i.customId == 'Icons') {
                 await collector.stop();
                 return resolve(await CreateVIPInfoEmbed(interaction, userConfig));
             }
@@ -152,17 +170,57 @@ const CreateVIPInfoEmbed = async (interaction, userConfig) => {
         });
     });
 
-    function CreateBackButton(disabled=false) {
-        return new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('back')
-                .setLabel('back')
-                .setStyle(ButtonStyle.Danger)
-                .setDisabled(disabled),
-        );
-    }
 }
+function CreateBackButton(disabled=false) {
+    return new ActionRowBuilder()
+    .addComponents(
+        new ButtonBuilder()
+            .setCustomId('back')
+            .setLabel('back')
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(disabled),
+    );
+}
+
+const CreateIconEmbed = async (interaction, userConfig) => {
+    //display the info, and then when the back button is clicked, take them back to the shop menu
+    return new Promise(async (resolve, reject) => {
+        //create an embed instead
+        const iconEmbed = new EmbedBuilder()
+        .setColor(primaryColour)
+        .setTitle('Icon Stuff')
+        .setDescription('Purchase Icons and once purchased, you can equip them any time you want just by running /shop again')
+        .setFooter({text: `I haven't implemented a custom icon yet but it should be possible, feel free to PR on github`})
+
+        // const iconRows = [ //back button and then also other stu3ff on next linesCreatePurchaseComponents(icons, userConfig.tokens, false, false) ]
+
+        const iconRows =  [ CreateBackButton(false), ...CreatePurchaseComponents(icons, userConfig.tokens, false, true)]
+        const reply = await interaction.editReply({ content: ' ', embeds: [iconEmbed], components: iconRows, fetchReply: true })
+
+        const filter = i => i.user.id === interaction.user.id;
+
+        const collector = await reply.createMessageComponentCollector({ filter, max: 1, time: 180 * 1000})
+
+        collector.on('collect', async (i) => {
+            if(i.customId == 'back') {
+                // await i.deferUpdate();
+                return resolve(await CreateShopEmbed(interaction, userConfig, i))
+            }
+            else {
+                //if the user has already purchased the icon just equip it
+                
+            }
+        })
+
+        collector.on('end', async collected => {
+            if(collected.size == 0) {
+                return resolve(await interaction.editReply({content: 'timed out', components: [CreateBackButton(true)]}))
+            }
+        });
+    });
+
+}
+
 const SendConfirmationMessage = async (interaction, message, time=15000) => {
     return new Promise(async (resolve, reject) => {
         //create an embed instead
@@ -206,9 +264,9 @@ const SendConfirmationMessage = async (interaction, message, time=15000) => {
     })
 }
 
-const CreatePurchaseComponents = (items, userTokens, disableAll=false) => {
+const CreatePurchaseComponents = (items, userConfig, disableAll=false, iconButtons=false) => {
     //need a quit button, add the vip info thing to that row too
-    const actionRows = [
+    const actionRows = !iconButtons ? [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('Quit')
@@ -220,8 +278,13 @@ const CreatePurchaseComponents = (items, userTokens, disableAll=false) => {
                 .setLabel('Vip / General Info')
                 .setStyle(ButtonStyle.Success)
                 .setDisabled(disableAll),
+            new ButtonBuilder()
+                .setCustomId('Icons')
+                .setLabel('Icons')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(disableAll),
         )
-    ]
+    ] : []
     let actionRowIndex = 0
     return items.reduce((actionRows, currentItem, currentIndex) => {
         //3 buttons per row, if you want less or more change that value
@@ -230,13 +293,15 @@ const CreatePurchaseComponents = (items, userTokens, disableAll=false) => {
             actionRows.push(new ActionRowBuilder);
             actionRowIndex++;
         }
-        const nameWithoutCost = currentItem.price ? currentItem.name.split(' - ')[1] : currentItem.name
+        // if icon buttons it's actually gonna be the name **with** the cost
+        const nameWithoutCost = iconButtons ? `${currentItem.name} - $${currentItem.price}` : currentItem.price ? currentItem.name.split(' - ')[1] : currentItem.name
         actionRows[actionRowIndex].addComponents(
             new ButtonBuilder()
-                .setCustomId(nameWithoutCost)
+                .setCustomId(iconButtons ? currentItem.name : nameWithoutCost)
                 .setLabel(nameWithoutCost) // if price doesn't exist it defaults to null, which makes the statement false cause it is free
-                .setStyle(currentItem.price > userTokens ? ButtonStyle.Secondary : ButtonStyle.Primary)
-                .setDisabled((disableAll || currentItem.price > userTokens || !currentItem.enabled) ?? false),
+                // if doing this for icons then make it green if they already bought it
+                .setStyle((iconButtons && userConfig.icons.includes(currentItem.name)) ? ButtonStyle.Success : currentItem.price > userConfig.tokens ? ButtonStyle.Secondary : ButtonStyle.Primary)
+                .setDisabled((disableAll || currentItem.price > userConfig.tokens || !currentItem.enabled) ?? false),
         );
         return actionRows
     }, actionRows)

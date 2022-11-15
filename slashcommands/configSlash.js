@@ -110,9 +110,11 @@ const configSchema = new mongoose.Schema({
     discordId: String, // their discord id to fetch their config
     vip: { type: Boolean, default: false },
     tokens: { type: Number, default: 200, min: 0},
+    icon: { type: String, default: null, lowercase: true, trim: true }, // a little thing to appear in front of users name 
     nicknames: { type: [String], lowercase: true, trim: true },
     maxNicknames: { type: Number, default: 3, min: 1, max: 10},
     badges: {type: [String]}, // Indexes of the badges that they own in the order they got them? //TODO need badge command to create badge, fix badge, give badge and delete
+    icons: { type: [String], lowercase: true, trim: true}, // all their items that they purchased so they can go back and switch them around
     stats: configStats,
     settings: configSettings,
 })
@@ -640,11 +642,13 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
             .setTitle('Settings')
             .setThumbnail(interaction.user.displayAvatarURL())
             .setDescription('This is an overview of the the settings, send your nickname to this channel bellow, click the button to change your real name instead. ' +
-                `You have ${userConfig.maxNicknames} nicknames allowed, and there can\'t be duplicates, when you add a new nickname it is inserted at the start and removes the old third one\n` +
-                'The reset button will open up a menu where you can choose the settings you would like to reset to default')
+                `You have ${userConfig.maxNicknames} nicknames allowed, and there can\'t be duplicates, when you add a new nickname it is inserted at the start and removes the old third/whatever your max one is\n` +
+                'The reset button will open up a menu where you can choose the settings you would like to reset to default' +
+                'If you want to change your icon, run /shop')
             .addFields(
                 { name: 'Vip Status', value: `${userConfig.vip ? 'true :partying_face:' : 'false'}`, inline: true},
                 { name: 'Moodle Money', value: `${userConfig.tokens}`, inline: true},
+                { name: 'Icon', value: `${userConfig.icon || 'none'}`, inline: true},
                 { name: 'Name On Moodle', value: `${userConfig.name}` },
                 { name: 'Nicknames', value: `[${userConfig.nicknames.join(', ')}]` },
             );
@@ -791,7 +795,7 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
                         .setLabel('Reset')
                         .setDisabled(disabled)
                         .setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder()
+                        new ButtonBuilder()
                         .setCustomId('Name')
                         .setLabel(editingName ? 'Editing moodle name' : 'Editing Nicknames')
                         .setDisabled(disabled)
