@@ -221,7 +221,7 @@ const CreateIconEmbed = async (interaction, userConfig, lastI) => {
                 //if the user has already purchased the icon just equip it
                 const iconWanted = icons.find(ic => ic.name == i.customId);
                 if(userConfig.icons.includes(i.customId)) {
-                    userConfig.icon = iconWanted.emoji;
+                    userConfig.icon = iconWanted.emoji == userConfig.icon ? null : iconWanted.emoji;
                 }
                 else {
                     if(iconWanted.price == 0 || await SendConfirmationMessage(interaction, `Do you want to buy the icon ${iconWanted.emoji} (${iconWanted.name}) for (${iconWanted.price})`)) {
