@@ -44,7 +44,7 @@ module.exports = {
         await interaction.deferReply(/*{ephemeral: true}*/);
 
         // const browser = await puppeteer.launch({ headless: false })
-        const browser = await puppeteer.launch();
+        const browser = await UtilFunctions.BrowserWithCache();
         const page = await browser.newPage();
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 

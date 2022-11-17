@@ -4,6 +4,8 @@ const { resolve } = require("path");
 const crypto = require("crypto");
 const { ConvertName, GetConfigById } = require('../slashcommands/configSlash');
 const mongoose = require('mongoose');
+const puppeteer = require('puppeteer')
+const os = require('os')
 require("dotenv").config()
 
 //VARIABLES
@@ -719,6 +721,15 @@ const SplitIntoCharSections = async (inpStr, amount=1024) => {
     return chunks;
 }
 
+const BrowserWithCache = async (headless=true) => {
+    // save a cache of commonly used images and stuff
+    const userDataDir = os.tmpdir()//path.join(os.tmpdir(), 'puppeteerStuff')
+    return await puppeteer.launch({
+        userDataDir,
+        headless,
+    })
+}
+
 module.exports = {
     getFiles,
     LoginToMoodle,
@@ -733,6 +744,7 @@ module.exports = {
     SendConfirmationMessage,
     GetSelectMenuOverflowActionRows,
     SplitIntoCharSections,
+    BrowserWithCache,
     loginGroups,
     mainStaticUrl,
 }

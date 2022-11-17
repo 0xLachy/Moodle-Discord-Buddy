@@ -110,7 +110,7 @@ module.exports = {
         // `${mainStaticUrl}/user/index.php?page=0&perpage=5000&contextid=${contextId}&id=${termId}&newcourse`
 
         // const browser = await puppeteer.launch({ headless: false })
-        const browser = await puppeteer.launch();
+        const browser = await UtilFunctions.BrowserWithCache();
         const page = await browser.newPage();
         //console.log(UtilFunctions.GetTermURLS("participants")[courseIDIndex])
 

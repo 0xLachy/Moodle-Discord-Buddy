@@ -69,7 +69,7 @@ module.exports = {
     run: async (client, interaction, config) => {
         await interaction.deferReply(/*{ephemeral: true}*/);
         // const browser = await puppeteer.launch({ headless: false })
-        const browser = await puppeteer.launch();
+        const browser = await UtilFunctions.BrowserWithCache();
         const page = await browser.newPage();
 
         //? Testing out adding config to interaction because that is used everywhere

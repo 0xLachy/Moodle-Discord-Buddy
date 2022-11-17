@@ -87,7 +87,7 @@ module.exports = {
         // return await loginToMoodleReq(interaction.options.getInteger('times'), interaction.options.getString('message'));
         await interaction.deferReply({ephemeral: config?.settings.messages.Ephemeral ?? false});
         // const browser = await puppeteer.launch({ headless: false }) //slowMo:100
-        const browser = await puppeteer.launch();
+        const browser = await UtilFunctions.BrowserWithCache();
         const page = await browser.newPage();
         //log into the browser todo find a better way to do this
         let failedToLogin = false

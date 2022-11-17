@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlagsBitField, ComponentType, SlashCommandSubcommandBuilder, CommandInteractionOptionResolver } = require('discord.js');
 const puppeteer = require('puppeteer');
-const { GetSelectMenuOverflowActionRows, LoginToMoodle, AskForCourse, SendConfirmationMessage, TemporaryResponse, mainStaticUrl, loginGroups } = require("../util/functions")
+const { GetSelectMenuOverflowActionRows, LoginToMoodle, AskForCourse, SendConfirmationMessage, TemporaryResponse, BrowserWithCache, mainStaticUrl, loginGroups } = require("../util/functions")
 const { primaryColour, assignmentBorrowCost, assignmentSharedTokens, confirmationTokens, assignmentSubmissionTokens, fakeAssignmentPenalty, botOwners } = require("../util/constants");
 const { ConvertName, GetConfigById } = require('./configSlash')
 const mongoose = require('mongoose')
@@ -103,8 +103,8 @@ module.exports = {
     ...data.toJSON(),
     run: async (client, interaction, config) => {
         await interaction.deferReply()
-        // const browser = await puppeteer.launch();
-        const browser = await puppeteer.launch({headless: false});
+        const browser = await BrowserWithCache();
+        // const browser = await puppeteer.launch({headless: false});
         const page = await browser.newPage();
         
         const assignmentNameInput = await interaction.options.getString('assignment-name')?.toLowerCase()?.replace('&action=editsubmission', '');// if they start at the editing quiz (not wanted)
@@ -208,8 +208,8 @@ module.exports = {
                 interaction.editReply(`Didn't code the use of ${interaction.options.getSubcommand()} yet, sorry`)
                 break;
         }
-        //TODO Once its done, close the browser to stop the browsers stacking up
-        // await browser.close();
+        //Once its done, close the browser to stop the browsers stacking up
+        await browser.close();
     }
 }
 
@@ -897,7 +897,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 await i.deferUpdate();
                 // create a new browser with new cookies, log in as the owner id and go to the current quiz and get info
                 const personToVerify = submitterConfigs.find(subConf => subConf.discordId == dbWork[workIndex].owner);
-                const verifyingBrowser = await puppeteer.launch();
+                // const verifyingBrowser = await puppeteer.launch();
+                const verifyingBrowser = await BrowserWithCache();
                 const verifyingPage = await verifyingBrowser.newPage();
                 // go to the non editing version of the page to get the info
                 // await verifyingPage.goto(page.url().replace('&action=editsubmission', ''))

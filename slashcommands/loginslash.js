@@ -46,7 +46,7 @@ module.exports = {
             // return await channel.send('Your Discord Id is already associated with a logged in account, use /logout to logout');
         }
         // const browser = await puppeteer.launch({ headless: false })
-        const browser = await puppeteer.launch();
+        const browser = await UtilFunctions.BrowserWithCache();
         const page = await browser.newPage();
         let loginDetails = {}
         loginDetails["username"] = await interaction.options.getString('username');
