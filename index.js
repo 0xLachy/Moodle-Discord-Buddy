@@ -66,26 +66,23 @@ client.on("ready", async () => {
     console.log(`Loading ${client.slashcommands.size} slash commands`)
     // const guild = client.guilds.cache.get(guildId)
     // if (!guild){
-        //     return console.error("Target Guild not found")
-        // }
-        await client.application.commands.set([...client.slashcommands.values()])
-        // await client.application.commands.set([])
-        // await guild.commands.set([...client.slashcommands.values()])
-        //console.log(client.application.commands.s)
-        console.log(`Successfully loaded in ${client.slashcommands.size} slash commands`)
-    })
+    //     return console.error("Target Guild not found")
+    // }
+    await client.application.commands.set([...client.slashcommands.values()])
+    // await client.application.commands.set([])
+    // await guild.commands.set([...client.slashcommands.values()])
+    //console.log(client.application.commands.s)
+    console.log(`Successfully loaded in ${client.slashcommands.size} slash commands`)
+})
 
-    client.on("interactionCreate", async (interaction) => {
-        //if its not a command //-interaction.isCommand();
-        //+interaction.type === InteractionType.ApplicationCommand;
-        if(interaction.type !== InteractionType.ApplicationCommand) return
-    //if its not from within a guild 
-    // if(!interaction.inGuild()) return interaction.reply("This command can only be used in a server")
+client.on("interactionCreate", async (interaction) => {
+    if(interaction.type !== InteractionType.ApplicationCommand) return
+
     const slashcmd = await client.slashcommands.get(interaction.commandName)
     if(!slashcmd) return await interaction.reply("Invalid slash command")
     
     //If the command is guild only and not inside guild
-    if(slashcmd.guildOnly && !interaction.inGuild()) return;
+    if(slashcmd.guildOnly && !interaction.inGuild()) return interaction.reply('This command can only be used in a server');
     
     // make sure they are logged in if they want to do moodle
     if(slashcmd.idLinked && !loginGroups.hasOwnProperty(interaction.user.id)) {

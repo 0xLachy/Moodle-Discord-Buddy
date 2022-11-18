@@ -477,8 +477,10 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
     // .setThumbnail() IDK maybe there is an image on the website :/
 
     // if they are logged into the website themself, limit logins uses the owner for this function so thats why the check is here
-    // await interaction.options.getSubcommand()
-    if(submitting || (!config.settings.general.LimitLogins && loginGroups.hasOwnProperty(interaction.user.id) && interaction.options.getSubcommand() != 'missing')) {
+    // if they are just trying to view an assignment missing for another person, then they don't need to see it I guess, idk how I feel about this tbh
+    const showingFullInfo = (!config.settings.general.LimitLogins && loginGroups.hasOwnProperty(interaction.user.id) && !(interaction.options.getSubcommand() == 'missing' && interaction.options.getString('studentname') != null));
+    //(if they are submitting than they are obviously logged in!)
+    if(submitting || showingFullInfo) {
         assignmentEmbed.addFields(...info.submissionData);
         //if they aren't hiding feedback show that too!
         if(!config.settings.assignments.HideFeedback) {
@@ -502,17 +504,35 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                 .setLabel('Add Comments')
                 .setDisabled(false)
                 .setStyle(ButtonStyle.Success),
+            // new ButtonBuilder()
+            //     .setCustomId('Remove Comments')
+            //     .setLabel('Add Comments')
+            //     .setDisabled(info.comments.length == 0)
+            //     .setStyle(ButtonStyle.Danger),
         )
+        // const commentAllowed = !config.settings.general.LimitLogins && loginGroups.hasOwnProperty(interaction.user.id)
+        const reply = await interaction.editReply({ embeds: [assignmentEmbed], components: showingFullInfo ? [commentRow] : []});
+        
+        // if comments aren't allowed just return early
+        if(!showingFullInfo) return;
+        
         return new Promise(async (resolve, reject) => {
-            const reply = await interaction.editReply({ embeds: [assignmentEmbed], components: [commentRow]});
             const filter = i => i.user.id === interaction.user.id;
             const collector = await reply.createMessageComponentCollector({ filter, time: 30 * 1000 });
-            
+
+            let addingComments = false
             // get them to choose a recipient
             collector.on('collect', async (i) => {
                 if(i.customId == 'Add Comments') {
                     i.deferUpdate()
-                    await WaitToMakeSubmissionComments(interaction, page)
+                    // if they are already adding comments, don't duplicate them! Maybe in the future make it act like submitting where it turns off the collection or whatever :P
+                    // it would be pretty easy, just have to use the nested collector again I think :/
+                    if(addingComments) return;
+                    //*extending the collector so that the page won't close!
+                    collector.resetTimer({ time: 35 * 1000})
+                    addingComments = true;
+                    await WaitToMakeSubmissionComments(interaction, page, config, assignmentEmbed, info)
+                    addingComments = false;
                 }
             });
             
@@ -850,7 +870,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
 }
 
 //TODO have a way to delete comments
-const WaitToMakeSubmissionComments = async (interaction, page, time=30000) => {
+const WaitToMakeSubmissionComments = async (interaction, page, config, mainEmbed, info, time=30000) => {
     return new Promise(async (resolve, reject) => {
         //create an embed instead
         const confirmationEmbed = new EmbedBuilder()
@@ -878,21 +898,34 @@ const WaitToMakeSubmissionComments = async (interaction, page, time=30000) => {
 
         let stillConfirming = false;
         msgCollector.on('collect', async m => {
+            const commentToAdd = m.content;
+            if(interaction.inGuild() && config.settings.config.DeleteSettingMessages) { m.delete() };
             if(stillConfirming) return;
             let confirmationMessageString = 'Are you sure you want to send the coment: ';
-            if(m.content.length >= 1024 - confirmationMessageString.length) return TemporaryResponse(interaction, `Your comment is too long, chop it up into parts less than ${1024 - confirmationMessageString.length} characters`);
+            if(commentToAdd.length >= 1024 - confirmationMessageString.length) return TemporaryResponse(interaction, `Your comment is too long, chop it up into parts less than ${1024 - confirmationMessageString.length} characters`);
 
             // if they got past these hurdles, set still confirming to true!
             stillConfirming = true;
             //* I think the max description you can send is 1024 characters
-            if(await SendConfirmationMessage(interaction, `Are you sure you want to send the comment: ${m.content}`)) {
+            if(await SendConfirmationMessage(interaction, `Are you sure you want to send the comment: ${commentToAdd}`)) {
                 //if they do want to send the message
                 await page.evaluate((commentToAdd) => {
+                    // as long as it's clicked once, the text area loads, I can close and but the text area stays so this is fine for multi comments lol
                     document.querySelector('div[role="main"] a.comment-link span').click();
                     document.querySelector('div.comment-area textarea').value = commentToAdd;
                     document.querySelector('div.comment-area a[id*="comment-action-post"]').click();
-                }, m.content)
+                }, commentToAdd)
+                //update the comments on the embed to show that stuff
+                // this is a string set to none sometimes, there might be an easier way of doing this :/
+                // split at \n, that might break some comments though if I implement a deleting feature :(
+                const commentData = info.submissionData.find(sd => sd.name == 'Submission comments')
+                commentData.value = commentData.value == 'none' ? commentToAdd : commentData.value + '\n' + commentToAdd;
+                const commentField = mainEmbed.data.fields.find(field => field.name == 'Submission comments');
+                if(commentField) commentField.value = commentData.value;
+
+                await interaction.editReply({ embeds: [mainEmbed]})
             }
+            stillConfirming = false;
         })
         // the only thing that it is collecting is quit so nothing needed here
         collector.on('collect', async (i) => {
