@@ -962,7 +962,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
     `or set as work to submit. If you choose to borrow work you will have to pay the user ${assignmentBorrowCost} when you click save`)
     .setFields(await GetWorkFields());
 
-    const buttonRow = GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1);
+    const buttonRow = GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1, undefined, undefined, dbWork[workIndex].owner == interaction.user.id);
+                // await interaction.editReply({ components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1, false, addBorrowedButton.disabled, dbWork[workIndex].owner == interaction.user.id)})
     // in the second row
     const addBorrowedButton = buttonRow[1].components.find(btn => btn.data.label == 'Add Work')
 
@@ -992,17 +993,23 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 await i.deferUpdate()
                 //next is disabled if it can't go any further, so this is safe
                 workIndex++;
+                await interaction.editReply({ components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1, false, addBorrowedButton.disabled, dbWork[workIndex].owner == interaction.user.id)})
             }
             else if(i.customId == 'Back') {
                 await i.deferUpdate()
                 workIndex--;
+                await interaction.editReply({ components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1, false, addBorrowedButton.disabled, dbWork[workIndex].owner == interaction.user.id)})
             }
             else if(i.customId == 'Delete Shared') {
                 i.deferUpdate();
                 //send a confirmation message asking w
-                if(SendConfirmationMessage(interaction, `Are you sure that you want to delete the work containing \`${dbWork[workIndex].attachments.map(work => work.name).join(', ')}\` by <@${dbWork[workIndex].owner}>?`)) {
-                    if(SendConfirmationMessage(interaction, `Do you want to take back the tokens that they earned for posting the assignment?`)) {
-                        GetConfigById(dbWork[workIndex].owner).tokens -= assignmentSubmissionTokens;
+                if(await SendConfirmationMessage(interaction, `Are you sure that you want to delete the work containing \`${dbWork[workIndex].attachments.map(work => work.name).join(', ')}\` by <@${dbWork[workIndex].owner}>?`)) {
+                    // pretty much should always take the money back, only bot owner can decide on that, because otherwise they get free money essentially!
+                    if(!botOwners.includes(interaction.user.id) || await SendConfirmationMessage(interaction, `Do you want to take back the tokens that they earned for posting the assignment?`)) {
+                        const deleteOwner = GetConfigById(dbWork[workIndex].owner);
+                        deleteOwner.tokens -= assignmentSubmissionTokens;
+                        if(deleteOwner.tokens < 0) deleteOwner.tokens = 0;
+                        await deleteOwner.save();
                     }
                     //delete from the database, and then delete from the array
                     await dbWork[workIndex].delete();
@@ -1028,7 +1035,8 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 await LoginToMoodle(verifyingPage, dbWork[workIndex].owner, page.url().replace('&action=editsubmission', '')).catch((err) => {
                     console.log(err)
                     interaction.followUp({ content: 'An error occured while signing into moodle, they might have changed their password but not logged out and back in'})
-                    interaction.editReply({components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1)})
+                    // interaction.editReply({components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1)})
+                    interaction.editReply({ components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1, false, addBorrowedButton.disabled, dbWork[workIndex].owner == interaction.user.id)})
                 });
                 await verifyingPage.waitForSelector('div.submissionstatustable tbody tr td')
                 const veryPersonInfo = await GetFullAssignmentInfo(verifyingPage, false);
@@ -1041,11 +1049,16 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 if(dbWork[workIndex].modifyDate != veryPersonInfo.submissionData.find(subm => subm.name == 'Last modified').value) {
                     //THEY CHANGED THEIR WORK WITHOUT THE BOT!!! DELETE THEIR WORK AND TAKE AWAY THEIR MONEY
                     // they can always resubmit again if they didn't mean to edit it so it is on purpose
-                    await interaction.followUp(`<@${personToVerify.discordId}> had different dates! They submitted on ${dbWork[workIndex].modifyDate}, but it was ` +
-                    `found that they had edited it on ${veryPersonInfo.submissionData.find(subm => subm.name == 'Last modified').value}! Their assignment work will now be deleted and they will pay a penalty of $${fakeAssignmentPenalty}! (As well as taking back their submission earnings of $${assignmentSubmissionTokens})`);
+                    const conclusionString = `<@${personToVerify.discordId}> had different dates! They submitted on ${dbWork[workIndex].modifyDate}, but it was ` +
+                    `found that they had edited it on ${veryPersonInfo.submissionData.find(subm => subm.name == 'Last modified').value}! Their assignment work will now be deleted and they will pay a penalty of $${fakeAssignmentPenalty}! (As well as taking back their submission earnings of $${assignmentSubmissionTokens})`;
+                    await interaction.followUp(conclusionString);
                     personToVerify.tokens -= assignmentSubmissionTokens;
                     personToVerify.tokens -= fakeAssignmentPenalty;
 
+                    //Can't be negative so set it to zero if too low
+                    if(personToVerify.tokens < 0) personToVerify.tokens = 0;
+                    await personToVerify.save();
+                    console.log(conclusionString)
                     //delete the file from the database
                     await dbWork[workIndex].delete();
                     // it won't be deleted from the array though, so delete it here to!
@@ -1124,10 +1137,10 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
 
     }
 
-    function GetWorkButtonRows(backDisabled=false, nextDisabled=false, disableAll=false, addWorkDisabled=false) {
+    function GetWorkButtonRows(backDisabled=false, nextDisabled=false, disableAll=false, addWorkDisabled=false, deleteAllowed=false) {
         const mainActionRow = new ActionRowBuilder();
-        //TODO if the work belongs to the user themself, then let them delete it :P
-        if(botOwners.includes(interaction.user.id) || interaction?.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+        //if the work belongs to the user themself, then let them delete it :P
+        if(deleteAllowed || botOwners.includes(interaction.user.id) || interaction?.memberPermissions.has(PermissionFlagsBits.Administrator)) {
             mainActionRow.addComponents(
                 new ButtonBuilder()
                     .setCustomId('Delete Shared')
