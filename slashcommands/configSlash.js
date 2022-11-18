@@ -1,11 +1,13 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const { primaryColour } = require("../util/constants");
 const mongoose = require('mongoose');
+const { SendConfirmationMessage } = require('../util/functions');
 require("dotenv").config()
 //TODO add the stats viewer screen where you can see your stats
 //And I guess badges too, but I think that should be a seperate command
 let cachedConfigs = [];
-//Todo test that if you change a nickname, it actually saves in cached configs
+//not sure about the null one but yeah, just to stop errors and stuff
+const bannedNames = [ 'me', 'myself', 'all', 'default', 'null']
 //*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices are not added to the database
 const settingsInfo = {
     general: {
@@ -105,9 +107,6 @@ const configStats = Object.entries(statsInfo).reduce((stats, [statName, statObj]
 }, {})
 //discordID string or int, I think it is given by discord api as string
 // make the schema that is used to send and recieve data
-const topLevelDefaults = {
-
-}
 const configSchema = new mongoose.Schema({
     name: { type: String, default: null, lowercase: true, trim: true }, // their moodle name
     discordId: String, // their discord id to fetch their config
@@ -666,14 +665,14 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
 
         const buttonRow = CreateButtonRow()
 
-        await interaction.editReply({ content: ' ', embeds: [settingsOverviewEmbed], components: [selectRow, buttonRow] });
+        const reply = await interaction.editReply({ content: ' ', embeds: [settingsOverviewEmbed], components: [selectRow, buttonRow] });
         const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
         let channelResponse = false;
         //make sure that it is the right person using the buttons and select menus
         const filter = i => i.user.id === interaction.user.id;
         const msgFilter = m => m.author.id === interaction.user.id
 
-        const collector = await channel.createMessageComponentCollector({ filter, time: 180 * 1000 });
+        const collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
         const msgCollector = await channel.createMessageCollector({ filter: msgFilter, time: 180 * 1000 });
 
         collector.on('collect', async (i) => {
@@ -719,7 +718,13 @@ const CreateSettingsOverview = (interaction, userConfig, editingName=false) => {
                 await TemporaryResponse(interaction, 'Saved!')
             }
             else if(inputCommand.length > 0) {
-                if(editingName) {
+                if(bannedNames.includes(inputCommand)) {
+                    await TemporaryResponse(interaction, 'That name has been banned!')
+                }
+                else if(!await SendConfirmationMessage(interaction, `Are you sure you want to add the name ${inputCommand} as ${editingName ? 'your Main name' : 'one of your Nicknames'}?`)) {
+                    await TemporaryResponse(interaction, 'Name not added!')
+                }
+                else if(editingName) {
                     if(userConfig.name == inputCommand) {
                         await TemporaryResponse(interaction, 'You already have that name!')
                     }
