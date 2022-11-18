@@ -1,7 +1,6 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, ComponentBuilder} = require('discord.js');
 const { primaryColour } = require("../util/constants");
 const mongoose = require('mongoose');
-const { SendConfirmationMessage } = require('../util/functions');
 require("dotenv").config()
 //TODO add the stats viewer screen where you can see your stats
 //And I guess badges too, but I think that should be a seperate command
@@ -298,6 +297,7 @@ module.exports = {
     permissions: [],
     idLinked: false,
     devOnly: false,
+    statsInfo,
     FixConfigFiles,
     GetConfigById,
     GetConfigs,
@@ -1022,4 +1022,52 @@ const CreateMoveRow = async (disableBack=false, disableNext=false) => {
                 // .setDisabled(disable on overview screen I guess?)
         ) 
     ;
+}
+
+//* BECAUSE OF DEPENDENCY ISSUES, I CAN'T IMPORT THIS FROM THE MAIN FUNCTIONS :(
+const SendConfirmationMessage = async (interaction, message, time=30000) => {
+    return new Promise(async (resolve, reject) => {
+        //create an embed instead
+        const confirmationEmbed = new EmbedBuilder()
+        .setColor(primaryColour)
+        .setTitle('Confirmation')
+        .setDescription(message)
+
+        const confirmationRow = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('no')
+                .setLabel('no')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('yes')
+                .setLabel('yes')
+                .setStyle(ButtonStyle.Success),
+        );
+        const reply = await interaction.followUp({content: ' ', embeds:[confirmationEmbed], components:[confirmationRow], fetchReply: true})
+        
+        const filter = i => i.user.id === interaction.user.id;
+        const collector = await reply.createMessageComponentCollector({ filter, time });
+
+        collector.on('collect', async (i) => {
+            collector.stop()
+            if(i.customId == 'yes') {
+                return resolve(true)
+            }
+            else if(i.customId == 'no') {
+                return resolve(false)
+            }
+        })
+
+        //by default I am going to assume if they forget, don't confirm it cause it is likely something like spending money and they might not want to!
+        collector.on('end', collected => {
+            // reply.delete();
+            //new way to delete messages!
+            interaction.webhook.deleteMessage(reply)
+            if(collected.size == 0) {
+                // submitting ? interaction.deleteReply() : interaction.editReply({components: []})
+                return resolve(false); //we finished the function
+            }
+        });
+    })
 }
