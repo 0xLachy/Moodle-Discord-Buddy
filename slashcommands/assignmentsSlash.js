@@ -8,7 +8,6 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const axios = require('axios');
-const { client } = require('..');
 
 //TODO give them an extra reward for getting a grade
 //TODO have a subcommand called diff, you compare the work done between two people, like what has both done, what has noone done, who did this, who did that.
