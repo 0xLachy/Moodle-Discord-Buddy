@@ -109,13 +109,28 @@ client.on("interactionCreate", async (interaction) => {
     //increment commands run
     config.stats.TotalCommandsRun++;
     // then save to the database... every time, might be a bit expensive but better than fetching every time
+    //* there might be an error if one of the commands is saving the config and the user runs a new command at the same time with saving to the db and crashes the program :(
     await config.save();
     //not awaiting cause other commands can run at the same time I guess idk...
     await slashcmd.run(client, interaction, config)
     //check that the user doesn't have any new badges yet
     const newBadges = await CheckForNewBadges(config);
     if(newBadges.length > 0) {
-        interaction.followUp({ ephemeral: true, content: `You just got ${newBadges.length} badge${newBadges.length > 1 ? 's' : ''} :partying_face: (${newBadges.join(', ')})`})
+        const congratString = `You just got ${newBadges.length} badge${newBadges.length > 1 ? 's' : ''} (${newBadges.join(', ')})! :partying_face:`;
+        if(config.settings.general.SendDMS) {
+            try {
+                const channel = await interaction.user.createDM();
+                channel.send(congratString)
+            } catch (error) {
+                console.log(error)
+                console.log(`Couldn't send message to ${interaction.user.id}, their send messages setting will be disabled`)
+                config.settings.general.SendDMS = false;
+                await config.save();
+            }
+        }
+        else {
+            interaction.followUp({ ephemeral: true, content:congratString })
+        }
     }
 })
 //discord error handling things that might help

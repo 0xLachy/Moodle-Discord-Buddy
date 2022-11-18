@@ -8,6 +8,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const axios = require('axios');
+const { client } = require('..');
 
 //TODO give them an extra reward for getting a grade
 //TODO have a subcommand called diff, you compare the work done between two people, like what has both done, what has noone done, who did this, who did that.
@@ -918,6 +919,7 @@ const WaitToMakeSubmissionComments = async (interaction, page, config, mainEmbed
                 //update the comments on the embed to show that stuff
                 // this is a string set to none sometimes, there might be an easier way of doing this :/
                 // split at \n, that might break some comments though if I implement a deleting feature :(
+                //! if they have 2 comments of 900 or whatever which is allowed, it will break this display thing :/
                 const commentData = info.submissionData.find(sd => sd.name == 'Submission comments')
                 commentData.value = commentData.value == 'none' ? commentToAdd : commentData.value + '\n' + commentToAdd;
                 const commentField = mainEmbed.data.fields.find(field => field.name == 'Submission comments');
@@ -1059,12 +1061,22 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                         if(dbWork[workIndex].grade == assignmentSchema.obj.grade.default) {
                             recipient = submitterConfigs.find(subConf => subConf.discordId == work.owner)
                             recipient.tokens += confirmationTokens;
-                            await recipient.save()
                             await interaction.followUp(`<@${recipient.discordId}> has just earned $${confirmationTokens} for having their work being confirmed and graded!`)
-                            //TODO SEND MESSAGE TO RECIPIENT TO CONGRATULATE THEM
+                            // //! TEST THIS
                             // if(recipient.settings.general.SendDMS) {
-                            //     //send message
+                            //     // I don't know where I get the error but yeah
+                            //     try {
+                            //         // will not work because it needs to be a discord user
+                            //         // const channel = await recipient.discordId.createDM();
+                            //         const channel = await (await client.users.fetch(recipient.discordId)).createDM();
+                            //         channel.send(`Congratulations! You just earned $${confirmationTokens} for the assignment \`${assignmentName}\` being verified!`)
+                            //     } catch (error) {
+                            //         console.log(`Couldn't send message to ${recipient.discordId}, their send messages setting will be disabled`)
+                            //         recipient.settings.general.SendDMS = false;
+                            //     }
                             // }
+                            // lastly save all the changes made for them
+                            await recipient.save()
                         }
                         dbWork[workIndex].grade = veryPersonInfo.feedback.find(fb => fb.name == 'Grade');
                         await dbWork[workIndex].save()
