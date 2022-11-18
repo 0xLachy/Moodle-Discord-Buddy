@@ -9,9 +9,7 @@ const os = require('os')
 const path = require('path')
 const axios = require('axios');
 
-//TODO give them an extra reward for getting a grade
 //TODO have a subcommand called diff, you compare the work done between two people, like what has both done, what has noone done, who did this, who did that.
-//TODO give huge warning when they want to submit nothing
 //? maybe I should make it so you can choose the price of your assignment, with default in constants.js
 const data = new SlashCommandBuilder()
 	.setName('assignments')
@@ -94,7 +92,7 @@ const assignment_db = mongoose.createConnection(process.env.MONGO_URI, {
 const AssignmentModel = assignment_db.model('Submissions', assignmentSchema, 'Submissions')
 
 module.exports = {
-    category: "info",
+    category: 'utility',
     permissions: [],
     idLinked: false,
     devOnly: false,
@@ -434,7 +432,7 @@ const AddAndWaitForMoreSelect = async (interaction, page, config, assignmentOpti
         selectMenuPage = 0;
         const reply = await interaction.editReply({content: ' ', components: GetSelectMenuOverflowActionRows(selectMenuPage, assignmentOptions, placeholder), fetchReply: true})
         const filter = i => i.user.id === interaction.user.id;
-        //TODO extend collector when they click next idk, 20 seconds to choose from big list? having the page still open seems expensive though
+        //? maybe extend collector when they click next idk, 20 seconds to choose from big list? having the page still open seems expensive though
         collector = await reply.createMessageComponentCollector({ filter, time: submitting ? 60 * 1000 : 20 * 1000 });
 
         // get them to choose a recipient
@@ -663,58 +661,13 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                     return resolve(await interaction.editReply({ components: []}))
                 }
                 else if(i.customId == 'Remove Work') {
-                    //TODO make it prompt for all, or specific files
                     // await interaction.editReply({components: [CreateSubmitButtonsRow(true, true, true, true,)]})
                     // await i.deferUpdate();
                     const removeCompRow = CreateSubmitButtonsRow(true, true, false, true);
                     
                     // calling this function but instead of adding we are removing stuff
                     await CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, userWork, assignmentEmbed, 
-                        [removeCompRow], addWorkButton, sharedWorkButton, removeButton, [buttonRow], maxNumberOfFiles, true)
-                    // // console.log(i.message.components[0], removeCompRow)
-                    // // if currently in the removing work stage, close the adding work window
-                    // // i.message.components[0].components.for
-                    // if(i.message.components[0].components.every((btn, index) => btn.data.disabled ?? false == removeCompRow.components[index].data.disabled)) {
-                    //     // await Promise.all([ i.deferUpdate(), nestedConfirmationCollector.stop() ])
-                    //     await nestedConfirmationCollector.collector.stop();
-                    //     i.deferUpdate();
-                    //     return await interaction.editReply({ components: [buttonRow]})
-                    //     // return await i.deferUpdate({ components: [buttonRow] });
-                    // }
-    
-                    // //* can't edit components in defer update because they vanish back to normal in seconds, I swear that used to work
-                    // await i.deferUpdate();
-                    // await interaction.editReply({components: [removeCompRow]})
-                    // // await i.deferUpdate({components: [removeCompRow]});
-                    
-                    // //this button should be disabled if the thing says none
-    
-                    // // let workOnAssignInfo = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment')
-                    // // const splitUpSubmittedAssignments = workOnAssignInfo.value.trim().split(', ');
-    
-                    // const splitUpSubmittedAssignments = await GetWorkOnAssignment(page);
-    
-                    // const filesToRemoveNames = await AmountConfirmationInput(interaction, nestedConfirmationCollector, splitUpSubmittedAssignments, 'Choose whether or not to remove all or just a certain file from the assignment', ButtonStyle.Danger)
-    
-                    // // await interaction.editReply({ components: [buttonRow]})
-                    // for await (const submFile of await page.$$('div.fp-thumbnail')) {
-                    //     const submFileName = await submFile.evaluate((node) => node.querySelector('img').title);
-                    //     if(filesToRemoveNames.includes(submFileName)) {
-                    //         //* for some reason when a thing is deleted, sometimes it stays on the page unfortunately
-                    //         await submFile.click().catch();
-                    //         await DeleteFileFromPage(page);
-    
-                    //         // remove it from the submitted assignments thing
-                    //         splitUpSubmittedAssignments.splice(splitUpSubmittedAssignments.indexOf(submFileName), 1)
-                    //     }
-                    // }
-    
-                    // // const oldWorkOnAssign = assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment');
-                    // //!!!! IF THERE IS A COMMA LIKE THAT, IT THINKS IT IS MORE THAN ONE ASSIGNMENT!
-                    // // oldWorkOnAssign.value = oldWorkOnAssign.value.split(', ').filter(olWork => !filesToRemoveNames.includes(olWork)).join(', ') || 'none';
-                    // assignmentEmbed.data.fields.find(field => field.name == 'Current work on Assignment').value = splitUpSubmittedAssignments.length ? `'${splitUpSubmittedAssignments.join(`', '`)}'` : 'none';
-    
-                    // await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
+                    [removeCompRow], addWorkButton, sharedWorkButton, removeButton, [buttonRow], maxNumberOfFiles, true)
                 }
                 else if(i.customId == 'Add Work') {
                     //* it should be disabled if they have no work, but just a precausion
@@ -726,10 +679,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                     const addWorkOnlyRow = CreateSubmitButtonsRow(true, false, true, true);
                     
                     await CheckToModifySubmittedFiles(interaction, i, page, nestedConfirmationCollector, chosenWork, { owner: interaction.user.id, attachments: userWork }, assignmentEmbed, 
-                        [addWorkOnlyRow], addWorkButton, sharedWorkButton, removeButton, [buttonRow], maxNumberOfFiles)
-    
-                    // await interaction.editReply({ embeds: [assignmentEmbed], components: [buttonRow]})
-    
+                    [addWorkOnlyRow], addWorkButton, sharedWorkButton, removeButton, [buttonRow], maxNumberOfFiles)
                 }
                 else if(i.customId == 'Save') {
                     await i.deferUpdate();
@@ -948,7 +898,6 @@ const WaitToMakeSubmissionComments = async (interaction, page, config, mainEmbed
 const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork, dbWork, submitterConfigs, assignmentName, maxNumberOfFiles) => {
     //If this function is being called dbWork.length > 0 is true so iteration works
     //*now I doubt 25 people will submit assignments, but I should probably code for that
-    // todo if admin, allow them to delete submissions, or if validity is false auto delete I guess
 
     // get all the configs of the people submitting 
     // I don't want to refresh this function heaps because yeah

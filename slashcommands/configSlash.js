@@ -70,7 +70,6 @@ const settingsInfo = {
     },
 }
 
-//TODO I need to have a way for people to view these stats
 const statsInfo = {
     //* have to have 0 (or any number) as a default otherwise database Nan errors
     CreationDate: { type: Date, default: Date.now, info: 'When the config file was created'},

@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, 
 const { GetSelectMenuOverflowActionRows, SendConfirmationMessage } = require("../util/functions");
 const { botOwners, primaryColour, MoodleCoinImgURL } = require("../util/constants");
 const { CreateOrUpdateConfig, GetConfigById, GetConfigs, GetDefaults } = require("./configSlash")
-//TODO make it so if admin use the bot they can also remove tokens from people
+
 //* You actually can put in any valid id for the user id, which means it can be sent from dms
 const data = new SlashCommandBuilder()
 	.setName('donate')
