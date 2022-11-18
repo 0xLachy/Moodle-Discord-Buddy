@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, CategoryChannel, ComponentBuilder} = require('discord.js');
-const { GetSelectMenuOverflowActionRows } = require("../util/functions");
+const { GetSelectMenuOverflowActionRows, SendConfirmationMessage } = require("../util/functions");
 const { botOwners, primaryColour, MoodleCoinImgURL } = require("../util/constants");
 const { CreateOrUpdateConfig, GetConfigById, GetConfigs, GetDefaults } = require("./configSlash")
 //TODO make it so if admin use the bot they can also remove tokens from people
@@ -44,8 +44,8 @@ module.exports = {
             return await PromptForDonation(interaction, config, recipient, amount)
         }
         else {
-            const recipientConfig = GetConfigById(recipient) ?? CreateOrUpdateConfig({ discordId: recipient.id, nicknames: [ recipient?.nickname, recipient.username ].filter(name => name != undefined).map(name => name.toLowerCase())});
-            return FinaliseAndDisplayDonation(interaction, userConfig, interaction.guild.members.fetch(recipient), recipientConfig, amount)
+            const recipientConfig = GetConfigById(recipient) ?? await CreateOrUpdateConfig({ discordId: recipient.id, nicknames: [ recipient?.nickname, recipient.username ].filter(name => name != undefined).map(name => name.toLowerCase())});
+            return FinaliseAndDisplayDonation(interaction, config, await interaction?.guild?.members?.fetch(recipient) ?? recipient, recipientConfig, amount)
         }
     }
 }
@@ -54,7 +54,6 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
         //if amount is null
         amount ??= userConfig.settings?.shop?.DonationAmount ?? 25;
         //TODO make a donation embed top banner
-        //TODO make a badge for donating over 50 tt/mm to someone
 
         const filter = i => i.user.id === interaction.user.id;
         //INSTEAD OF USING CHANNEL USE MESSAGE
@@ -115,7 +114,7 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
                     .setDisabled(amount == 0 || amount > userConfig.tokens)
             )
             // if the owner of the bot or admin they can see and therefore use the take button
-            if(botOwners.includes(interaction.user.id) || interaction?.memberPermissions.has(PermissionFlagsBits.Administrator)) {
+            if(botOwners.includes(interaction.user.id) || interaction?.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
                 confirmationRow.addComponents(
                     new ButtonBuilder()
                         .setCustomId('Take Away')
@@ -169,6 +168,14 @@ const PromptForDonation = (interaction, userConfig, recipient, amount) => {
 const FinaliseAndDisplayDonation = async (interaction, userConfig, recipient, recipientConfig, amount) => {
     //making sure it is a number, just in case javascript stuff :P
     amount = Number(amount);
+    if(userConfig.tokens < amount) return interaction.editReply({ content: `You only have $${userConfig.tokens}! donate less!`})
+    // if it is one of the botOwners then they can put in negative amounts so that they can steal
+    if(!botOwners.includes(interaction.user.id) && amount < 0) return interaction.editReply({ content: `You can't put in negative amounts!`, embeds: [], components: []})
+    await interaction.editReply({ content: 'Choose if you want to follow through!'})
+    // if they decide not to donate return early again
+    if(!(await SendConfirmationMessage(interaction, `Are you sure you want to give away $${amount} to <@${recipient.id}>? You will have $${userConfig.tokens - amount} moodle money left.`))) return await interaction.editReply({ content: 'Donation not finalized!', embeds: [], components: []})
+
+    // if all the tests passed, swap tokens essentially :P
     recipientConfig.tokens += amount;
     recipientConfig.stats.TokensRecieved += amount;
     userConfig.tokens -= amount;

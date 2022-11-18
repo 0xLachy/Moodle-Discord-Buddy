@@ -565,14 +565,16 @@ function encrypt(loginDetails){
 
 const TemporaryResponse = async (interaction, message, time=1000) => {
     const reply = await interaction.followUp({content: message, fetchReply: true})
-    setTimeout(() => reply.delete(), time);
+    // setTimeout(() => reply.delete(), time);
+    setTimeout(() => interaction.webhook.deleteMessage(reply), time);
 }
 
+//* IMPORTANT, if interaction hasn't been edit replied yet, it will cause the whole interaction to be deleted :/
 const SendConfirmationMessage = async (interaction, message, time=30000) => {
     return new Promise(async (resolve, reject) => {
         //create an embed instead
         const confirmationEmbed = new EmbedBuilder()
-        .setColor(UtilFunctions.primaryColour)
+        .setColor(primaryColour)
         .setTitle('Confirmation')
         .setDescription(message)
 
@@ -604,7 +606,9 @@ const SendConfirmationMessage = async (interaction, message, time=30000) => {
 
         //by default I am going to assume if they forget, don't confirm it cause it is likely something like spending money and they might not want to!
         collector.on('end', collected => {
-            reply.delete();
+            // reply.delete();
+            //new way to delete messages!
+            interaction.webhook.deleteMessage(reply)
             if(collected.size == 0) {
                 // submitting ? interaction.deleteReply() : interaction.editReply({components: []})
                 return resolve(false); //we finished the function
