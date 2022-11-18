@@ -12,6 +12,7 @@ const settingsInfo = {
         title: 'General Settings',
         info: 'The main settings to change, it\'s a bit barren, please give sugestions to the bot creator!',
         LimitLogins: { type: Boolean, default: false, info: 'Use the bot owner to log in where possible, like for leaderboards and stuff'},
+        SendDMS: { type: Boolean, default: true, info: 'If possible send direct messages notifying you of stuff like when an assignment you submitted gets verified or when you get donated to or when you earn a badge!'},
         AutoSave: { type: Boolean, default: true, info: 'Save when you quit or when you time out so you don\'t lose progress'},
     },
     shop: {
@@ -67,6 +68,8 @@ const settingsInfo = {
         DeleteSettingMessages: { type: Boolean, default: true, info: '(Only deletes inside guild) When you send in messages to edit config, delete them once they are passed'},
     },
 }
+
+//TODO I need to have a way for people to view these stats
 const statsInfo = {
     //* have to have 0 (or any number) as a default otherwise database Nan errors
     CreationDate: { type: Date, default: Date.now, info: 'When the config file was created'},

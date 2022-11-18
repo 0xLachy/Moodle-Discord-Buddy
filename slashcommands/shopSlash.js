@@ -10,6 +10,7 @@ const data = new SlashCommandBuilder()
 // if you have custom discord emojis you can actually use them!
 //TODO add the ultimate badge... with this power than can have any icon that they put as a string or whatever, like they send in an emoji and boom
 // the good thing about having the name thing is that if you want to change something like vip emoji you don't have to change its name, but apart from that :/
+//* I could link up badges to icons, once you get the badge, you can equip the icon, maybe differnet section 
 const icons = [ 
     { name: 'vip', emoji: ':shield:', noPurchase: true }, // could call it purchaseable and set to false but using booleans this way is better imo
     { name: 'party', emoji: ':partying_face:', price: 0 }, // they can get this one for free if they bother to look at icons
