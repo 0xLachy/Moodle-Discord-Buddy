@@ -29,7 +29,7 @@ module.exports = {
     devOnly: false,
 
     ...data.toJSON(),
-    run: async (client, interaction) => {
+    run: async (client, interaction, config) => {
         // if(interaction.inGuild()){
         //     let channel = await interaction.user.createDM(); 
         //     await channel.send('Login here, not in the Guild')
@@ -52,7 +52,7 @@ module.exports = {
         loginDetails["username"] = await interaction.options.getString('username');
         loginDetails["password"] = await interaction.options.getString('password');
         //log into the browser todo find a better way to do this
-        await UtilFunctions.LoginToMoodle(page, await interaction.user.id, undefined, loginDetails).then(async (result) => {
+        await UtilFunctions.LoginToMoodle(page, config, undefined, loginDetails).then(async (result) => {
             // console.log(result);
             const loggedInName = await page.evaluate(() => document.querySelector('#usermenu > span').textContent)
             const moodleId = await page.evaluate(() => document.querySelector('[data-user-id]').getAttribute('data-user-id'))
