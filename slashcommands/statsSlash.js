@@ -38,6 +38,8 @@ const CreateStatDisplayEmbed = async (interaction, user, config) => {
         .setTitle(`Statistic view for ${user.username}`)
         .setDescription('These statistics are stored in MongoDB and can always be updated to have more stuff, feel free to PR on github!')
         .setThumbnail(user.displayAvatarURL())
+        // im adding the moodle id here because I don't know where else to put it :/
+        .addFields({ name: 'Moodle Id', value: config.moodleId ?? 'N/A'})
         .addFields(Object.entries(config.stats).map(([name, statValue]) => {
             return {
                 name,

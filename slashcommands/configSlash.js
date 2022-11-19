@@ -3,7 +3,6 @@ const { primaryColour } = require("../util/constants");
 const mongoose = require('mongoose');
 require("dotenv").config()
 //TODO add the stats viewer screen where you can see your stats
-//! MAJOR ERROR, IF SOMEONE SETS NICKNAMES AND NAME TO NOTHING THAN CAUSES ERRORS!!
 //And I guess badges too, but I think that should be a seperate command
 let cachedConfigs = [];
 //not sure about the null one but yeah, just to stop errors and stuff

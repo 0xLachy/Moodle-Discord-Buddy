@@ -121,7 +121,7 @@ module.exports = {
 const DisplayBadgeOverviewEmbed = async (interaction, config, target, displayAll=false, pageNum=0) => {
     const badgeOverviewEmbed = new EmbedBuilder()
         .setColor(primaryColour)
-        .setTitle(displayAll ? `All available badges` : `Badges for ${config.name ?? target?.username ?? config.nicknames[0]}`)
+        .setTitle(displayAll ? `All available badges` : `Badges for ${config.name ?? target?.username ?? (config.nicknames.length > 0 ? config.nicknames[0] : null) ?? config.discordId}`)
         .setThumbnail(target ? target.displayAvatarURL() : interaction.user.displayAvatarURL())
         .setDescription('Get badges through purchasing them through the shop or getting the right stats.')
         .addFields(

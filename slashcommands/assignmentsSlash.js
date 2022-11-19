@@ -1075,7 +1075,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 //if they don't have a name, use their first nickname, otherwise just put it in discord format
                 // I think because it is an embed it actually shows account so that by default
                 // name: `${currentPerson.name ?? currentPerson.nicknames[0] ?? `<@${currentPerson.discordId}>`}`
-                name: `${currentPerson.name ?? currentPerson.nicknames[0] ?? currentPerson.discordId}${index == workIndex ? '【 SELECTED 】' : ''}`,
+                name: `${currentPerson.name ?? (currentPerson.nicknames.length > 0 ? currentPerson.nicknames[0] : null) ?? currentPerson.discordId}${index == workIndex ? '【 SELECTED 】' : ''}`,
                 //Not using (name)[url] for attachments because they could submit for free (and without the bot)
                 value: `Grade: ${work.grade}\nSubmitted on ${work.modifyDate}\nAttachments: ${work.attachments.map(att => att.name).join(', ')}`
             }
