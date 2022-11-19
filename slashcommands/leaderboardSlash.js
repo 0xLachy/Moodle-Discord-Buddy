@@ -60,12 +60,7 @@ module.exports = {
         
         //log into the browser
         try {
-            if(config?.settings.general.LimitLogins){
-                await UtilFunctions.LoginToMoodle(page)
-            }
-            else {
-                await UtilFunctions.LoginToMoodle(page, interaction.user.id)
-            }
+            await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : config)
         } catch (error) {
             console.log(error)
             return await interaction.editReply(`The Wifi is Too Slow and timed out on Navigation or maybe your login details are wrong, the error is: \n\`${error.toString()}\``);

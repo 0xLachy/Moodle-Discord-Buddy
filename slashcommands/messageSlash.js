@@ -92,7 +92,7 @@ module.exports = {
         //log into the browser todo find a better way to do this
         let failedToLogin = false
         //don't do the owner login here because it's messaging people
-        await UtilFunctions.LoginToMoodle(page, await interaction.user.id).catch(reason => {
+        await UtilFunctions.LoginToMoodle(page, config).catch(reason => {
             console.log(reason);
             interaction.editReply({content: 'Failed to login to moodle'});
             failedToLogin = true;

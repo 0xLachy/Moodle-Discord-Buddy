@@ -108,7 +108,8 @@ module.exports = {
         const wentStraightToAssignment = assignmentNameInput?.startsWith('https://');
 
         //log into the browser, if assignmentName input is a url, just go straight to it.
-        await LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : interaction.user.id, wentStraightToAssignment ? assignmentNameInput : undefined) 
+        // just gonna ignore limit logins for this one just because
+        await LoginToMoodle(page, config, wentStraightToAssignment ? assignmentNameInput : undefined) 
         
         if(wentStraightToAssignment) {
             // can't find a better way of doing this, .then wasn't working
@@ -476,7 +477,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
 
     // if they are logged into the website themself, limit logins uses the owner for this function so thats why the check is here
     // if they are just trying to view an assignment missing for another person, then they don't need to see it I guess, idk how I feel about this tbh
-    const showingFullInfo = (!config.settings.general.LimitLogins && loginGroups.hasOwnProperty(interaction.user.id) && !(interaction.options.getSubcommand() == 'missing' && interaction.options.getString('studentname') != null));
+    const showingFullInfo = (loginGroups.hasOwnProperty(interaction.user.id) && !(interaction.options.getSubcommand() == 'missing' && interaction.options.getString('studentname') != null));
     //(if they are submitting than they are obviously logged in!)
     if(submitting || showingFullInfo) {
         assignmentEmbed.addFields(...info.submissionData);
@@ -980,7 +981,7 @@ const CreateSubmissionListEmbedAndButtons = async (interaction, page, chosenWork
                 // go to the non editing version of the page to get the info
                 // await verifyingPage.goto(page.url().replace('&action=editsubmission', ''))
                 //login to moodle through new page, it automatically waits for navigation
-                await LoginToMoodle(verifyingPage, dbWork[workIndex].owner, page.url().replace('&action=editsubmission', '')).catch((err) => {
+                await LoginToMoodle(verifyingPage, personToVerify, page.url().replace('&action=editsubmission', '')).catch((err) => {
                     console.log(err)
                     interaction.followUp({ content: 'An error occured while signing into moodle, they might have changed their password but not logged out and back in'})
                     // interaction.editReply({components: GetWorkButtonRows(workIndex == 0, workIndex == dbWork.length - 1)})

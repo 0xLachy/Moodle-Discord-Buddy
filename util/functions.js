@@ -50,15 +50,15 @@ const getFiles = (path, ending) => {
     return fs.readdirSync(path).filter(f=> f.endsWith(ending))
 }
 
-const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl, loginDetails=undefined) => {
+const LoginToMoodle = async (page, config=undefined, TermURL=dashboardUrl, loginDetails=undefined) => {
     // if (TermURL == 'Null') {
     //     console.log(Object.values(await GetCourseUrls(page))[currentTerm - 1])
     //     TermURL = Object.values(await GetCourseUrls(page))[currentTerm - 1]
     // }
     await page.goto(TermURL);
     
-    if (discordUserId != undefined){
-        if (loginGroups[discordUserId] != undefined) loginDetails = decrypt(loginGroups[discordUserId]);
+    if (config != undefined){
+        if (loginGroups[config.discordId] != undefined) loginDetails = decrypt(loginGroups[config.discordId]);
     }
     // dom element selectors
     const USERNAME_SELECTOR = '#username';
@@ -103,13 +103,17 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
     else if (TermURL != await page.url() && TermURL == dashboardUrl) return new Promise((resolve, reject) => reject("Login Failed, wrong username or password"))
     else {
         //if the login details aren't undefined, but they haven't been logged in yet, then log them in
-        if (loginDetails != undefined && loginGroups[discordUserId] == undefined) { 
-            loginGroups[discordUserId] = { discordId: discordUserId, ...encrypt(loginDetails)}
-            const currentUser = loginGroups[discordUserId]
+        if(config.moodleId == null) {
+            config.moodleId = await page.evaluate(() => document.querySelector('[data-user-id]').getAttribute('data-user-id'));
+            await config.save();
+        }
+        if (loginDetails != undefined && loginGroups[config.discordId] == undefined) { 
+            loginGroups[config.discordId] = { discordId: config.discordId, ...encrypt(loginDetails)}
+            const currentUser = loginGroups[config.discordId]
             await SaveSecurityKey(currentUser.name, currentUser.Securitykey)
             const newLogin = new Login({
                 name: currentUser.name,
-                discordId: discordUserId,
+                discordId: config.discordId,
                 initVector: currentUser.initVector,
                 encryptedPassword: currentUser.encryptedPassword
             })
@@ -120,7 +124,7 @@ const LoginToMoodle = async (page, discordUserId=undefined, TermURL=dashboardUrl
             // loginGroups[discordUserId]
             // loginGroups[discordUserId] = encrypt(loginDetails) 
         };
-        return new Promise((resolve, reject) => resolve('Successfully logged in as ' + discordUserId));
+        return new Promise((resolve, reject) => resolve('Successfully logged in as ' + config.discordId));
     }
 }
 const LogoutOfMoodle = async (interaction) => {
@@ -148,7 +152,7 @@ const GetCourseUrls = async (page) => {
     try {
         await page.waitForSelector('div[class*="block_myoverview"] div > a[class*="coursename"')
     } catch(err){
-        console.log("Moodle website has been updated and doesn't work anymore with the bot")
+        console.log("Moodle website has been updated and doesn't work anymore with the bot (or page just didn't load fast enough)")
     }
     
     return await page.evaluate(() => {
@@ -156,7 +160,6 @@ const GetCourseUrls = async (page) => {
         let aElements = document.querySelectorAll('div[class*="block_myoverview"] div > a[class*="coursename"')//#course-info-container-898-11 > div > div.w-100.text-truncate > a
         for (const aElem of aElements) {
             // This is the **child** part that contains the name of the term
-            console.log(aElem)
             termInfo[aElem.querySelector('span.multiline').textContent.trim()] = { "URL": aElem.href, "ID": aElem.querySelector('[data-course-id]').getAttribute("data-course-id")}; // getting an element with the id, then getting that id
         }
         return termInfo

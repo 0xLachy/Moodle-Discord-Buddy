@@ -54,7 +54,8 @@ module.exports = {
         //log into the browser todo find a better way to do this
         await UtilFunctions.LoginToMoodle(page, await interaction.user.id, undefined, loginDetails).then(async (result) => {
             // console.log(result);
-            loggedInName = await page.evaluate(() => document.querySelector('#usermenu > span').textContent)
+            const loggedInName = await page.evaluate(() => document.querySelector('#usermenu > span').textContent)
+            const moodleId = await page.evaluate(() => document.querySelector('[data-user-id]').getAttribute('data-user-id'))
             const loginEmbed = new EmbedBuilder()
             .setColor(primaryColour)
             .setTitle(`Your discord ID (${interaction.user.id}) is now associated with the moodle account: ${loggedInName}`)
@@ -64,7 +65,7 @@ module.exports = {
             // await channel.send({ embeds: [loginEmbed] })
             await interaction.editReply({embeds:[loginEmbed]});
            
-            await CreateOrUpdateConfig({name: loggedInName.toLowerCase(), discordId: interaction.user.id})
+            await CreateOrUpdateConfig({name: loggedInName.toLowerCase(), discordId: interaction.user.id, moodleId})
             await browser.close();
 
             //if there is an error, tell them what went wrong

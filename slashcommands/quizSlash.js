@@ -80,7 +80,7 @@ module.exports = {
         await page.exposeFunction("GuessOrFillSpecificQuestion", GuessOrFillSpecificQuestion);
 
         //Login to moodle and catch any errors that occur
-        await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : await interaction.user.id).catch(reason => {
+        await UtilFunctions.LoginToMoodle(page, config).catch(reason => {
             console.log(reason);
             interaction.editReply({content: 'Internet was probably too slow and timed out, or something went wrong with your login'});
             browser.close();

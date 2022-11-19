@@ -112,13 +112,14 @@ const configStats = Object.entries(statsInfo).reduce((stats, [statName, statObj]
 // make the schema that is used to send and recieve data
 const configSchema = new mongoose.Schema({
     name: { type: String, default: null, lowercase: true, trim: true }, // their moodle name
+    moodleId: { type: String, default: null },
     discordId: String, // their discord id to fetch their config
     vip: { type: Boolean, default: false },
     tokens: { type: Number, default: 200, min: 0},
     icon: { type: String, default: null, lowercase: true, trim: true }, // a little thing to appear in front of users name 
     nicknames: { type: [String], lowercase: true, trim: true },
     maxNicknames: { type: Number, default: 3, min: 1, max: 10},
-    badges: {type: [String]}, // Indexes of the badges that they own in the order they got them? //TODO need badge command to create badge, fix badge, give badge and delete
+    badges: { type: [String]}, // Indexes of the badges that they own in the order they got them? //TODO need badge command to create badge, fix badge, give badge and delete
     icons: { type: [String], lowercase: true, trim: true}, // all their items that they purchased so they can go back and switch them around
     stats: configStats,
     settings: configSettings,

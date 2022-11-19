@@ -118,7 +118,7 @@ module.exports = {
         // await UtilFunctions.LoginToMoodle(page, interaction.user.id, UtilFunctions.GetTermURLS("participants")[0]).catch(error => console.log(error))
 
         try {
-            await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : interaction.user.id)
+            await UtilFunctions.LoginToMoodle(page, config?.settings.general.LimitLogins ? undefined : config)
         } catch (error) {
             return await interaction.editReply("The Wifi is Too Slow and timed out on Navigation")
         }
