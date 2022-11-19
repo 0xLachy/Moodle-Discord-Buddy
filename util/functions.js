@@ -654,9 +654,10 @@ async function DeleteSecuritykey(moodleName) {
 }
 
 // this function was modified from https://www.reddit.com/r/Discordjs/comments/sf00wb/comment/ilt1mgg/
-const GetSelectMenuOverflowActionRows = (page, options, placeholder) => {
+// if options length is zero it will through error
+const GetSelectMenuOverflowActionRows = (page, options, placeholder, quitOption=false) => {
     const RecipientRows = [ GetRecipientSelectMenu(page, options, placeholder) ]
-    const moveButtons = GetSelectMenuNextButtons(page, options.length);
+    const moveButtons = GetSelectMenuNextButtons(page, options.length, quitOption);
     if(moveButtons.components.length > 0) {
         RecipientRows.push(moveButtons)
     }
@@ -680,8 +681,16 @@ const GetRecipientSelectMenu  = (page, options, placeholder='Choose an option') 
     );
 }
 
-const GetSelectMenuNextButtons = (page, optionLength) => {
+const GetSelectMenuNextButtons = (page, optionLength, quitOption=false) => {
     const buttonActionRow = new ActionRowBuilder()
+    if(quitOption) {
+        buttonActionRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId('Quit')
+                .setLabel('Quit')
+                .setStyle(ButtonStyle.Danger),
+        );
+    }
     if (page>0) {
         buttonActionRow.addComponents(
         new ButtonBuilder()

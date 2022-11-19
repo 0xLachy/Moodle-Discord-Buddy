@@ -61,6 +61,11 @@ const settingsInfo = {
         DefaultMainCourseUrl: { type: String, default: null, lowercase: true, trim: true, info: 'The course you want to be selected by default for single course commands like status'},
         AutoChangeMain: { type: Boolean, default: true, info: 'Whenever it is just a single select, change your main default course url to whatever you selected last'},
     },
+    vip: {
+        title: 'VIP Settings',
+        info: `These settings will only apply when you are VIP!`,
+        DisplayLeaderboardEdit: { type: Boolean, default: true, info: 'At the end of runnning leaderboard display an option to edit the leaderboard!'},
+    },
     config: {
         title: 'Configuration Settings',
         info: 'Settings for the settings!',

@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
-const { EmbedBuilder, SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+// const { GetSelectMenuOverflowActionRows, SendConfirmationMessage } = require("../util/functions");
 const { primaryColour } = require("../util/constants");
 const { ConvertName, GetConfigs } = require('./configSlash')
 
@@ -9,33 +10,24 @@ const { ConvertName, GetConfigs } = require('./configSlash')
 const data = new SlashCommandBuilder()
 	.setName('leaderboard')
 	.setDescription('Get leaderboard for the lismore course')
-    .addBooleanOption(option =>
-        option
-            .setName("merge")
-            .setDescription("Merge the results of all the terms chosen together into one")
-            .setRequired(false)
-    )
-    .addBooleanOption(option =>
-        option
-            .setName("add-roles")
-            .setDescription("Add Roles to students in discord based off ranking")
-            .setRequired(false)
-    )
-    .addBooleanOption(option =>
-        option
-            .setName("remove-roles")
-            .setDescription("Removes all the ranking roles given to everyone")
-            .setRequired(false)
-    )
+    // .addBooleanOption(option =>
+    //     option
+    //         .setName("add-roles")
+    //         .setDescription("Add Roles to students in discord based off ranking")
+    //         .setRequired(false)
+    // )
+    // .addBooleanOption(option =>
+    //     option
+    //         .setName("remove-roles")
+    //         .setDescription("Removes all the ranking roles given to everyone")
+    //         .setRequired(false)
+    // )
     .addBooleanOption(option =>
         option
             .setName('config-priority')
             .setDescription('Place people with configs (people who have used the bot) above everyone else')
             .setRequired(false)
     )
-    .addStringOption(option => option.setName('rig').setDescription('rig the score for a person e.g Harrison Baird = 12'));
-
-
 
 //The Roles for the leaderboard, an array so it can use index for status, like king is first and so on
 // the roles will be added in order up until index of the last place roles, 
@@ -87,39 +79,29 @@ module.exports = {
             browser.close()
             return null;
         })
-        let mergeResults = await interaction.options.getBoolean('merge') // doesn't seem to work
-        if(mergeResults == null) { mergeResults = true }  // default value!
 
-        // if(mergeResults == undefined) mergeResults = true; // default value is now true
-        let riggedTerm = await interaction.options.getString("rig");
-        let leaderboardTitle = riggedTerm ? "Leaderboard For Selected Terms (totally not rigged :sweat_smile:)" : "Leaderboard For Selected Terms"; // could use += and add the total not rigged part but but yeah
-        
         //The leaderboard is being sent in from fasterleaderboard return. then just add the other stuff
-        const finalLeaderboard = await FasterLeaderboard(page, chosenTerms, riggedTerm, mergeResults);
-        SendEmbedMessage(finalLeaderboard, interaction, mergeResults, leaderboardTitle)
+        const finalLeaderboard = await FasterLeaderboard(page, chosenTerms);
+        SendEmbedMessage(finalLeaderboard, interaction, config, 'Leaderboard For Selected Terms')
         
-        const addRoles = await interaction.options.getBoolean('add-roles')
+        //ROLES SECTION BASICALLY
+        // const addRoles = await interaction.options.getBoolean('add-roles')
         //if we aren't adding roles (because adding roles calls remove roles)
-        if(await interaction.options.getBoolean('remove-roles') && !addRoles && interaction.inGuild()) {
-            await RemoveRoles(interaction)
-            await interaction.followUp('Removed roles from people (it takes some time for discord api to remove them)')
-        }
+        // if(await interaction.options.getBoolean('remove-roles') && !addRoles && interaction.inGuild()) {
+        //     await RemoveRoles(interaction)
+        //     await interaction.followUp('Removed roles from people (it takes some time for discord api to remove them)')
+        // }
 
-        if(addRoles && !riggedTerm && interaction.inGuild()) { 
-            if(!mergeResults) {
-                await interaction.followUp('The Leaderboard needs to be merged to add roles!')
-            }
-            else {
-                await GiveRolesFromLeaderboard(interaction, finalLeaderboard) 
-            }
-        }
+        // if(addRoles && interaction.inGuild()) { 
+        //     await GiveRolesFromLeaderboard(interaction, finalLeaderboard) 
+        // }
         // }
         //Once its done, close the browser to stop the browsers stacking up
         await browser.close();
     }
 }
 
-async function FasterLeaderboard(page, chosenTerms, rigPerson=null, mergeResults=true){
+async function FasterLeaderboard(page, chosenTerms){
     //await page.goto(term_url, {waitUntil: 'domcontentloaded'});
     let leaderboardResults = {};
 
@@ -150,109 +132,146 @@ async function FasterLeaderboard(page, chosenTerms, rigPerson=null, mergeResults
             console.log("term doesn't exist yet")
             break;
         }
-
-        //If Merging the results, don't include the term name
-        if (mergeResults){
-            leaderboardResults = await page.evaluate((leaderboardResults) => {             
-                for (elem of document.querySelectorAll('table.assignment-recent > tbody > tr > td:nth-child(2) > div > a')){
-                    //sets the leaderboardresultsObj at username 1 or increase it (if undefined it is 0 + 1)
-                    leaderboardResults[elem.textContent] = (leaderboardResults[elem.textContent] || 0) + 1;
-                }
-                return leaderboardResults;
-            }, leaderboardResults);
-        }
-        else {
-            leaderboardResults[termName] = await page.evaluate(() => { 
-            let leaderboardResultsObj = {}            
-            for (elem of document.querySelectorAll('table.assignment-recent > tbody > tr > td:nth-child(2) > div > a')){
-                leaderboardResultsObj[elem.textContent] = (leaderboardResultsObj[elem.textContent] || 0) + 1;
-            }
-            return leaderboardResultsObj;
-        });
-        }
-    }
-    //Its pretty poor code but I might remove it anyways
-    if(rigPerson != null){
-        rigArr = rigPerson.split("=")
-        rigArr = rigArr.map(x => x.trim())
-        if(rigArr[0] == "hb") rigArr[0] = "Harrison Baird";
-        if(rigArr[0] == "ls") rigArr[0] = "Lachlan Stroh";
-        try{
-            leaderboardResults[rigArr[0]] = parseInt(rigArr[1]);
-        }
-        catch(err){
-            console.log(err);
-            console.log("didn't set the rig message properly");
-        }
         
+        leaderboardResults = await page.evaluate((leaderboardResults) => {             
+            for (elem of document.querySelectorAll('table.assignment-recent > tbody > tr > td:nth-child(2) > div > a')){
+                //sets the leaderboardresultsObj at username 1 or increase it (if undefined it is 0 + 1)
+                leaderboardResults[elem.textContent] = (leaderboardResults[elem.textContent] || 0) + 1;
+            }
+            return leaderboardResults;
+        }, leaderboardResults);
+
     }
     return leaderboardResults;
 }
 
-function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, title, colour=primaryColour) {
+async function SendEmbedMessage(leaderboardResults, interaction, config, title='Leaderboard Results', colour=primaryColour) {
     // Create the Message Embed to send to the channel
-    let embedMsg = new EmbedBuilder();
+    const leaderboardEmbed = new EmbedBuilder()
+        .setTitle(title)
+        .setColor(colour)
     // used to display that people with configs
     const configPriority = interaction.options.getBoolean('config-priority') ?? false
     const allConfigs = GetConfigs();
-
-    title ? embedMsg.setTitle(title) : embedMsg.setTitle(`Leaderboard Results:`);
-    // if(title != "default"){
-    //     embedMsg.setTitle(title)
-    // }
-    // else{
-    //     embedMsg.setTitle(`Leaderboard Results:`);
-    // }
-    // if merging results, send the results straight into the embed
-    if (mergeResults) {
-        AddToLeaderboardResultToEmbed(leaderboardResults, "All Terms / Courses")
-    }
-    else { // otherwise loop through the terms, and set field name to be the term name
-        for (const termResultName of Object.keys(leaderboardResults)) {
-            AddToLeaderboardResultToEmbed(leaderboardResults[termResultName], termResultName);
+    
+    //using the configs because that way they can display their icons
+    let sortedLeaderboardResults = Object.entries(leaderboardResults).map(([name, tally]) => {
+        return {
+            name,
+            tally,
+            config: allConfigs.find(fig => fig.name == name.toLowerCase()) // alot null but thats fine
         }
-    }
+    })
 
-    embedMsg.setColor(colour);
+    //now properly sorting it
+    SortLeaderboardResults();
+
+    AddToLeaderboardResultToEmbed(sortedLeaderboardResults, "All Terms / Courses")
 
     try{
-        interaction.editReply({ embeds: [embedMsg] });
+        await interaction.editReply({ embeds: [leaderboardEmbed] });
     }
     catch(DiscordAPIError){
         interaction.editReply("The result is too long to send in a discord (embed) message")    
     }
-    // if(!messageTooLong){
-    // }
-    // else{
-        //Send the assignments, but not as an embed, maybe check the stringss before adding the embed feilds
-    // }
 
-    function AddToLeaderboardResultToEmbed(leaderboardResults, fieldName) {
-        let msgString = "";
+    // if the user isn't vip or not merging (bec)
+    if(!config.vip || !config.settings.vip.DisplayLeaderboardEdit || sortedLeaderboardResults.length == 0) return;
 
-        //* This is how sorting array, putting people logged in above everyone else because they are better
-        // sortedLeaderboardResults = Object.entries(leaderboardResults).sort((a,b) => b[1]-a[1])
-        // Set it up so the people with configs have priority
-        let sortedLeaderboardResults = Object.entries(leaderboardResults).map(([name, tally]) => {
-            return {
-                name,
-                tally,
-                config: allConfigs.find(fig => fig.name == name.toLowerCase()) // alot null but thats fine
-            }
+    // if the person doesn't have a name, or that name can't be found in the leaderboard then just use the first place person
+    let personBeingEdited = (config.name != null ? sortedLeaderboardResults.find(slr => slr.name.toLowerCase() == config.name)?.name : null) ?? sortedLeaderboardResults[0].name
+    const cheatEmbed = new EmbedBuilder()
+        .setColor(primaryColour)
+        .setTitle('Vip leaderboard modifications')
+        .setDescription(`As a vip member you are allowed to edit the leaderboard!\nYou have 60 seconds before it auto quits :sweat_smile:\nType in a number to edit the selected persons score\n**Person being edited: ${personBeingEdited}**`)
+    
+    
+    let pageNumber = 0;
+    
+    let optionsToEdit = GetRigOptions();
+    // const cheatActionRows = UtilFunctions.GetSelectMenuOverflowActionRows(pageNumber, optionsToEdit, 'Choose someone to change their score!')
+    // const reply = await interaction.editReply({content: ' ', embeds:[donationEmbed], components: GetSelectMenuOverflowActionRows(page, peopleOptions, 'Choose a person to donate to!'), fetchReply: true})
+    //* Can't be ephemeral because you lose the ability to edit the message!!!!
+    const reply = await interaction.followUp({ embeds: [cheatEmbed], components: UtilFunctions.GetSelectMenuOverflowActionRows(pageNumber, optionsToEdit, 'Choose someone to change their score!', true), ephemeral: false, fetchReply: true})
+    const filter = i => i.user.id === interaction.user.id;
+    const msgFilter = m => m.author.id === interaction.user.id
+    
+    const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
+    
+    const collector = await reply.createMessageComponentCollector({ filter, time: 180 * 1000 });
+    const msgCollector = await channel.createMessageCollector({ filter: msgFilter, time: 180 * 1000 });
+
+    msgCollector.on('collect', async m => {
+        const commentToAdd = m.content;
+        if(commentToAdd.toLowerCase() == 'quit') return await collector.stop();
+        if(interaction.inGuild() && config.settings.config.DeleteSettingMessages) { m.delete() };
+        if(isNaN(commentToAdd)) return UtilFunctions.TemporaryResponse(interaction, 'Not a Number, so no edit was made', 1000);
+        if(commentToAdd > 99999999 || commentToAdd < -99999999) return UtilFunctions.TemporaryResponse(interaction, 'Number was wayyy to big/small, chill out a little!', 1000)
+
+        sortedLeaderboardResults.find(slr => slr.name == personBeingEdited).tally = commentToAdd;
+        //I don't have to sort the whole array so this is a bit slow, but it's fine for now
+        SortLeaderboardResults();
+        //I hope this resets the fields
+        leaderboardEmbed.setFields()
+        AddToLeaderboardResultToEmbed(sortedLeaderboardResults, 'All Terms / Courses')
+        // also update the the optionsToEdit
+
+        optionsToEdit = GetRigOptions();
+        await Promise.all([
+            reply.edit({ components: UtilFunctions.GetSelectMenuOverflowActionRows(pageNumber, optionsToEdit, 'Choose someone to change their score!', true)}),
+            interaction.editReply({ embeds: [leaderboardEmbed]})
+        ])
+    })
+
+    // get them to choose a recipient
+    collector.on('collect', async (i) => {
+        await i.deferUpdate();
+        if(i.customId == 'Quit') {
+            await collector.stop();
+        }
+        if(i.customId == 'select') {
+            personBeingEdited = i.values[0]
+        }
+        else if(i.customId == 'next_page') {
+            pageNumber++;
+            await reply.edit({ components: UtilFunctions.GetSelectMenuOverflowActionRows(pageNumber, optionsToEdit, 'Choose someone to change their score!', true)})
+        }
+        else if(i.customId == 'previous_page') {
+            pageNumber--;
+            await reply.edit({ components: UtilFunctions.GetSelectMenuOverflowActionRows(pageNumber, optionsToEdit, 'Choose someone to change their score!', true)})
+        }
+    })
+
+    // tell them that they have timed out
+    collector.on('end', collected => {
+        msgCollector.stop();
+        return interaction.webhook.deleteMessage(reply)
+    });
+
+    function GetRigOptions() {
+    //! if two people have the same name this is gonna cause some mad errors
+        return sortedLeaderboardResults.map(res => {
+            return { label: `${res.name}: ${res.tally}`, value: res.name, description: 'edit person'}
         })
-        //now properly sorting it
+    }
+
+    function SortLeaderboardResults() {
         sortedLeaderboardResults = sortedLeaderboardResults.sort((a, b) => {
             // sorting in reverse order kinda if they have a config
-            if(configPriority && a.config && !b.config) {
+            if (configPriority && a.config && !b.config) {
                 return -1;
             }
-            else if(configPriority && b.config && !a.config) {
+            else if (configPriority && b.config && !a.config) {
                 return 1;
             }
             else {
                 return b.tally - a.tally;
             }
-        })
+        });
+    }
+
+    function AddToLeaderboardResultToEmbed(sortedLeaderboardResults, fieldName) {
+        let msgString = "";
 
         for(person of sortedLeaderboardResults){
             msgString += `${person?.config?.icon ?? ''} ${person.name} : ${person.tally}\n`
@@ -285,14 +304,56 @@ function SendEmbedMessage(leaderboardResults, interaction, mergeResults=true, ti
                 chunks.push(tempStr)
             }
 
-           chunks.forEach((biggerChunk, index) => embedMsg.addFields({ name: `${fieldName} part ${index + 1}`, value: biggerChunk }))
+           chunks.forEach((biggerChunk, index) => leaderboardEmbed.addFields({ name: `${fieldName} part ${index + 1}`, value: biggerChunk }))
         }
         else{
             //Add the assignments that were done to the message
-            embedMsg.addFields( { name: fieldName, value: msgString } )
+            leaderboardEmbed.addFields( { name: fieldName, value: msgString } )
         }
 
     }
+}
+
+async function WaitForNewUserValue(interaction, sortedLeaderboardResults, userName) {
+    const msgFilter = m => m.author.id === interaction.user.id
+
+    const channel = interaction.inGuild() ? await interaction.channel : await interaction.user.createDM();
+
+    const collector = await reply.createMessageComponentCollector({ filter, time });
+    const msgCollector = await channel.createMessageCollector({ filter: msgFilter, time: 180 * 1000 });
+
+    let stillConfirming = false;
+    msgCollector.on('collect', async m => {
+        const commentToAdd = m.content;
+        if(interaction.inGuild() && config.settings.config.DeleteSettingMessages) { m.delete() };
+        if(stillConfirming) return;
+        let confirmationMessageString = 'Are you sure you want to send the coment: ';
+        if(commentToAdd.length >= 1024 - confirmationMessageString.length) return TemporaryResponse(interaction, `Your comment is too long, chop it up into parts less than ${1024 - confirmationMessageString.length} characters`);
+
+        // if they got past these hurdles, set still confirming to true!
+        stillConfirming = true;
+        //* I think the max description you can send is 1024 characters
+        if(await SendConfirmationMessage(interaction, `Are you sure you want to send the comment: ${commentToAdd}`)) {
+            //if they do want to send the message
+            await page.evaluate((commentToAdd) => {
+                // as long as it's clicked once, the text area loads, I can close and but the text area stays so this is fine for multi comments lol
+                document.querySelector('div[role="main"] a.comment-link span').click();
+                document.querySelector('div.comment-area textarea').value = commentToAdd;
+                document.querySelector('div.comment-area a[id*="comment-action-post"]').click();
+            }, commentToAdd)
+            //update the comments on the embed to show that stuff
+            // this is a string set to none sometimes, there might be an easier way of doing this :/
+            // split at \n, that might break some comments though if I implement a deleting feature :(
+            //! if they have 2 comments of 900 or whatever which is allowed, it will break this display thing :/
+            const commentData = info.submissionData.find(sd => sd.name == 'Submission comments')
+            commentData.value = commentData.value == 'none' ? commentToAdd : commentData.value + '\n' + commentToAdd;
+            const commentField = mainEmbed.data.fields.find(field => field.name == 'Submission comments');
+            if(commentField) commentField.value = commentData.value;
+
+            await interaction.editReply({ embeds: [mainEmbed]})
+        }
+        stillConfirming = false;
+    })
 }
 
 
