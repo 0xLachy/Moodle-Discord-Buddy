@@ -40,7 +40,6 @@ module.exports = {
     }
 }
 
-//TODO sell icons that people can have next to their name for the leaderboards (special one will only be allowed for vip)
 const CreateShopEmbed = (interaction, userConfig, lastI) => {
     return new Promise(async (resolve, reject) => {
         // TODO add the thing to increment

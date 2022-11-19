@@ -9,9 +9,7 @@ require("dotenv").config()
 let autoSubmit = false;
 let showHints = true;
 
-// TODO fix term4, good way to get top level of each question inside form document.querySelectorAll('form div[id*="question"]')
 // TODO create your own quiz option, provides a link for images, + and - button for the options, they can click on it to make it true or false
-// TODO for essay full display for the question input, divide it up into 500 or 600 character sections so there is enough room to edit responses
 const data = new SlashCommandBuilder()
 	.setName('quiz')
 	.setDescription('Slash command to handle moodle users, to get their profile data')
@@ -118,7 +116,6 @@ module.exports = {
         if(chosenQuizzes == null || chosenQuizzes.length == 0) return await browser.close();
 
         for (const chosenQuizIndex in chosenQuizzes) {
-            //TODO use a for of or something
             const chosenQuiz = chosenQuizzes[chosenQuizIndex]
             if(chosenQuiz?.daily) repeatAmount = 1;
 
@@ -288,7 +285,6 @@ const DisplayQuizSummary = async (interaction, page, quiz, updatedQuestions, pre
                 .setTitle(EmbedTitle)
                 // .setURL(page.url())
                 // .setThumbnail(recipientImg)
-                //TODO add more to the description  that explains it
                 .setDescription('This is a summary of the quiz, it will only show the answers you selected, check that all of the questions have at least one answer, sometimes the answer doesn\'t save (discordAPI issues)');
             ;
     
@@ -842,7 +838,6 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
         const curQuestionPromptText = await questionDivContent.$eval('div.qtext', e => e.textContent);
         const updatedQuestion = updatedQuestionsData.find(question => question.questionName == curQuestionPromptText)
         const textAnswer = await questionDivContent.$('span.answer input')
-        //TODO with essay response, click on the box and use puppeteer typing function to type everything into the box
         if(textAnswer){
             //set the text value to be the text answer that was given
             textAnswer.value = updatedQuestion.answerData[0].value
@@ -865,7 +860,6 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
             // await frame.click('body#tinymce p')
             await bodyElem.focus();
 
-            //TODO actually test this out
             // await page.type(updatedQuestion.answerData.map(ad => ad.value).join(''))
             await page.keyboard.type(updatedQuestion.answerData.map(ad => ad.value).join(''))
             // const essayText = await frame.$$eval
@@ -914,7 +908,6 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
 //This one is checking whether or not our answers were correct or not
 const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
     await page.waitForSelector('form div[id*="question"] div.content > div');
-    //TODO update for essay response and use page.$ probably
     const questionDivs = await page.$$('form div[id*="question"] div.content')
     // for (const questionDivContent of questionDivs) {
     //     //qtext contains only the title of the question

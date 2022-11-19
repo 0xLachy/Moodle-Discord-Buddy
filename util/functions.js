@@ -65,12 +65,12 @@ const LoginToMoodle = async (page, config=undefined, TermURL=dashboardUrl, login
     const PASSWORD_SELECTOR = '#password';
     const BUTTON_SELECTOR = 'body > div > div > div > div.uk-card-body.uk-text-left > div > div.uk-width-3-4 > form > div.uk-margin.uk-text-right > button';
     
-    //TODO USE WAITFORSELECTOR
     try {
-        await page.waitForSelector(USERNAME_SELECTOR)
+        // for when internet is super slow
+        await page.waitForSelector(USERNAME_SELECTOR, { timeout: 60 * 1000})
     } catch(err){
-        console.logError("login page not working, #Username not found")
-        console.log(err)
+        console.log("login page not working, #Username not found")
+        // return console.log(err)
     }
     
     await page.click(USERNAME_SELECTOR);
@@ -187,14 +187,14 @@ function AskForCourse(interaction, page, multipleTerms=false){
         const rows = [];
         // term info is <termname> = [ <url> , <id>]
 
-        //TODO add in a blacklist and set default button or whatever
         // if they are on a single course select, turn this into multiselect button
         // then reset it back
         // const termsForButtons = Object.keys(termInfo);
         // the incrementing will be done wrong
         AddTermsToRows();
         // If allowing multiple, have a enter button and an edit button
-        //TODO I think I might not want to do this if they don't have any courses
+        //?I think I might not want to do this if they don't have any courses
+        // but I think everyone has courses
 
 
         const reply = await interaction.editReply({/*ephemeral: true,*/ embeds: [termsEmbed], components: rows})

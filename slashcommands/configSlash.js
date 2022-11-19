@@ -2,9 +2,9 @@ const { SlashCommandBuilder, ActionRowBuilder, SelectMenuBuilder, EmbedBuilder, 
 const { primaryColour } = require("../util/constants");
 const mongoose = require('mongoose');
 require("dotenv").config()
-//TODO add the stats viewer screen where you can see your stats
-//And I guess badges too, but I think that should be a seperate command
+
 let cachedConfigs = [];
+
 //not sure about the null one but yeah, just to stop errors and stuff
 const bannedNames = [ 'me', 'myself', 'all', 'default', 'null']
 //*THIS IS WHERE YOU PUT ALL THE CONFIG SETTINGS, (outer) title and info & choices are not added to the database

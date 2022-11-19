@@ -274,11 +274,15 @@ const SendMessageToUser = async (interaction, page, config, recipientName, recip
     let sentSize = await page.evaluate(() => document.querySelectorAll('div.message.send').length);
     // console.log(sentSize)
     console.time('Sending heaps of messages')
+    // const msgTextArea = await page.$('textarea[data-region="send-message-txt"]')
+    // const sendMsgButton = await page.$('button[data-action="send-message"]')
     for (let index = 0; index < sendAmount; index++) {
         // textBox.innerText = messageText;
         //TODO getting the elems every time is inefficient
         await page.evaluate((messageText) => {document.querySelector('textarea[data-region="send-message-txt"]').value = messageText}, messageText);
         await page.evaluate(() => document.querySelector('button[data-action="send-message"]').click());
+        // msgTextArea.value = messageText
+        // await sendMsgButton.click();
 
         //Whenever a new message send is loaded into the page
         await page.waitForFunction(
