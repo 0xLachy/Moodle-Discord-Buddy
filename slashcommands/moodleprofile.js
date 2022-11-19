@@ -3,6 +3,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const puppeteer = require('puppeteer');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, Util } = require('discord.js');
 const UtilFunctions = require("../util/functions");
+const { ConvertName, GetConfigs } = require('./configSlash')
 const { primaryColour } = require("../util/constants");
 // const wait = require('node:timers/promises').setTimeout;
 
@@ -20,8 +21,8 @@ const data = new SlashCommandBuilder()
     .addStringOption(option =>
         option
             .setName('name-or-id')
-            .setDescription("If there are 2 people with the name, also use last name")
-            .setRequired(true)
+            .setDescription("If there are 2 people with the name, also use last name (id is moodle id, not discord...yet)")
+            .setRequired(false)
     )
     .addBooleanOption(option =>
         option
@@ -57,12 +58,14 @@ module.exports = {
 
         // nullish operator assigns true to it if it is null by default
         const courseContext = await interaction.options.getBoolean('context') ?? true;
-        const nameOrId = await interaction.options.getString('name-or-id');
+
+        const nameOrId = ConvertName(((await interaction.options.getString('name-or-id')) ?? config?.name) ?? (config.nicknames.length > 0 ? config.nicknames[0] : 'null'));
+        const moodleId = GetConfigs().find(conf => conf.name == nameOrId)?.moodleId 
 
         //outer scope so it can be used later
         let chosenTerm = null;
         //If it needs course context
-        if(courseContext || isNaN(nameOrId)) {
+        if(courseContext || (moodleId == null && isNaN(nameOrId))) {
             //Get the term to use as context id (IT is needed unfortunately)
             chosenTerm = await UtilFunctions.AskForCourse(interaction, page).catch(reason => {
                 //If no button was pressed, then just quit
@@ -75,7 +78,7 @@ module.exports = {
             if(chosenTerm == null) return await interaction.deleteReply();
         }
         //Get their id
-        let userProfileID = await UtilFunctions.NameToID(interaction, page, nameOrId, chosenTerm)
+        let userProfileID = moodleId ?? await UtilFunctions.NameToID(interaction, page, nameOrId, chosenTerm)
         if (userProfileID == null) { 
             await interaction.editReply('Recipient ID could not be found')
             await browser.close(); 
