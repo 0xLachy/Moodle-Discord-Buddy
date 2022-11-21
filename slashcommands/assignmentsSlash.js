@@ -100,8 +100,8 @@ module.exports = {
     ...data.toJSON(),
     run: async (client, interaction, config) => {
         await interaction.deferReply()
-        // const browser = await BrowserWithCache();
-        const browser = await puppeteer.launch({headless: false});
+        const browser = await BrowserWithCache();
+        // const browser = await puppeteer.launch({headless: false});
         const page = await browser.newPage();
         
         const assignmentNameInput = await interaction.options.getString('assignment-name')?.toLowerCase()?.replace('&action=editsubmission', '');// if they start at the editing quiz (not wanted)
