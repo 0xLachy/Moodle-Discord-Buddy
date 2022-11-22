@@ -3,7 +3,6 @@ const puppeteer = require('puppeteer');
 const UtilFunctions = require("../util/functions");
 const { primaryColour, dailyQuizTokensPerQuestion } = require("../util/constants");
 const mongoose = require('mongoose');
-const { off } = require('superagent');
 require("dotenv").config()
 
 let autoSubmit = false;
@@ -85,7 +84,7 @@ module.exports = {
         })
 
         //Choose which term to find the quiz list
-        let chosenTerm = await UtilFunctions.AskForCourse(interaction, page).catch(reason => {
+        const chosenTerms = await UtilFunctions.AskForCourse(interaction, page, true).catch(reason => {
             //If no button was pressed, then just quit
             console.log(reason)
             // whilst this would be nice, if reason is some other error it will break the reply
@@ -94,7 +93,7 @@ module.exports = {
             return null;
         })
         
-        if(chosenTerm == null) return await interaction.deleteReply();
+        if(chosenTerms == null) return await interaction.deleteReply();
 
         //if they don't say if they want it autofilled, it will be false
         const autoFillEverything = await interaction.options.getBoolean('autofill') ?? false;
@@ -112,7 +111,7 @@ module.exports = {
             dbName: 'Quizzes'
         });
         // get the chosen quiz and questions, if any of them return null, just close the browser as it won't be used anymore
-        const chosenQuizzes = await DisplayQuizzes(interaction, await GetQuizzesList(page, chosenTerm.ID), config, quizConfig?.ShowAlreadyCompletedQuizzes);
+        const chosenQuizzes = await DisplayQuizzes(interaction, await GetQuizzesList(page, Object.values(chosenTerms).map(term => term.ID)), config, quizConfig?.ShowAlreadyCompletedQuizzes);
         if(chosenQuizzes == null || chosenQuizzes.length == 0) return await browser.close();
 
         for (const chosenQuizIndex in chosenQuizzes) {
@@ -694,48 +693,54 @@ const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFill
     return await GoToNextPageScrape(page, [], false, databaseQuestions, autoFillEverything)
 }
 
-const GetQuizzesList = async (page, termID) => {
-    try {
-        await page.goto(`${UtilFunctions.mainStaticUrl}/mod/quiz/index.php?id=${termID}`)    
-    } catch (error) {
-        console.log('page url is not working')
-        return null; // no quizzes found
+const GetQuizzesList = async (page, termIDs) => {
+    let quizzes = {
+        due: [],
+        done: [],
     }
 
-    //INITIATE SCRAPING
-    await page.waitForSelector('#region-main > div > table > tbody > tr')
-
-    return await page.evaluate(() => {
-        let quizzes = {
-            'due': [],
-            'done': []
-        };
-
-        let tableRows = document.querySelectorAll('#region-main > div > table > tbody > tr');//#yui_3_17_2_1_1658806562256_56 > table > tbody
-        for (trElem of tableRows){
-            
-            // Gets table data elems from rows, then assigns the name to the other data of row, and add profile pic lastly
-            tdElems = trElem.querySelectorAll("td");
-            //this means that it was graded 
-            //if it was not there or complete only is false (so that means do all of them)
-            if(tdElems[3].textContent == '') {
-                //add the name to the due part of the quizzes
-                quizzes['due'].push({ name: tdElems[1].textContent, displayName: tdElems[1].textContent, url: tdElems[1].querySelector('a').href });
-            }
-            else {
-                const total = tdElems[3].textContent;
-                quizzes['done'].push({ name: `${tdElems[1].textContent}`, displayName: `${tdElems[1].textContent} ${total}`, url: tdElems[1].querySelector('a').href, total: parseFloat(total) });
-            }
+    for (const termID of termIDs) {
+        try {
+            await page.goto(`${UtilFunctions.mainStaticUrl}/mod/quiz/index.php?id=${termID}`)    
+        } catch (error) {
+            console.log('page url is not working')
+            return null; // no quizzes found
         }
-        // sort the array so that the lowest scoring ones show first
-        quizzes['done'].sort((a, b) => a.total - b.total)
-        return quizzes
-        // return arrOfEveryone;
-    })
+    
+        //INITIATE SCRAPING
+        await page.waitForSelector('#region-main > div > table > tbody > tr')
+    
+        quizzes = await page.evaluate((quizzes) => {
+            let tableRows = document.querySelectorAll('#region-main > div > table > tbody > tr');//#yui_3_17_2_1_1658806562256_56 > table > tbody
+            for (trElem of tableRows){
+                
+                // Gets table data elems from rows, then assigns the name to the other data of row, and add profile pic lastly
+                tdElems = trElem.querySelectorAll("td");
+                //this means that it was graded 
+                //if it was not there or complete only is false (so that means do all of them)
+                if(tdElems[3].textContent == '') {
+                    //add the name to the due part of the quizzes
+                    quizzes['due'].push({ name: tdElems[1].textContent, displayName: tdElems[1].textContent, url: tdElems[1].querySelector('a').href });
+                }
+                else {
+                    const total = tdElems[3].textContent;
+                    quizzes['done'].push({ name: `${tdElems[1].textContent}`, displayName: `${tdElems[1].textContent} ${total}`, url: tdElems[1].querySelector('a').href, total: parseFloat(total) });
+                }
+            }
+            // sort the array so that the lowest scoring ones show first
+            quizzes['done'].sort((a, b) => a.total - b.total)
+            return quizzes
+            // return arrOfEveryone;
+        }, quizzes)
+        
+    }
+
+    return quizzes
 }
 
 const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
     return new Promise(async (resolve, reject) => {
+        let pageNum = 0;
         const quizzesEmbed = new EmbedBuilder()
         .setColor(primaryColour)
         .setTitle('Available Quizzes')
@@ -743,23 +748,26 @@ const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
         ' If you have hints enabled, when you click an answer the button will turn green or red (correct or false), if the bot doesn\'t know it already it will be blue (normal selected) ' + 
         '\nAlso if you encounter an interaction failed response, just click the button again, sometimes discord doesn\'t record interactions properly :angry: ')
 
-        let selectedOptions = quizzes['due']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz is still due', value: quiz.url }));
-        if(showDone) selectedOptions = selectedOptions.concat(quizzes['done']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz has already been finished', value: quiz.url })));
+        let quizSelectOptions = quizzes['due']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz is still due', value: quiz.url }));
+        if(showDone) quizSelectOptions = quizSelectOptions.concat(quizzes['done']?.map((quiz) => ({ label: quiz.displayName, description: 'This Quiz has already been finished', value: quiz.url })));
         //? '!selectedOptions.length' works too because of javascript but less readable
-        if(selectedOptions.length == 0) {
+        if(quizSelectOptions.length == 0) {
            //there isn't any quizzes so yeah just tell them that
             quizzesEmbed.setDescription(`Couldn't find any quizzes! re-run the command and choose a different course!${showDone ? '' : '\nYou have disabled showing quizzes already done, re-enable that with /config and you might see quizzes again!'}`)
             await interaction.editReply({ content: '', embeds: [quizzesEmbed], components: []}) 
             return resolve(null)
         }
-        const selectRow = new ActionRowBuilder()
-            .addComponents(
-                new SelectMenuBuilder()
-                    .setCustomId('select')
-                    .setPlaceholder('Nothing selected')
-                    .setMaxValues(selectedOptions.length)
-                    .addOptions(...selectedOptions)
-        );
+
+        // const selectRow = new ActionRowBuilder()
+        //     .addComponents(
+        //         new SelectMenuBuilder()
+        //             .setCustomId('select')
+        //             .setPlaceholder('Nothing selected')
+        //             .setMaxValues(quizSelectOptions.length)
+        //             .addOptions(...quizSelectOptions)
+        // );
+
+        // const quizSelectActionRows = UtilFunctions.GetSelectMenuOverflowActionRows(pageNum, quizSelectOptions, 'Choose the quizzes you want to do!')
         const maxDailys = config.vip ? 2 : 1;
         //falsy statement, if it aint zero
         if(config.stats.DailyQuizzesDoneToday) {
@@ -782,7 +790,10 @@ const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
                     .setDisabled(!canDoDailyQuiz)
         );
     
-        const reply = await interaction.editReply({ content: ' ', embeds: [quizzesEmbed], components: [ selectRow, buttonRow ] });  
+        // quizSelectActionRows.push(buttonRow)
+
+        const reply = await interaction.editReply({ content: ' ', embeds: [quizzesEmbed],
+         components: [ ...UtilFunctions.GetSelectMenuOverflowActionRows(pageNum, quizSelectOptions, 'Choose the quizzes you want to get done!', false, quizSelectOptions.length), buttonRow] });  
     
         const filter = i => i.user.id === interaction.user.id;
         const collector = await reply.createMessageComponentCollector({filter, max: 1, time: 180 * 1000 });
@@ -799,6 +810,14 @@ const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
                 const { name, url } = quizzes['due'].length > 0 ? quizzes['due'][Math.floor(Math.random() * quizzes['due'].length)] : quizzes['done'][Math.floor(Math.random() * quizzes['done'].length)]
                 await interaction.editReply({ content: `Going to ${name} to get quiz questions and attempt now!`, embeds: [], components: []});
                 return resolve([{ name, url, daily: true}])
+            }
+            else if(i.customId == 'next_page') {
+                pageNum++;
+                await interaction.editReply({ components: [ ...UtilFunctions.GetSelectMenuOverflowActionRows(pageNum, quizSelectOptions, 'Choose the quizzes you want to get done!', false, quizSelectOptions.length), buttonRow]})
+            }
+            else if(i.customId == 'previous_page') {
+                pageNum--;
+                await interaction.editReply({ components: [ ...UtilFunctions.GetSelectMenuOverflowActionRows(pageNum, quizSelectOptions, 'Choose the quizzes you want to get done!', false, quizSelectOptions.length), buttonRow]})
             }
             //* Interaction has already been acknowlegded with just update, trying deferUpdate
             await i.deferUpdate({ content: `Going to ${i.values.join(', ')} to get quiz questions and attempt now!`, embeds: [], components: []})

@@ -205,113 +205,118 @@ function AskForCourse(interaction, page, multipleTerms=false){
         // let updatedButtons = row.components
         //flatten so all the buttons are in the same array because of row.components
         let updatedButtons = rows.slice(0, -1).map(row => row.components).flat();
+        let quitEarly = false;
     
         //so I could do rows[rows.length -1].components.find(c => c.customId == 'Edit').Enabled but this is cleaner I think 
         // So if one of the buttons was clicked, then update text
         collector.on('collect', async i => {
 
-            if (multipleTerms) {
-                const editingRightNow = rows[rows.length - 1].components.find(c => c.data.custom_id == 'Edit').data.disabled
-                // if enter button, stop early
-                if(i.customId == 'Enter'){
-                    if(editingRightNow) {
-                        for (const termButton of updatedButtons) {
-                            //? now I can either reset, or delete from other lists, idk what is better
-                            //TODO refactor this code because is has repeat code that can be shortened down but I am feeling lazy rn
-                            const termUrl = termInfo[termButton.data.custom_id].URL
-                            const indexInsideDisableList = config.settings.courses.DefaultDisabledUrls.indexOf(termUrl);
-                            const indexinsideBlackList = config.settings.courses.BlackListedUrls.indexOf(termUrl);
-                            if(termButton.data.style == ButtonStyle.Danger) {
-                                // if it is included in disable list, remove it
-                                if(indexInsideDisableList != -1) {
-                                    config.settings.courses.DefaultDisabledUrls.splice(indexInsideDisableList, 1);
-                                }
-                                // add to the blacklist on the users config if it doesn't exist
-                                if(indexinsideBlackList == -1) {
-                                    config.settings.courses.BlackListedUrls.push(termUrl)
-                                }
+            const editingRightNow = rows[rows.length - 1].components.find(c => c.data.custom_id == 'Edit').data.disabled
+            // if enter button, stop early
+            if(i.customId == 'Enter'){
+                if(editingRightNow) {
+                    for (const termButton of updatedButtons) {
+                        //? now I can either reset, or delete from other lists, idk what is better
+                        //TODO refactor this code because is has repeat code that can be shortened down but I am feeling lazy rn
+                        const termUrl = termInfo[termButton.data.custom_id].URL
+                        const indexInsideDisableList = config.settings.courses.DefaultDisabledUrls.indexOf(termUrl);
+                        const indexinsideBlackList = config.settings.courses.BlackListedUrls.indexOf(termUrl);
+                        if(termButton.data.style == ButtonStyle.Danger) {
+                            // if it is included in disable list, remove it
+                            if(indexInsideDisableList != -1) {
+                                config.settings.courses.DefaultDisabledUrls.splice(indexInsideDisableList, 1);
                             }
-                            else if(termButton.data.style == ButtonStyle.Secondary) {
-                                //same as the function above but reverse
-                                if(indexinsideBlackList != -1) {
-                                    config.settings.courses.BlackListedUrls.splice(indexinsideBlackList, 1);
-                                }
-                                if(indexInsideDisableList == -1) {
-                                    config.settings.courses.DefaultDisabledUrls.push(termUrl)
-                                }
-                            }
-                            else if(termButton.data.style == ButtonStyle.Primary) {
-                                //remove from any of the lists entirely
-                                if(indexinsideBlackList != -1) {
-                                    config.settings.courses.BlackListedUrls.splice(indexinsideBlackList, 1);
-                                }
-                                if(indexInsideDisableList != -1) {
-                                    config.settings.courses.DefaultDisabledUrls.splice(indexInsideDisableList, 1);
-                                }
-                            }
-                            else {
-                                console.log(`Error inside term choice function, the style ${termButton.data.style} did not work in the code, (it is the button ${button.data.label})`)
+                            // add to the blacklist on the users config if it doesn't exist
+                            if(indexinsideBlackList == -1) {
+                                config.settings.courses.BlackListedUrls.push(termUrl)
                             }
                         }
-                        collector.resetTimer({ time: 15 * 1000 })
-                        SetDefaultTitle();
-                        rows.length = 0;
-                        AddTermsToRows()
-                        await interaction.editReply({embeds: [termsEmbed], components: rows})
-                        //? could combine this with a promise with some other stuff if I wanted too
-                        await config.save()
-                        return i.deferUpdate();
+                        else if(termButton.data.style == ButtonStyle.Secondary) {
+                            //same as the function above but reverse
+                            if(indexinsideBlackList != -1) {
+                                config.settings.courses.BlackListedUrls.splice(indexinsideBlackList, 1);
+                            }
+                            if(indexInsideDisableList == -1) {
+                                config.settings.courses.DefaultDisabledUrls.push(termUrl)
+                            }
+                        }
+                        else if(termButton.data.style == ButtonStyle.Primary) {
+                            //remove from any of the lists entirely
+                            if(indexinsideBlackList != -1) {
+                                config.settings.courses.BlackListedUrls.splice(indexinsideBlackList, 1);
+                            }
+                            if(indexInsideDisableList != -1) {
+                                config.settings.courses.DefaultDisabledUrls.splice(indexInsideDisableList, 1);
+                            }
+                        }
+                        else {
+                            console.log(`Error inside term choice function, the style ${termButton.data.style} did not work in the code, (it is the button ${button.data.label})`)
+                        }
                     }
-                    i.deferUpdate();
-                    return await collector.stop();
-                }   
-                else if(i.customId == 'Edit') {
-                    // edit the embed so the buttons are all deselected and only blacklisted ones are
-                    // make an option for reset blacklist as well as done or enter
-                    //* extending the timer out so they have time to edit
-                    collector.resetTimer({ time: 120 * 1000})
-                    termsEmbed.setTitle('Course Option Editing');
-                    termsEmbed.setURL(null);
-                    termsEmbed.setDescription('Click on the select, if they are red, they will be blacklisted meaning they will not be shown, if they are blue they will be '
-                        + 'selected by default (when multi select), grey for unselected by default (but still shown)\n click on the button to cycle colors');
-
-                    //resetting the rows because adding the blacklisted ones
-                    // it also disables the edit button so that
+                    collector.resetTimer({ time: 15 * 1000 })
+                    SetDefaultTitle();
                     rows.length = 0;
-                    AddTermsToRows(true)
+                    AddTermsToRows()
                     await interaction.editReply({embeds: [termsEmbed], components: rows})
-                    return await i.deferUpdate();
+                    //? could combine this with a promise with some other stuff if I wanted too
+                    await config.save()
+                    return i.deferUpdate();
                 }
-                // let updatedActionRowComponent = []
+                i.deferUpdate();
+                return await collector.stop();
+            }   
+            else if(i.customId == 'Edit') {
+                // edit the embed so the buttons are all deselected and only blacklisted ones are
+                // make an option for reset blacklist as well as done or enter
+                //* extending the timer out so they have time to edit
+                collector.resetTimer({ time: 120 * 1000})
+                termsEmbed.setTitle('Course Option Editing');
+                termsEmbed.setURL(null);
+                termsEmbed.setDescription('Click on the select, if they are red, they will be blacklisted meaning they will not be shown, if they are blue they will be '
+                    + 'selected by default (when multi select), grey for unselected by default (but still shown)\n click on the button to cycle colors');
 
-                //loop through each action row on the embed and update it accordingly
-                await UpdateActionRowButtons(i, editingRightNow);           
-
-                // Respond to the interaction, 
-                // and send updated components to the Discord API
-                //update it to new updated action row
-                // await i.update({components: newActionRowEmbeds})
-                // await i.update({components: i.message.components})
-                // Update button info because a button has been clicked
-                //message components are stored as an array as action rows, but all that matters is the components (The wanted buttons are in the first(only) row)
-                // updatedButtons = await i.message.components[0].components;
-                // set the buttons to be all the rows but the last one, and map out so it's only their components
-                updatedButtons = i.message.components.slice(0, -1).map(compRow => compRow.components).flat();
-            }     
-            else {
+                //resetting the rows because adding the blacklisted ones
+                // it also disables the edit button so that
+                rows.length = 0;
+                AddTermsToRows(true)
+                await interaction.editReply({embeds: [termsEmbed], components: rows})
+                return await i.deferUpdate();
+            }
+            else if(i.customId == 'Quit') {
+                quitEarly = true
+                await collector.stop()
+                return resolve(multipleTerms ? [] : null)
+            }
+            if(!editingRightNow && !multipleTerms) {
                 if(config.settings.courses.AutoChangeMain) {
                     config.settings.courses.DefaultMainCourseUrl = termInfo[i.customId].URL
                 }
                 await i.update({ content: 'Term Chosen, Scraping Now!', components: [], embeds: [] });
                 resolve(termInfo[i.customId])
-                await collector.stop()
+                return await collector.stop()
             }
+            // let updatedActionRowComponent = []
+
+            //loop through each action row on the embed and update it accordingly
+            await UpdateActionRowButtons(i, editingRightNow);           
+
+            // Respond to the interaction, 
+            // and send updated components to the Discord API
+            //update it to new updated action row
+            // await i.update({components: newActionRowEmbeds})
+            // await i.update({components: i.message.components})
+            // Update button info because a button has been clicked
+            //message components are stored as an array as action rows, but all that matters is the components (The wanted buttons are in the first(only) row)
+            // updatedButtons = await i.message.components[0].components;
+            // set the buttons to be all the rows but the last one, and map out so it's only their components
+            updatedButtons = i.message.components.slice(0, -1).map(compRow => compRow.components).flat();
+
 
             // return i;
         });
     
         collector.on('end', collected => {
-            if (multipleTerms) {
+            if (multipleTerms && !quitEarly) {
                 // only in multiple terms is the edit option available
                 if(rows[rows.length - 1].components.find(c => c.data.custom_id == 'Edit').disabled) {
                     return reject('Timed out on editing courses')
@@ -370,40 +375,41 @@ function AskForCourse(interaction, page, multipleTerms=false){
                 }
                 // let termButton = new ButtonBuilder().setCustomId(term).setLabel(term).setStyle(ButtonStyle.Primary)
                 // row.addComponents(termButton)
-                if (multipleTerms) {
-                    rows[rowNumber].addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(term)
-                            .setLabel(term)
-                            //* convoluted but basically, if it is blacklisted than make it red, if it is off then grey, otherwise blue for on.
-                            //it will only show if 
-                            .setStyle(blackListedUrls.includes(curTermUrl) ? ButtonStyle.Danger : defaultDisabledUrls.includes(curTermUrl) ? ButtonStyle.Secondary : ButtonStyle.Primary)
-                    );
-                } else {
-                    //If it is only select one, than just show them all as blue because disable doesn't matter
-                    rows[rowNumber].addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(term)
-                            .setLabel(term)
-                            .setStyle(ButtonStyle.Primary)
-                    );
-                }
+                rows[rowNumber].addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(term)
+                        .setLabel(term)
+                        //* convoluted but basically, if it is blacklisted than make it red, if it is off then grey, otherwise blue for on.
+                        //it will only show if 
+                        .setStyle(blackListedUrls.includes(curTermUrl) ? ButtonStyle.Danger : defaultDisabledUrls.includes(curTermUrl) ? ButtonStyle.Secondary : ButtonStyle.Primary)
+                );
                 termAddedIndex++;
             }
-            if(multipleTerms) {
-            rows.push( new ActionRowBuilder().addComponents(
+            const editRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                .setCustomId('Quit')
+                .setLabel('Quit')
+                .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder()
                 .setCustomId('Edit')
                 .setLabel('Edit')
                 .setDisabled(editing)
                 .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                .setCustomId('Enter')
-                // if editing say done otherwise say enter, still handles by enter id
-                .setLabel(editing ? 'Done' : 'Enter')
-                .setStyle(ButtonStyle.Success)
-            ))
-        }
+            );
+
+            // if they are editing, have a way for them to save
+            if(multipleTerms || editing) {
+                editRow.addComponents(
+                    new ButtonBuilder()
+                    .setCustomId('Enter')
+                    // if editing say done otherwise say enter, still handles by enter id
+                    .setLabel(editing ? 'Done' : 'Enter')
+                    .setStyle(ButtonStyle.Success)
+                )
+            }
+
+            rows.push(editRow);
+        
         }
 
         function SetDefaultTitle() {
@@ -658,33 +664,37 @@ async function DeleteSecuritykey(moodleName) {
 
 // this function was modified from https://www.reddit.com/r/Discordjs/comments/sf00wb/comment/ilt1mgg/
 // if options length is zero it will through error
-const GetSelectMenuOverflowActionRows = (page, options, placeholder, quitOption=false) => {
-    const RecipientRows = [ GetRecipientSelectMenu(page, options, placeholder) ]
-    const moveButtons = GetSelectMenuNextButtons(page, options.length, quitOption);
+const GetSelectMenuOverflowActionRows = (pageNumber, options, placeholder, quitOption=false, selectCount=1) => {
+    if(selectCount > 25) selectCount = 25;
+    const RecipientRows = [ GetRecipientSelectMenu(pageNumber, options, placeholder, selectCount) ]
+    const moveButtons = GetSelectMenuNextButtons(pageNumber, options.length, quitOption);
     if(moveButtons.components.length > 0) {
         RecipientRows.push(moveButtons)
     }
     return RecipientRows;
 }
 
-const GetRecipientSelectMenu  = (page, options, placeholder='Choose an option') => {
-    let selectMenu = new SelectMenuBuilder()
+const GetRecipientSelectMenu  = (pageNumber, options, placeholder='Choose an option', selectCount) => {
+    const selectMenu = new SelectMenuBuilder()
     .setCustomId('select')
     .setPlaceholder(placeholder)
     // .addOptions(options.filter((option, i) => i * page < 25 * (page +1) ));
     //This lower bit might be faster but it is giving emoji errors for some reason so yeah idk :P
-    for (let i = 25*page; i < options.length && i < 25 * (page + 1); i++) {
+    for (let i = 25*pageNumber; i < options.length && i < 25 * (pageNumber + 1); i++) {
         selectMenu.addOptions(options[i])
         // selectMenu.addOptions({ label: 'fillter', value: '32424234' + i, description: 'hi'})
     }
-
+    
+    if(selectCount > 1) {
+        selectMenu.setMaxValues(selectCount)
+    }
     return new ActionRowBuilder()
     .addComponents(
         selectMenu
     );
 }
 
-const GetSelectMenuNextButtons = (page, optionLength, quitOption=false) => {
+const GetSelectMenuNextButtons = (pageNumber, optionLength, quitOption=false) => {
     const buttonActionRow = new ActionRowBuilder()
     if(quitOption) {
         buttonActionRow.addComponents(
@@ -694,7 +704,7 @@ const GetSelectMenuNextButtons = (page, optionLength, quitOption=false) => {
                 .setStyle(ButtonStyle.Danger),
         );
     }
-    if (page>0) {
+    if (pageNumber>0) {
         buttonActionRow.addComponents(
         new ButtonBuilder()
             .setCustomId('previous_page')
@@ -702,7 +712,7 @@ const GetSelectMenuNextButtons = (page, optionLength, quitOption=false) => {
             .setEmoji('⬅')
         )
     }
-    if (25 * (page + 1) < optionLength) {
+    if (25 * (pageNumber + 1) < optionLength) {
         buttonActionRow.addComponents(
         new ButtonBuilder()
             .setCustomId('next_page')
