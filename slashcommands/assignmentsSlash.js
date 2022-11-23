@@ -305,6 +305,7 @@ function GetWantedAssignments(assignments, personName, filtering=false, assignme
 function SendEmbedMessage(missingAssignments, interaction, personName, title=`Missing Assignments for ${personName}`, colour=primaryColour) {
     const assignmentEmbeds = [];
     const fields = [];
+    const filterMessage = interaction.options.getString("filterstring") != null;
     for(term of Object.entries(missingAssignments)){
         //* if submissions then assignments is really linkAndPeople
         let [termName, assignments] = term;
@@ -347,7 +348,7 @@ function SendEmbedMessage(missingAssignments, interaction, personName, title=`Mi
             return assignmentString;
         }, '') 
        //if it is empty then no assignments were found
-        fullAssignmentString ||= personName ? 'No Assignments Missing, Congrats :partying_face:' : 'No Assignments Found';
+        fullAssignmentString ||= (personName && !filterMessage) ? 'No Assignments Missing, Congrats :partying_face:' : 'No Assignments Found';
         
         const assignmentLinesArray = fullAssignmentString.match(/.{1,1024}(\s|$)/g);
 
