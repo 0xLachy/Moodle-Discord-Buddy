@@ -702,7 +702,8 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                             if(work?.owner && work.owner != interaction.user.id) {
                                 sharerCosts[work.owner] = (sharerCosts[work.owner] || 0) + work.price;
                             }
-                        })
+                            return sharerCosts;
+                        }, {})
     
                         //array of configs that we need
                         const sharerConfigs = Object.keys(sharerCosts).map((owner) => GetConfigById(owner));
@@ -710,7 +711,9 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                         // if they have already submitted work through the bot they need to delete their old work
     
                         // if(await SendConfirmationMessage(interaction, `You are submitting work from another person, you will have to pay $${assignmentBorrowCost} to ${ownerConfig.name ?? ownerConfig.nicknames[0] ?? `<@${ownerConfig.discordID}>`}${replacingSharedWork ? `\nYou will be also removing your old work so it will take back $${assignmentBorrowCost}`:''}`)) {
-                        if(await SendConfirmationMessage(interaction, `You are submitting work from other people, payouts below!\n${Object.entries(sharerCosts).map(([owner, cost]) => `${sharerConfigs.find(conf => conf.discordId == owner).name || `<@${owner}>`} - $${cost}`)}`)) {
+                        //* if the don't have enough money then tell them so!
+                        const moneyNeeded = Object.values(sharerCosts).reduce((a,c) => a + c) - config.tokens;
+                        if(moneyNeeded <= 0 && await SendConfirmationMessage(interaction, `You are submitting work from other people, payouts below!\n${Object.entries(sharerCosts).map(([owner, cost]) => `${sharerConfigs.find(conf => conf.discordId == owner)?.name || `<@${owner}>`} - $${cost}`)}`)) {
                             for (const sharer of Object.entries(sharerCosts)) {
                                 
                                 const [owner, cost] = sharer;
@@ -718,7 +721,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                                 config.tokens -= cost; // take away amount that it costs
     
                                 //getting the correct config by the id
-                                const ownerConfig = sharerConfigs.find(conf => conf.owner == owner);
+                                const ownerConfig = sharerConfigs.find(conf => conf.discordId == owner);
                                 ownerConfig.tokens += cost; // paying the owner
         
                                 // add to their stats so they can get achievements
@@ -741,8 +744,12 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                         }
                         else {
                             //return early 
-                            return resolve(await interaction.editReply({ components: [CreateSubmitButtonsRow(true, true, true, true,)]}))
+                            await interaction.editReply({ components: [CreateSubmitButtonsRow(true, true, true, true,)]})
+                            if(moneyNeeded) {
+                                await interaction.followUp(`You needed $${moneyNeeded} to get all of these assignments. you currently have $${config.tokens}`)
+                            }
                             // return resolve(await DisplayFullInfo(interaction, updatedInfo, config, page, false));
+                            return resolve()
                         }
                     }
     
@@ -1267,6 +1274,7 @@ const CheckToModifySubmittedFiles = async (interaction, i, page, nestedConfirmat
                 }
                 else {
                     //add to the work information thing
+                    work.owner = workToAdd.owner
                     chosenWork.push(work)
                     splitUpSubmittedAssignments.push(work.name)
                 }
