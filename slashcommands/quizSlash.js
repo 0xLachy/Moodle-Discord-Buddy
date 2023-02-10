@@ -1112,8 +1112,8 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             }];
         }
         else {
-            answerData = await questionDivContent.$$eval('div.answer div', (answerDivs, currentdbAnswer) => answerDivs.map((answerDiv, answerNumber) => {
-                const label = answerDiv.querySelector('label').childNodes[1]?.textContent || answerDiv.querySelector('label')?.textContent // only get the label and don't include the answer number
+            answerData = await questionDivContent.$$eval('div.answer > div', (answerDivs, currentdbAnswer) => answerDivs.map((answerDiv, answerNumber) => {
+                const label = answerDiv.querySelector('div div').childNodes[1]?.textContent || answerDiv.querySelector('div div')?.textContent // only get the label and don't include the answer number
                 const clickableButton = answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"] )')
                 // the new answer will be correct if in correct strings, false if in false strings, or null not in any
                 const newAnswerCorrect = currentdbAnswer?.correct.some(correctString => correctString == label) ? true : currentdbAnswer?.incorrect.some(incorrectString => incorrectString == label) ? false : null;
