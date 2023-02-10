@@ -676,7 +676,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
 const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFillEverything) => {
     await page.goto(chosenQuizUrl);
     let quizDisabled = await page.evaluate(() => {
-        return document.querySelector('button[type="submit"]').textContent == 'Back to the course'
+        return document.querySelector('div[class*="quiz"] button[type="submit"]').textContent == 'Back to the course'
     })
     // if you cant access the quiz, don't bother getting questions, it will say the quiz is disabled in message
     if(quizDisabled) return null;
@@ -684,7 +684,7 @@ const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFill
     // doing network idle because error with go back to start scraping which is annoying
     await Promise.all([
         page.waitForNavigation({ waitUntil: 'networkidle2' }),
-        page.evaluate(() => document.querySelector('button[type="submit"]').click()),
+        page.evaluate(() => document.querySelector('div[class*="quiz"] button[type="submit"]').click()),
         //on end querySelectorAll[1] because the second one is the actual full sumbit, that first one is like a retry button
         //but first I have to go back and click
     ])
