@@ -109,7 +109,13 @@ module.exports = {
 
         //log into the browser, if assignmentName input is a url, just go straight to it.
         // just gonna ignore limit logins for this one just because
-        await LoginToMoodle(page, config, wentStraightToAssignment ? assignmentNameInput : undefined) 
+        try {
+            await LoginToMoodle(page, config, wentStraightToAssignment ? assignmentNameInput : undefined) 
+            
+        } catch (error) {
+            
+            console.log('failed to login to moodle, error:', error)
+        }
         
         if(wentStraightToAssignment) {
             // can't find a better way of doing this, .then wasn't working
@@ -767,7 +773,7 @@ const DisplayFullInfo = async (interaction, info, config, page, submitting=false
                     // if they have donating set to true and it isn't personal only and they aren't using borrowed work
                     if(chosenWork.length > 0 && config.settings.assignments.Donating && !personalOnlyCheckBox) {
                         //send a confirmation message saying, do you want to donate this assignment?
-                        console.log(updatedInfo)
+                        // console.log(updatedInfo)
                         //replacing shared work as in replacing something they already shared
                         if(replacingSharedWork) {
                             replacingSharedWork.modifyDate = updatedInfo.submissionData.find(subm => subm.name == 'Last modified').value;

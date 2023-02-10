@@ -6,9 +6,7 @@ const { CheckForNewBadges } = require('./slashcommands/badgeSlash')
 const { GetLoginsFromDatabase, loginGroups } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
-//TODO daily quiz for moodle money, badge for daily moodle quizzes done (1, 25, 52, 365)
-//*vip can get a second daily quiz, they can't use autofill for the quizzes!
-//+ const client = new Client({ intents: [GatewayIntentBits.Guilds], partials: [Partials.Channel] });
+//TODO convert console.logs into winston logs because running on raspi and can't see console.log when default run
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -141,7 +139,7 @@ process.on("uncaughtException", async (err) => {
     console.error("Uncaught Promise Exception:\n", err);
 });
 process.on("uncaughtExceptionMonitor", async (err) => {
-  console.error("Uncaught Promise Exception (Monitor):\n", err);
+  console.error("Uncaught Promise Exception (Monitor):\n", err, err.toString());
 });
 // process.on("multipleResolves", async (type, promise, reason) => {
     //   console.error("Multiple Resolves:\n", type, promise, reason);

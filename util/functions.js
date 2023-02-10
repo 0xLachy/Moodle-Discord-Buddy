@@ -18,7 +18,7 @@ const errorColour = 0xFF0000;
 
 //course stuff
 const mainStaticUrl = "https://moodle.oeclism.catholic.edu.au";
-const dashboardUrl = `${mainStaticUrl}/my/index.php`
+const dashboardUrl = `${mainStaticUrl}/my/courses.php`
 
 //login stuff
 const algorithm = "aes-256-cbc"; 
@@ -55,37 +55,36 @@ const LoginToMoodle = async (page, config=undefined, TermURL=dashboardUrl, login
     //     console.log(Object.values(await GetCourseUrls(page))[currentTerm - 1])
     //     TermURL = Object.values(await GetCourseUrls(page))[currentTerm - 1]
     // }
-    await page.goto(TermURL);
+    // await page.goto(TermURL);
+    await Promise.all([
+        // page.waitForNavigation({ waitUntil: 'networkidle2' }),
+        page.waitForNavigation(),
+        page.goto(TermURL),
+    ])
     
     if (config != undefined){
         if (loginGroups[config.discordId] != undefined) loginDetails = decrypt(loginGroups[config.discordId]);
     }
     // dom element selectors
-    const USERNAME_SELECTOR = '#username';
-    const PASSWORD_SELECTOR = '#password';
-    const BUTTON_SELECTOR = 'body > div > div > div > div.uk-card-body.uk-text-left > div > div.uk-width-3-4 > form > div.uk-margin.uk-text-right > button';
+    const USERNAME_SELECTOR = 'input#Ecom_User_ID';
+    const PASSWORD_SELECTOR = 'input[type="password"]';
+    const BUTTON_SELECTOR = 'input[value="Log in"]';
+
+    await page.waitForSelector(USERNAME_SELECTOR, { visible: true, timeout: 60 * 1000}).then((elem) => elem.focus()).catch((err) => console.log(err))
     
-    try {
-        // for when internet is super slow
-        await page.waitForSelector(USERNAME_SELECTOR, { timeout: 60 * 1000})
-    } catch(err){
-        console.log("login page not working, #Username not found")
-        // return console.log(err)
-    }
-    
-    await page.click(USERNAME_SELECTOR);
+    // await page.click(USERNAME_SELECTOR);
+    // await page.$eval(USERNAME_SELECTOR, e => e.focus());
     loginDetails != undefined ? await page.keyboard.type(loginDetails.username) : await page.keyboard.type(process.env.MOODLENAME);
 
-    await page.click(PASSWORD_SELECTOR);
+    // await page.click(PASSWORD_SELECTOR);
+    await page.$eval(PASSWORD_SELECTOR, e => e.focus());
     loginDetails != undefined ? await page.keyboard.type(loginDetails.password) : await page.keyboard.type(process.env.PASSWORD);
-    // try {
-        
-    // } catch (error) {
-        
-    // }
+
+    
     let reasonForFailure = '';
     await Promise.all([
-    page.click(BUTTON_SELECTOR),
+    // page.click(BUTTON_SELECTOR),
+    page.$eval(BUTTON_SELECTOR, b => b.click()),
     page.waitForNavigation({timeout: 600000}) // takes a while to load
     ]).catch((err) => {
         reasonForFailure = 'Navigation Timed Out';
@@ -95,12 +94,11 @@ const LoginToMoodle = async (page, config=undefined, TermURL=dashboardUrl, login
     if(reasonForFailure != '') return new Promise((resolve, reject) => reject(reasonForFailure))
     //more specific way to get
     reasonForFailure = await page.evaluate(() => {
-        //
-        return document.querySelector('div.uk-alert-danger.uk-text-center.uk-alert > p')?.textContent//.textContent body -le
+        return document.querySelector('div#instructions')?.textContent//.textContent body -le
     })
     if (reasonForFailure != undefined && TermURL != page.url()) return new Promise((resolve, reject) => reject(reasonForFailure))
     //If they haven't successfully gotten past login to the wanted url, it bugs out for other urls that aren't dashboard url
-    else if (TermURL != await page.url() && TermURL == dashboardUrl) return new Promise((resolve, reject) => reject("Login Failed, wrong username or password"))
+    else if (TermURL != await page.url() && TermURL == dashboardUrl) return new Promise((resolve, reject) => reject("Login failed or page didn't redirect after login correctly (check dashboardURL)"))
     else {
         //if the login details aren't undefined, but they haven't been logged in yet, then log them in
         if(config.moodleId == null) {
@@ -144,13 +142,39 @@ const LogoutOfMoodle = async (interaction) => {
     delete loginGroups[discordUserId]
 }
 
+
 const GetCourseUrls = async (page) => {
-    if(page.url() != dashboardUrl){
+    if(await page.url() != dashboardUrl){
+        console.log(page.url())
+        console.log(dashboardUrl)
         await page.goto(dashboardUrl)
     }
 
+    // return await page.waitForSelector('div[class*="block_myoverview"]', (cardDeck => {
+    //     const courses = cardDeck.querySelectorAll('a[class*="coursename"]');
+    //     const termInfo = {};
+
+    //     for (const course of courses) {
+    //         // This is the **child** part that contains the name of the term
+    //         termInfo[course.querySelector('span.multiline').textContent.trim()] = { "URL": course.href, "ID": course.querySelector('[data-course-id]').getAttribute("data-course-id")}; // getting an element with the id, then getting that id
+    //     }
+    //     return termInfo
+    // }))
+
+    return await page.waitForSelector('div[class="card-deck"]', (cardDeck => {
+        const courses = cardDeck.querySelectorAll('a[class*="coursename"]');
+        const termInfo = {};
+
+        for (const course of courses) {
+            // This is the **child** part that contains the name of the term
+            termInfo[course.querySelector('span.multiline').textContent.trim()] = { "URL": course.href, "ID": course.querySelector('[data-course-id]').getAttribute("data-course-id")}; // getting an element with the id, then getting that id
+        }
+        return termInfo
+    }))
+
     try {
         await page.waitForSelector('div[class*="block_myoverview"] div > a[class*="coursename"')
+        // await page.waitForSelector('section[role="navigation"]')
     } catch(err){
         console.log("Moodle website has been updated and doesn't work anymore with the bot (or page just didn't load fast enough)")
     }
@@ -747,11 +771,11 @@ const SplitIntoCharSections = async (inpStr, amount=1024) => {
     return chunks;
 }
 
-const BrowserWithCache = async (headless=true) => {
-    // save a cache of commonly used images and stuff
-    const userDataDir = os.tmpdir()//path.join(os.tmpdir(), 'puppeteerStuff')
+const BrowserWithCache = async (headless=false) => {
+    // save a cache of commonly used images and stuff, unfortunately it saves cookies :(
+    // const userDataDir = os.tmpdir()//path.join(os.tmpdir(), 'puppeteerStuff')
     return await puppeteer.launch({
-        userDataDir,
+        // userDataDir,
         headless,
     })
 }
