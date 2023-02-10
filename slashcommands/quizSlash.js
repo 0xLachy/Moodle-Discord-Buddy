@@ -710,12 +710,13 @@ const GetQuizzesList = async (page, termIDs) => {
         }
     
         //INITIATE SCRAPING
-        await page.waitForSelector('#region-main > div > table > tbody > tr')
+        await page.waitForSelector('#region-main > * div > table > tbody > tr')
     
         quizzes = await page.evaluate((quizzes) => {
-            let tableRows = document.querySelectorAll('#region-main > div > table > tbody > tr');//#yui_3_17_2_1_1658806562256_56 > table > tbody
+            let tableRows = document.querySelectorAll('#region-main > * div > table > tbody > tr');//#yui_3_17_2_1_1658806562256_56 > table > tbody
             for (trElem of tableRows){
-                
+                //if it is a table divider just skip it
+                if(trElem.querySelector('.tabledivider')) continue;
                 // Gets table data elems from rows, then assigns the name to the other data of row, and add profile pic lastly
                 tdElems = trElem.querySelectorAll("td");
                 //this means that it was graded 

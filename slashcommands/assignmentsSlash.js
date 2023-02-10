@@ -109,13 +109,7 @@ module.exports = {
 
         //log into the browser, if assignmentName input is a url, just go straight to it.
         // just gonna ignore limit logins for this one just because
-        try {
-            await LoginToMoodle(page, config, wentStraightToAssignment ? assignmentNameInput : undefined) 
-            
-        } catch (error) {
-            
-            console.log('failed to login to moodle, error:', error)
-        }
+        await LoginToMoodle(page, config, wentStraightToAssignment ? assignmentNameInput : undefined) 
         
         if(wentStraightToAssignment) {
             // can't find a better way of doing this, .then wasn't working
