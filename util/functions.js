@@ -85,11 +85,15 @@ const LoginToMoodle = async (page, config=undefined, TermURL=dashboardUrl, login
     await Promise.all([
     // page.click(BUTTON_SELECTOR),
     page.$eval(BUTTON_SELECTOR, b => b.click()),
-    page.waitForNavigation({timeout: 600000}) // takes a while to load
+    page.waitForNavigation({timeout: 600000, waitUntil: 'networkidle2' }), // takes a while to load
+    page.waitForRequest(request => {
+        return  request.url().includes(mainStaticUrl) && request.method() === 'GET'
+    })
     ]).catch((err) => {
         reasonForFailure = 'Navigation Timed Out';
         console.log(err);
     })
+    // all moodle pages should have this
 
     if(reasonForFailure != '') return new Promise((resolve, reject) => reject(reasonForFailure))
     //more specific way to get
@@ -145,8 +149,6 @@ const LogoutOfMoodle = async (interaction) => {
 
 const GetCourseUrls = async (page) => {
     if(await page.url() != dashboardUrl){
-        console.log(page.url())
-        console.log(dashboardUrl)
         await page.goto(dashboardUrl)
     }
 
@@ -161,8 +163,8 @@ const GetCourseUrls = async (page) => {
     //     return termInfo
     // }))
 
-    return await page.waitForSelector('div[class="card-deck"]', (cardDeck => {
-        const courses = cardDeck.querySelectorAll('a[class*="coursename"]');
+    await page.waitForSelector('div[class*="card-deck"]');
+    return await page.$$eval('div[class*="card-deck"] a[class*="coursename"]', (courses) => {
         const termInfo = {};
 
         for (const course of courses) {
@@ -170,7 +172,17 @@ const GetCourseUrls = async (page) => {
             termInfo[course.querySelector('span.multiline').textContent.trim()] = { "URL": course.href, "ID": course.querySelector('[data-course-id]').getAttribute("data-course-id")}; // getting an element with the id, then getting that id
         }
         return termInfo
-    }))
+    })
+    // return await page.waitForSelector('div[class*="card-deck"]', (cardDeck => {
+    //     const courses = cardDeck.querySelectorAll('a[class*="coursename"]');
+    //     const termInfo = {};
+
+    //     for (const course of courses) {
+    //         // This is the **child** part that contains the name of the term
+    //         termInfo[course.querySelector('span.multiline').textContent.trim()] = { "URL": course.href, "ID": course.querySelector('[data-course-id]').getAttribute("data-course-id")}; // getting an element with the id, then getting that id
+    //     }
+    //     return termInfo
+    // }))
 
     try {
         await page.waitForSelector('div[class*="block_myoverview"] div > a[class*="coursename"')
