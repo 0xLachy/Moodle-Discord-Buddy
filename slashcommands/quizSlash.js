@@ -7,6 +7,7 @@ require("dotenv").config()
 
 let autoSubmit = false;
 let showHints = true;
+const submitButtonSelector = 'button[type=Submit].btn-primary';
 
 // TODO create your own quiz option, provides a link for images, + and - button for the options, they can click on it to make it true or false
 const data = new SlashCommandBuilder()
@@ -197,8 +198,9 @@ const AutoFillAnswers = async (interaction, page, quiz, scrapedQuestions, lastI)
 
 const GetCorrectAnswersFromResultsPage = async (page, updatedQuestions) => {
     //Got an error from this but everything worked fine for some reason
-    await page.waitForSelector('button[type="submit"]').catch(err => console.log(err))
-    await page.evaluate(() => document.querySelectorAll('button[type="submit"]')[1].click())    // the second submit is the final submit button, the first is to retry.
+    await page.waitForSelector('button[type=Submit].btn-primary').catch(err => console.log(err))
+    await page.evaluate(() => document.querySelector('button[type=Submit].btn-primary').click())    // the second submit is the final submit button, the first is to retry.
+    //popup for finally submitting
     await page.waitForSelector('div.confirmation-buttons input.btn-primary');
     await Promise.all([
         page.evaluate(() => document.querySelector('div.confirmation-buttons input.btn-primary').click()),
@@ -211,7 +213,7 @@ const GetCorrectAnswersFromResultsPage = async (page, updatedQuestions) => {
 const UpdateQuizzesWithInputValues = async (page, updatedQuestions) => {
     await Promise.all([
         page.waitForNavigation(),
-        page.evaluate(() => document.querySelector('button[type="submit"]').click())
+        page.evaluate(() => document.querySelector('button[type=Submit].btn-secondary').click())
     ])
     await GoBackToStart(page);
     await GoToNextPageScrape(page, updatedQuestions, true)
@@ -676,7 +678,7 @@ const DisplayQuestionEmbed = async (interaction, page, scrapedQuestions, quiz,  
 const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFillEverything) => {
     await page.goto(chosenQuizUrl);
     let quizDisabled = await page.evaluate(() => {
-        return document.querySelector('div[class*="quiz"] button[type="submit"]').textContent == 'Back to the course'
+        return document.querySelector('button[type=Submit].btn-primary').textContent == 'Back to the course'
     })
     // if you cant access the quiz, don't bother getting questions, it will say the quiz is disabled in message
     if(quizDisabled) return null;
@@ -684,7 +686,7 @@ const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFill
     // doing network idle because error with go back to start scraping which is annoying
     await Promise.all([
         page.waitForNavigation({ waitUntil: 'networkidle2' }),
-        page.evaluate(() => document.querySelector('div[class*="quiz"] button[type="submit"]').click()),
+        page.evaluate(() => document.querySelector('button[type=Submit].btn-primary').click()),
         //on end querySelectorAll[1] because the second one is the actual full sumbit, that first one is like a retry button
         //but first I have to go back and click
     ])
@@ -850,7 +852,7 @@ const DisplayQuizzes = async (interaction, quizzes, config, showDone=true) => {
 const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
     // only gets one item
     // const questionDivs = await page.waitForSelector('form div[id*="question"] div.content > div');
-    await page.waitForSelector('form div[id*="question"] div.content > div');
+    await page.waitForSelector('form div[id*="question"] div.content > div', { visible: true});
 
     const questionDivs = await page.$$('form div[id*="question"] div.content > div')
     
@@ -889,7 +891,7 @@ const UpdateQuestionDivs = async (page, updatedQuestionsData) => {
         }
         else {
             
-            questionDivContent.$$eval('div.answer div', (answerDivs, updatedQuestion) => {
+            questionDivContent.$$eval('div.answer > div', (answerDivs, updatedQuestion) => {
                 for (let i = 0; i < answerDivs.length; i++) {
                     answerDivs[i].querySelector(':is( input[type="checkbox"], input[type="radio"]').checked = updatedQuestion.answerData[i].value
                 }
