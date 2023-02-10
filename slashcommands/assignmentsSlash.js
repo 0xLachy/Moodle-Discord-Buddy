@@ -137,7 +137,10 @@ module.exports = {
             return null;
         })//).map(term => term.ID)
 
-        if(chosenTerms == null) return;
+        if(chosenTerms == null || chosenTerms.length == 0) {
+            browser.close();
+            return await interaction.deleteReply();
+        }
         
         let filteredAssignments;
         switch (await interaction.options.getSubcommand()) {

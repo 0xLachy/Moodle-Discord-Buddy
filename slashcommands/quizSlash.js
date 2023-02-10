@@ -93,8 +93,10 @@ module.exports = {
             return null;
         })
         
-        if(chosenTerms == null) return await interaction.deleteReply();
-
+        if(chosenTerms == null || chosenTerms.length == 0) {
+            browser.close();
+            return await interaction.deleteReply();
+        }
         //if they don't say if they want it autofilled, it will be false
         const autoFillEverything = await interaction.options.getBoolean('autofill') ?? false;
          
