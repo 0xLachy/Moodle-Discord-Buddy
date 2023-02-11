@@ -3,6 +3,7 @@ A very handy discord bot for people who use moodle for their school and have a d
 ## Set up
 1. First thing you need to do is rename example.env to just ".env"
 2. Replace the values with your own data, like the bot token, mongo uri, and your moodle login stuff.
+3. Check that headless is set to true (for the browser inside functions.js) (that way you can run the bot without a gui)
 
 ### Env Variable info
 #### Discord Token   

@@ -327,7 +327,7 @@ function AskForCourse(interaction, page, multipleTerms=false){
                 if(config.settings.courses.AutoChangeMain) {
                     config.settings.courses.DefaultMainCourseUrl = termInfo[i.customId].URL
                 }
-                await i.update({ content: 'Term Chosen, Scraping Now!', components: [], embeds: [] });
+                await i.update({ content: 'Course Chosen, Scraping Now!', components: [], embeds: [] });
                 resolve(termInfo[i.customId])
                 return await collector.stop()
             }
