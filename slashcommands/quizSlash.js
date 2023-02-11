@@ -69,7 +69,14 @@ module.exports = {
         // const browser = await puppeteer.launch({ headless: false })
         const browser = await UtilFunctions.BrowserWithCache();
         const page = await browser.newPage();
-
+        browser.on("targetcreated", async (target)=>{
+            const tPage = await target.page();
+            await page.goto(await tPage.url())
+            if(tPage) await tPage.close();
+            // page=await target.page();
+            // if(page) page.close();
+        });
+        
         //? Testing out adding config to interaction because that is used everywhere
         interaction.userConfig = config;
 
@@ -685,7 +692,8 @@ const GetQuizQuestions = async (page, chosenQuizUrl, databaseQuestions, autoFill
     
     // doing network idle because error with go back to start scraping which is annoying
     await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle2' }),
+        // page.waitForNavigation({ waitUntil: 'networkidle2' }),
+        page.waitForNavigation(),
         page.evaluate(() => document.querySelector('button[type=Submit].btn-primary').click()),
         //on end querySelectorAll[1] because the second one is the actual full sumbit, that first one is like a retry button
         //but first I have to go back and click
@@ -979,6 +987,8 @@ const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
         // undefined if it doesn't exist :/ 
         // const questionName = await questionDivContent.$eval('div.qtext', e => e.textContent);
         updatedQuestion.outcome = await questionDivContent.$eval('div.outcome.clearfix div.feedback', e => e?.textContent);
+        // updatedQuestion.outcome = await questionDivContent.evaluate((questionDivContent) => questionDivContent.querySelector('div.outcome.clearfix div.feedback')?.textContent, questionDivContent);
+
 
         //* I think I could check if it is div.rightanswer but this works anyways
         if(updatedQuestion?.outcome?.includes('The correct answer is:')) {
@@ -997,6 +1007,7 @@ const UpdateQuestionCorrectnessDivs = async (page, updatedQuizResponses) => {
         }
     }
 
+    console.log(updatedQuizResponses)
     return updatedQuizResponses;
     // return await page.evaluate((updatedQuizResponses) => {
     //     let questionDivs = document.querySelectorAll('form div[id*="question"] div.content');
@@ -1070,6 +1081,8 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
 
         const essayResponse = await questionDivContent.$('div.qtype_essay_response')
         const textAnswer = await questionDivContent.$('span.answer input');
+        // true or false has to be asked after the essay and text response, because they also won't have asnwer numbers
+        const tofQ = await questionDivContent.$('span.answernumber') == null;
         let answerData = []
         let questionType = '';
         if(essayResponse) {
@@ -1114,14 +1127,14 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
             }];
         }
         else {
-            answerData = await questionDivContent.$$eval('div.answer > div', (answerDivs, currentdbAnswer) => answerDivs.map((answerDiv, answerNumber) => {
-                const label = answerDiv.querySelector('div div').childNodes[1]?.textContent || answerDiv.querySelector('div div')?.textContent // only get the label and don't include the answer number
+            answerData = await questionDivContent.$$eval('div.answer > div', (answerDivs, currentdbAnswer, tofQ) => answerDivs.map((answerDiv, answerNumber) => {
+                const label = tofQ ? answerDiv.querySelector('label').textContent : answerDiv.querySelector('div div').childNodes[1]?.textContent || answerDiv.querySelector('div div')?.textContent // only get the label and don't include the answer number
                 const clickableButton = answerDiv.querySelector(':is( input[type="checkbox"], input[type="radio"] )')
                 // the new answer will be correct if in correct strings, false if in false strings, or null not in any
                 const newAnswerCorrect = currentdbAnswer?.correct.some(correctString => correctString == label) ? true : currentdbAnswer?.incorrect.some(incorrectString => incorrectString == label) ? false : null;
                 
                 return {
-                    //use array instead of answer number but it says A. and stuff with isn't even a number
+                    //use array instead of answer number but it says A. and stuff with isn't even a number (the to string is the map count)
                     answerNumber: answerDiv.querySelector('span.answernumber')?.textContent || answerNumber.toString(),
                     correct: newAnswerCorrect,
                     label,
@@ -1129,7 +1142,7 @@ const ScrapeQuestionDataFromDivs = async (page, scrapedQuestions, dbAnswers, aut
                     value: clickableButton.checked // boolean
                 };
 
-            }), currentdbAnswer);
+            }), currentdbAnswer, tofQ);
             //all the buttons should be the same type so only need the first to determine what type it is
             questionType = answerData[0].type;
         }
