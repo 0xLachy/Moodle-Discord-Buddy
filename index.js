@@ -7,6 +7,7 @@ const { GetLoginsFromDatabase, loginGroups } = require("./util/functions")
 const mongoose = require('mongoose')
 require("dotenv").config()
 //TODO convert console.logs into winston logs because running on raspi and can't see console.log when default run
+//TODO !!! Need to make it so the bot owner logs in like other people so their login will be encrypted in the env file!
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { EmbedBuilder } = require('discord.js');
+const { loginGroups } = require('../util/functions')
 const { primaryColour, errorColour } = require("../util/constants");
 
 //Code to get all the command names:
@@ -37,11 +38,12 @@ module.exports = {
         let inputCommand = await interaction.options.getString("command")
         if(inputCommand == null) {
             //If no inputCommand is added go here, fetching all the slash commands
-
             //Create a new embed message to reply to the sender
+            let loggedInUser = loginGroups[interaction.user.id]
             let embed = new EmbedBuilder()
             .setTitle(`List of available slash commands (${client.slashcommands.size})`)
             .setColor(primaryColour)
+            .setFooter({text: loggedInUser ? `You are logged in as ${loggedInUser.name}` : 'You are not logged in,  run /login'})
             // .setFooter('The options count is the amount of sub commands and choices in each command per category')
 
             //Get all the slash commands and put them into categories
