@@ -71,8 +71,10 @@ module.exports = {
         const page = await browser.newPage();
         browser.on("targetcreated", async (target)=>{
             const tPage = await target.page();
-            await page.goto(await tPage.url())
-            if(tPage) await tPage.close();
+            if(tPage) {
+                await page.goto(await tPage.url())
+                await tPage.close();
+            }
             // page=await target.page();
             // if(page) page.close();
         });

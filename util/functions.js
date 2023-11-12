@@ -40,7 +40,7 @@ async function GetLoginsFromDatabase() {
     let dbLogins = Array.from(await Login.find({}))
     console.log(`${dbLogins.map(loginData => loginData.name).join(', ')} are now logged in`)
     for (const loginUser of dbLogins) {
-        loginGroups[loginUser.discordId] =  loginUser
+        loginGroups[loginUser.discordId] = loginUser
         loginGroups[loginUser.discordId].Securitykey = Buffer.from(process.env[loginUser.name], 'binary')
     }
 }
