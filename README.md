@@ -29,6 +29,7 @@ The prefix commands have now been deleted in favor for slash commands which are 
 For the quizzes, the autofill will try fetch the correct answers from the database, if they aren't located, it will just give random answers. If the quiz has answers in the database, it should also light the buttons up green or red depending on whether or not you got the answer correct.
 
 Here are a few examples
+
 ![helpcommand](resources/commandHelp.png)
 ![quizcommand](resources/commandQuiz.png)
 ![shopCommand](resources/commandShop.png)
